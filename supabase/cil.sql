@@ -1242,7 +1242,7 @@ declare aj public.tareas_ajustes; ahora timestamptz := now(); hoy date := public
 begin
   select * into aj from tareas_ajustes where id = 1;
   create temp table if not exists _avisos (persona_id uuid, clave text, titulo text, cuerpo text, url text) on commit drop;
-  delete from _avisos;
+  delete from _avisos where true;
 
   -- 1) Te toca ahora: tareas con «desde», para quien la tiene
   insert into _avisos
