@@ -1354,7 +1354,10 @@
         }).join('') + '</div>' : '') +
       '<label class="check"><input type="checkbox" name="activo"' + (pe.activo ? ' checked' : '') + (soyYo ? ' disabled' : '') + '>Activo <small class="muted">(puede entrar)</small></label>' +
       (soyYo ? '<p class="ayuda">No puedes quitarte el rol ni desactivarte a ti misma.</p>' : '') +
-      '<div class="acciones"><button class="btn grande" type="submit">Guardar</button></div></form>';
+      '<div class="acciones"><button class="btn grande" type="submit">Guardar</button></div></form>' +
+      (store.modo === 'supabase' && (pe.rol !== 'admin' || soyYo) ? '<form data-form="clave" data-id="' + esc(pe.id) + '"><h3>Cambiar clave</h3>' +
+        '<label class="campo">Clave nueva <small>(mínimo 8 caracteres; dísela en persona)</small><input name="clave" type="text" minlength="8" required autocomplete="off" autocapitalize="off" spellcheck="false"></label>' +
+        '<div class="acciones"><button class="btn sec" type="submit">Cambiar clave</button></div></form>' : '');
   }
 
   // El modal solo se vuelve a pintar si cambió (otro modal, datos nuevos o su historial): así un aviso
@@ -1573,6 +1576,11 @@
       var pp = store.actualizar('personas', pid, patch);
       if (sueltas.length) pp = pp.then(function () { return store.rpc('reasignar', { p_items: sueltas.map(function (x) { return { id: x.id, a: null }; }), p_motivo: 'manual' }); });
       ejecutar(pp, sueltas.length ? 'Guardado. Sus ' + plural(sueltas.length, 'tarea pendiente quedó', 'tareas pendientes quedaron') + ' sin asignar: repártelas desde Hoy.' : 'Guardado.', true);
+    }
+    else if (tipo === 'clave') {
+      var clave = String(fd.get('clave') || '').trim();
+      if (clave.length < 8) { aviso('La clave debe tener al menos 8 caracteres.'); return; }
+      ejecutar(store.rpc('cambiar_clave', { p_persona: f.getAttribute('data-id'), p_clave: clave }), 'Clave cambiada. Dísela en persona.', true);
     }
     else if (tipo === 'reasignar') {
       var items = [];

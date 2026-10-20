@@ -1234,6 +1234,20 @@ begin
   insert into avisos_cola (persona_id, titulo, cuerpo) values (auth.uid(), 'Aviso de prueba', 'Si ves esto, los avisos funcionan.');
 end $$;
 
+-- Gerencia cambia la clave de un empleado (sin correo: se la dice en persona).
+create extension if not exists pgcrypto with schema extensions;
+create or replace function public.cambiar_clave(p_persona uuid, p_clave text) returns void
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if not public.es_admin() then raise exception 'Solo gerencia.'; end if;
+  if length(coalesce(p_clave, '')) < 8 then raise exception 'La clave debe tener al menos 8 caracteres.'; end if;
+  if p_persona <> auth.uid() and exists (select 1 from personas where id = p_persona and rol = 'admin') then
+    raise exception 'No puedes cambiar la clave de otra persona de gerencia.';
+  end if;
+  update auth.users set encrypted_password = crypt(p_clave, gen_salt('bf')), updated_at = now() where id = p_persona;
+  if not found then raise exception 'Esa persona no existe.'; end if;
+end $$;
+
 -- Lo que hay que avisar ahora. Cada aviso sale una sola vez (avisos_enviados) y solo si su hora fue hace menos de 10 minutos.
 -- Solo la puede llamar la función del servidor (rol service_role).
 create or replace function public.avisos_pendientes() returns table (persona_id uuid, endpoint text, p256dh text, auth text, titulo text, cuerpo text, url text)
@@ -1391,7 +1405,7 @@ grant execute on function public.hoy(), public.es_admin(), public.tiene_acceso(t
   public.asignar_revisiones(), public.calificar(uuid, int, text, boolean),
   public.marcar_salida(text), public.datos_app(boolean), public.mi_puntualidad(), public.registrar_lecturas(uuid, jsonb),
   public.marcar_fuera(boolean), public.rescatar(uuid),
-  public.guardar_suscripcion(text, text, text), public.borrar_suscripcion(text), public.aviso_prueba() to authenticated;
+  public.guardar_suscripcion(text, text, text), public.borrar_suscripcion(text), public.aviso_prueba(), public.cambiar_clave(uuid, text) to authenticated;
 -- Solo la función del servidor (avisos) puede pedir los avisos pendientes
 do $$ begin
   if exists (select 1 from pg_roles where rolname = 'service_role') then
