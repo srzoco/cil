@@ -45,13 +45,15 @@ App web unificada **CIL** en GitHub Pages: https://srzoco.github.io/cil/
 - Instalado y funcionando: repositorio, SQL, usuarios, avisos (cron `avisos` cada minuto, 200 OK desde el 20 oct).
 - Claves: gerencia las cambia en Equipo → Personas (`cambiar_clave`) y las dice en persona. "Olvidé mi clave" por correo quedó para después (necesita SMTP propio; faltan 2 correos de empleados).
 - Sesión compartida con Contenido: CIL escribe y lee `barquero_sesion` y `bfcontenido_sesion` (gana la de `expires_at` mayor) para no pedir la clave dos veces.
-- Armador: `supabase/tasas-armador.sql` dispara el workflow de mensajesBF de 8:15 a 8:35 (el cron de GitHub llega tarde). El cambio del workflow (fijar el descuento del día, `forzar`) está listo pero sin subir: falta permiso de escritura en mensajesBF.
+- Armador: `supabase/tasas-armador.sql` dispara el workflow de mensajesBF de 8:15 a 8:35 (el cron de GitHub llega tarde). Workflow publicado (fija el descuento del día; `forzar` solo desde gerencia; en equipos sin acceso de administradora el número queda bloqueado). Falta que ella cree el token y corra el SQL (pasos 2 y 3).
 - Fase 2: llevar Contenido dentro de CIL (`/contenido/`, sesión `barquero_sesion`, tema compartido) y unificar sus avisos (`push_subs`, `notificar`, `push_config`) con los de tareas.
 - Fase 3: Armador de mensajes. Se le recomendó pasar productos y precios de `data.json` en GitHub a la base de datos (hoy se editan con un token de GitHub guardado en el teléfono). Ella aún no decide.
 - Falta: la lista de quién usa Contenido y quién usa Mensajes, el ícono (hoy dice "CIL" provisional) y cargar su lista real de tareas.
 - Gerencia evalúa: premio del mes, "cubre primero" y cuándo activar `usar_salidas`.
 
 ## Pruebas
+- `.github/workflows/pruebas.yml` corre en cada push: sintaxis, `cil.sql` dos veces sobre `pruebas/stub-supabase.sql` y `pruebas/humo.js` (Playwright, modo demo, 360 px).
+- Decisiones de gerencia: página de aprobación https://claude.ai/artifact/B3s85DdSYu8ucAxCsfFDiq (colección `decisiones`). Todo lo que necesite su OK va ahí.
 - No hay build ni dependencias. Sirve la carpeta con `python3 -m http.server`. El modo demo sale solo con `config.js` vacío (en pruebas, intercepta `config.js` con Playwright).
 - Para el SQL, Postgres local más PostgREST con un stub de `auth.uid()`. Verifica que `logic.js` y SQL den el mismo reparto.
 - Revisa la sintaxis JS con `node -e "new Function(require('fs').readFileSync('tareas/app.js','utf8'))"`.
