@@ -317,7 +317,15 @@
     return '<span class="pill hora">' + ICON.reloj + ' ' + esc(txt) + '</span>';
   }
   function tituloHtml(a) {
-    return esc(a.titulo) + (a.momento_nombre ? ' <span class="momento">· ' + esc(a.momento_nombre) + '</span>' : '');
+    return esc(a.titulo) + (a.momento_nombre ? ' <span class="momento">· ' + esc(a.momento_nombre) + '</span>' : '') + conHtml(a);
+  }
+  // Tareas de varias personas: «con María»
+  function conHtml(a) {
+    var txt = (S.data && S.data.companeros && S.data.companeros[a.id]) || '';
+    if (!txt && S.data && S.data.asignaciones) {
+      txt = L.companerosDe(S.data, a).map(function (b) { return b.asignado_a ? nombreDe(b.asignado_a) : 'sin asignar'; }).join(', ');
+    }
+    return txt ? ' <span class="momento">· con ' + esc(txt) + '</span>' : '';
   }
 
   function filaTareaEmpleado(a, atrasada) {
@@ -651,8 +659,11 @@
         }).join('') + '</div><label class="fila-inline">Cada <select name="cada_n">' +
         [1, 2, 3, 4].map(function (n) { return '<option value="' + n + '"' + (v.cada_n === n ? ' selected' : '') + '>' + (n === 1 ? 'semana' : n + ' semanas') + '</option>'; }).join('') +
         '</select></label></div>';
-      h += '<label class="campo frec-mensual"' + (v.frecuencia === 'mensual' ? '' : ' hidden') + '>Día del mes <small>(si cae en día libre, se adelanta al día de trabajo anterior)</small>' +
-        '<input type="number" name="dia_mes" min="1" max="31" value="' + esc(v.dia_mes || 1) + '" inputmode="numeric"></label>';
+      h += '<div class="campo frec-mensual"' + (v.frecuencia === 'mensual' ? '' : ' hidden') + '><label class="campo">Día del mes <small>(si cae en día libre, se adelanta al día de trabajo anterior)</small>' +
+        '<input type="number" name="dia_mes" min="1" max="31" value="' + esc(v.dia_mes || 1) + '" inputmode="numeric"></label>' +
+        '<label class="fila-inline">Cada <select name="cada_meses">' + [1, 2, 3, 4, 6, 12].map(function (n) {
+          return '<option value="' + n + '"' + ((v.frecuencia === 'mensual' ? v.cada_n || 1 : 1) === n ? ' selected' : '') + '>' + (n === 1 ? 'mes' : n === 12 ? '12 meses (una vez al año)' : n + ' meses') + '</option>';
+        }).join('') + '</select></label><small class="ayuda">Cuenta desde el mes en que «Empieza».</small></div>';
       h += '<label class="campo">Empieza<input type="date" name="fecha_inicio" value="' + esc(v.fecha_inicio || S.hoy) + '"></label>';
     }
 
@@ -673,6 +684,10 @@
         return '<label class="check" data-local="' + esc(localDe(pe)) + '"' + oculto(pe) + '><input type="checkbox" name="solo" value="' + esc(pe.id) + '"' + ((v.solo_pueden || []).indexOf(pe.id) >= 0 ? ' checked' : '') + '>' + esc(pe.nombre) + '</label>';
       }).join('') + '<p class="ayuda">Si solo puede una persona y falta, la tarea queda esperando hasta que vuelva.</p></div></div>';
 
+    // Cuántas personas la hacen juntas
+    if (!unica) h += '<label class="campo">¿Cuántas personas la hacen? <select name="personas">' + [1, 2, 3].map(function (n) {
+      return '<option value="' + n + '"' + ((v.personas || 1) === n ? ' selected' : '') + '>' + (n === 1 ? '1 persona' : n + ' personas juntas') + '</option>';
+    }).join('') + '</select><small class="ayuda">Con más de una, a cada una le cuentan los minutos completos. Con que una la marque, queda hecha para todas.</small></label>';
     // Registro de temperaturas
     h += '<label class="check"><input type="checkbox" name="registro"' + (v.registro ? ' checked' : '') + ' data-cambio="registro"><span>Pide anotar temperaturas <small class="muted">— al marcarla, la persona anota la lectura de cada equipo de frío</small></span></label>';
     h += '<div class="campo sub-campo registro-equipos"' + (v.registro ? '' : ' hidden') + '><span>¿Qué equipos? <small>(ninguno marcado = todos los activos del local)</small></span>' +
@@ -696,7 +711,7 @@
       if (prox.length) h += '<p class="ayuda">Próximas veces: ' + esc(prox.map(L.fmtFecha).join(' · ')) + '</p>';
     }
     h += '<div class="acciones"><button class="btn grande" type="submit">' + (nueva ? 'Crear tarea' : 'Guardar cambios') + '</button></div>';
-    if (!nueva) h += '<div class="mas-acciones"><button class="btn fantasma rojo" type="button" data-acc="borrar-plantilla" data-id="' + esc(p.id) + '">Borrar tarea</button></div>';
+    if (!nueva) h += '<div class="mas-acciones"><button class="btn sec" type="button" data-acc="duplicar-plantilla" data-id="' + esc(p.id) + '">Duplicar</button><button class="btn fantasma rojo" type="button" data-acc="borrar-plantilla" data-id="' + esc(p.id) + '">Borrar tarea</button></div>';
     h += '</form>';
     return h;
   }
@@ -1511,6 +1526,14 @@
       var a = asig(id);
       confirmar('¿Borrar esta tarea de una vez?', 'Borrar', function () { ejecutar(store.borrar('asignaciones', id).then(function () { return a && a.plantilla_id ? store.borrar('plantillas', a.plantilla_id) : null; }), 'Tarea borrada.', true); });
     }
+    else if (acc === 'duplicar-plantilla') {
+      // La copia nace pausada para que no salga repetida hoy: se revisa, se ajusta y se activa
+      var orig = plantilla(id); if (!orig) return;
+      var copia = {};
+      Object.keys(orig).forEach(function (k) { if (['id', 'creado_en', 'creado_por', 'actualizado_en'].indexOf(k) < 0) copia[k] = orig[k]; });
+      copia.titulo = (orig.titulo + ' (copia)').slice(0, 120); copia.activa = false;
+      ejecutar(store.insertar('plantillas', copia), 'Copia creada y pausada. Ajústala y marca «Activa».').then(function (r) { if (r && r.id) ir('/tarea/' + r.id); });
+    }
     else if (acc === 'borrar-plantilla') {
       confirmar('¿Borrar esta tarea? Lo ya hecho queda en el historial. Si solo quieres pausarla, desmarca «Activa».', 'Borrar tarea', function () {
       var hoy = S.hoy;
@@ -1707,7 +1730,8 @@
       detalle: String(fd.get('detalle') || '').trim() || null,
       minutos: min,
       solo_pueden: !unica && fd.get('restr') === '1' ? fd.getAll('solo') : [],
-      grupos: !unica && fd.get('restr') === 'g' ? fd.getAll('grupo') : []
+      grupos: !unica && fd.get('restr') === 'g' ? fd.getAll('grupo') : [],
+      personas: unica ? 1 : Math.max(1, Math.min(5, Number(fd.get('personas')) || 1))
     };
     if (fd.get('restr') === '1' && !fila.solo_pueden.length) { aviso('Marca quién puede hacerla, o elige «Cualquiera».'); return; }
     if (fd.get('restr') === 'g' && !fila.grupos.length) { aviso('Marca al menos un grupo, o elige «Cualquiera».'); return; }
@@ -1726,6 +1750,7 @@
       if (fr === 'mensual') {
         fila.dia_mes = Math.round(Number(fd.get('dia_mes')));
         if (!(fila.dia_mes >= 1 && fila.dia_mes <= 31)) { aviso('El día del mes debe estar entre 1 y 31.'); return; }
+        fila.cada_n = Number(fd.get('cada_meses')) || 1;
       }
     }
     if (id) fila.activa = !!fd.get('activa');

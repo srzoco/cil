@@ -208,6 +208,13 @@
       }
       a.estado = 'hecha'; a.hecha_en = new Date().toISOString(); a.hecha_por = a.asignado_a || yo.id; a.repetir = false;
       this._evento(a.id, 'hecha', null, a.hecha_por);
+      // Tarea de varias personas: con que una la marque, queda hecha para todos (igual que el SQL).
+      // Cada puesto queda como hecho por su dueño: la hicieron juntos, nadie le «debe» minutos a nadie.
+      L.companerosDe(db, a).forEach(function (b) {
+        if (b.estado !== 'pendiente') return;
+        b.estado = 'hecha'; b.hecha_en = a.hecha_en; b.hecha_por = b.asignado_a || a.hecha_por; b.repetir = false;
+        self._evento(b.id, 'hecha', null, b.hecha_por);
+      });
       if (a.motivo === 'rescate' && a.incumplida && !a.compensada && a.rescatada_de) { a.compensada = true; this._compensar(a.asignado_a || yo.id, a.rescatada_de, a.minutos); }
       if (p && String(p.seguimiento_titulo || '').trim() && (a.momento || 0) < 50 && a.fecha === hoy) {
         var t = new Date(Date.now() + (p.seguimiento_despues || 45) * 60000), t2 = new Date(t.getTime() + 15 * 60000);
@@ -221,8 +228,14 @@
     } else {
       if (a.estado !== 'hecha') return;
       if (!adm && L.hoyISO(new Date(a.hecha_en)) !== hoy) throw errorUsuario('Solo se puede deshacer el mismo día.');
+      var cuando = a.hecha_en;
       a.estado = 'pendiente'; a.hecha_en = null; a.hecha_por = null;
       this._evento(a.id, 'deshecha', null, a.asignado_a);
+      L.companerosDe(db, a).forEach(function (b) {
+        if (b.estado !== 'hecha' || b.hecha_en !== cuando) return;  // solo lo que se marcó junto con esta
+        b.estado = 'pendiente'; b.hecha_en = null; b.hecha_por = null;
+        self._evento(b.id, 'deshecha', null, b.asignado_a);
+      });
       db.lecturas = (db.lecturas || []).filter(function (x) { return x.asignacion_id !== a.id; });
       if ((a.momento || 0) < 50) db.asignaciones = db.asignaciones.filter(function (x) {
         return !(x.plantilla_id === a.plantilla_id && x.fecha === a.fecha && x.momento === (a.momento || 0) + 50 && x.estado === 'pendiente');

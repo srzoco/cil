@@ -186,8 +186,10 @@
       return false;
     }
     if (p.frecuencia === 'mensual') {
-      return f === anteriorLaborable(diaDelMes(f, p.dia_mes), esLab) ||
-             f === anteriorLaborable(diaDelMes(mesSiguiente(f), p.dia_mes), esLab);
+      // Cada N meses (cada_n), contando desde el mes de fecha_inicio
+      var cae = function (iso) { var n = p.cada_n || 1; var m = (Number(iso.slice(0, 4)) * 12 + Number(iso.slice(5, 7))) - (Number(p.fecha_inicio.slice(0, 4)) * 12 + Number(p.fecha_inicio.slice(5, 7))); return ((m % n) + n) % n === 0; };
+      var d1 = diaDelMes(f, p.dia_mes), d2 = diaDelMes(mesSiguiente(f), p.dia_mes);
+      return (cae(d1) && f === anteriorLaborable(d1, esLab)) || (cae(d2) && f === anteriorLaborable(d2, esLab));
     }
     return false;
   }
@@ -195,7 +197,7 @@
   function frecuenciaTxt(p) {
     if (p.frecuencia === 'diaria') return 'Todos los días';
     if (p.frecuencia === 'unica') return 'Una vez · ' + fmtFecha(p.fecha_unica);
-    if (p.frecuencia === 'mensual') return 'Cada mes, día ' + p.dia_mes;
+    if (p.frecuencia === 'mensual') return ((p.cada_n || 1) > 1 ? 'Cada ' + p.cada_n + ' meses' : 'Cada mes') + ', día ' + p.dia_mes;
     var dias = (p.dias_semana || []).slice().sort(function (a, b) { return ((a + 6) % 7) - ((b + 6) % 7); })
       .map(function (d) { return DIAS_CORTOS[d].toLowerCase(); }).join(', ');
     return (p.cada_n > 1 ? 'Cada ' + p.cada_n + ' semanas: ' : 'Cada semana: ') + dias;
@@ -297,11 +299,13 @@
   }
 
   // Igual que _elegir_persona en supabase.sql
-  function elegirPersona(db, p, f, ahora) {
+  function elegirPersona(db, p, f, ahora, excluir) {
     var asigs = db.asignaciones;
+    excluir = excluir || [];
     var soloPresentes = p.frecuencia === 'unica' && f === hoyISO(ahora) && pasoLimite(db.ajustes, ahora);
     var cand = db.personas.filter(function (pe) {
       if (!esEmpleadoActivo(pe)) return false;
+      if (excluir.indexOf(pe.id) >= 0) return false;  // ya tiene otro puesto de esta misma tarea
       if (localDePersona(db, pe) !== p.local_id) return false;
       if (!trabaja(db, pe, f)) return false;
       if (!puedeSegun(p, pe)) return false;
@@ -349,10 +353,14 @@
     db.plantillas.filter(function (p) {
       return p.activa && toca(p, f, laborableFn(db, p.local_id)) && !db.asignaciones.some(function (a) { return a.plantilla_id === p.id && a.fecha === f; });
     }).sort(ordenGeneracion).forEach(function (p) {
+      // Tareas de varias personas: un «puesto» por persona; cada una recibe los minutos completos
+      var elegidos = [];
+      for (var puesto = 0; puesto < personasDe(p); puesto++) {
       var quien, mot;
       if (p.frecuencia === 'unica' && p.al_pool) { quien = null; mot = 'pool'; }
-      else if (p.frecuencia === 'unica' && p.asignar_a) { quien = p.asignar_a; mot = 'fija'; }
-      else { quien = elegirPersona(db, p, f, ahora); mot = quien ? 'rotacion' : 'pool'; }
+      else if (p.frecuencia === 'unica' && p.asignar_a && puesto === 0) { quien = p.asignar_a; mot = 'fija'; }
+      else { quien = elegirPersona(db, p, f, ahora, elegidos); mot = quien ? 'rotacion' : 'pool'; }
+      if (quien) elegidos.push(quien);
       var momentos = (p.momentos && p.momentos.length) ? p.momentos : [null];
       momentos.forEach(function (m, i) {
         var a = {
@@ -360,13 +368,20 @@
           arrastra: p.frecuencia !== 'diaria', asignado_a: quien, asignado_original: quien, motivo: mot,
           estado: 'pendiente', hecha_en: null, hecha_por: null, creado_en: new Date().toISOString(),
           local_id: p.local_id, momento: i, momento_nombre: (m && String(m.nombre || '').trim()) || null, antes: (m && m.antes) || null,
-          desde: (m && m.desde) || null, registro: !!p.registro, equipos: (p.equipos || []).slice()
+          desde: (m && m.desde) || null, registro: !!p.registro, equipos: (p.equipos || []).slice(), puesto: puesto
         };
         db.asignaciones.push(a);
         nuevas.push(a);
       });
+      }
     });
     return nuevas;
+  }
+  function personasDe(p) { var n = Number(p && p.personas) || 1; return Math.max(1, Math.min(5, n)); }
+  // Los otros puestos de la misma tarea (mismo día y misma vez)
+  function companerosDe(db, a) {
+    if (!a || !a.plantilla_id) return [];
+    return db.asignaciones.filter(function (b) { return b.id !== a.id && b.plantilla_id === a.plantilla_id && b.fecha === a.fecha && b.momento === a.momento && (b.puesto || 0) !== (a.puesto || 0); });
   }
 
   // ---------- Lo que ve cada quien ----------
@@ -570,7 +585,7 @@
     localDe: localDe, localPrincipal: localPrincipal, labDe: labDe, laborable: laborable, laborableFn: laborableFn, trabaja: trabaja, especial: especial, localDePersona: localDePersona, frecuenciaTxt: frecuenciaTxt, proximas: proximas, siguienteLaborable: siguienteLaborable,
     seFue: seFue, anteriorLaborable: anteriorLaborable, carga: carga, capacidad: capacidad, cabeEn: cabeEn, estadoAsistencia: estadoAsistencia, estaPresente: estaPresente, asistenciaDe: asistenciaDe,
     esEmpleadoActivo: esEmpleadoActivo, plantillaDe: plantillaDe, puedeHacer: puedeHacer,
-    elegirPersona: elegirPersona, puedeSegun: puedeSegun, generarDia: generarDia, tareasDe: tareasDe, delPool: delPool,
+    elegirPersona: elegirPersona, puedeSegun: puedeSegun, generarDia: generarDia, personasDe: personasDe, companerosDe: companerosDe, tareasDe: tareasDe, delPool: delPool,
     sugerirReasignacion: sugerirReasignacion, reporteDia: reporteDia, textoReporte: textoReporte,
     historial: historial, cargaTipica: cargaTipica
   };

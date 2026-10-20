@@ -131,7 +131,7 @@ create table if not exists public.plantillas (
   minutos       int not null default 15 check (minutos between 1 and 600),
   frecuencia    text not null check (frecuencia in ('diaria', 'semanal', 'mensual', 'unica')),
   dias_semana   int[] not null default '{}',          -- 0 = domingo … 6 = sábado (semanal)
-  cada_n        int not null default 1 check (cada_n between 1 and 8),   -- cada N semanas
+  cada_n        int not null default 1 check (cada_n between 1 and 8),   -- cada N semanas (semanal) o N meses (mensual)
   dia_mes       int check (dia_mes between 1 and 31), -- mensual
   fecha_inicio  date not null default public.hoy(),
   fecha_unica   date,                                 -- unica
@@ -155,6 +155,10 @@ alter table public.plantillas add column if not exists grupos uuid[] not null de
 -- Registro de temperaturas: al marcarla «Hecho» pide la lectura de cada equipo (equipos vacío = todos los del local).
 alter table public.plantillas add column if not exists registro boolean not null default false;
 alter table public.plantillas add column if not exists equipos uuid[] not null default '{}';
+-- Cuántas personas la hacen juntas (1 = normal). Cada una recibe los minutos completos; con que una la marque, queda hecha.
+alter table public.plantillas drop constraint if exists plantillas_cada_n_check;
+alter table public.plantillas add constraint plantillas_cada_n_check check (cada_n between 1 and 12);
+alter table public.plantillas add column if not exists personas int not null default 1 check (personas between 1 and 5);
 -- Tarea que sale sola después de hacer esta (p. ej. «Apagar contenedores» 45 min después de «Prender contenedores»).
 alter table public.plantillas add column if not exists seguimiento_titulo text;
 alter table public.plantillas add column if not exists seguimiento_despues int not null default 45 check (seguimiento_despues between 1 and 600);
@@ -187,7 +191,10 @@ alter table public.asignaciones add column if not exists desde time;     -- no s
 alter table public.asignaciones add column if not exists registro boolean not null default false;  -- pide temperaturas
 alter table public.asignaciones add column if not exists equipos uuid[] not null default '{}';     -- cuáles (vacío = todos los del local)
 alter table public.asignaciones drop constraint if exists asignaciones_plantilla_id_fecha_key;
-create unique index if not exists asignaciones_plantilla_fecha_momento on public.asignaciones (plantilla_id, fecha, momento);
+-- Tareas de varias personas: un «puesto» por persona (0, 1, …). Cada puesto es una fila con su dueño.
+alter table public.asignaciones add column if not exists puesto int not null default 0;
+drop index if exists public.asignaciones_plantilla_fecha_momento;
+create unique index if not exists asignaciones_plantilla_fecha_momento_puesto on public.asignaciones (plantilla_id, fecha, momento, puesto);
 update public.asignaciones set local_id = public._local_principal() where local_id is null;
 -- Justificación de por qué no se hizo. Lo atrasado solo cuenta como carga si gerencia la aprueba.
 alter table public.asignaciones add column if not exists justificacion text;
@@ -419,6 +426,12 @@ $$;
 -- ¿Toca esta tarea ese día? Las diarias no salen en días libres (feriados, vacaciones);
 -- las semanales y mensuales que caen en día libre se adelantan al día de trabajo ANTERIOR (una sola vez).
 -- Por eso los feriados y vacaciones hay que cargarlos con anticipación.
+create or replace function public._mes_toca(p public.plantillas, d date) returns boolean
+language sql immutable as $$
+  select (((extract(year from d) * 12 + extract(month from d)) - (extract(year from p.fecha_inicio) * 12 + extract(month from p.fecha_inicio)))::int
+          % greatest(1, p.cada_n) + greatest(1, p.cada_n)) % greatest(1, p.cada_n) = 0
+$$;
+
 create or replace function public._toca(p public.plantillas, f date) returns boolean
 language plpgsql stable as $$
 declare d date; i int;
@@ -438,8 +451,11 @@ begin
     return false;
   end if;
   if p.frecuencia = 'mensual' then
-    return f = public._anterior_laborable(public._dia_del_mes(f, p.dia_mes), p.local_id)
-        or f = public._anterior_laborable(public._dia_del_mes((f + interval '1 month')::date, p.dia_mes), p.local_id);
+    -- cada N meses (cada_n), contando desde el mes de fecha_inicio
+    d := public._dia_del_mes(f, p.dia_mes);
+    if public._mes_toca(p, d) and f = public._anterior_laborable(d, p.local_id) then return true; end if;
+    d := public._dia_del_mes((f + interval '1 month')::date, p.dia_mes);
+    return public._mes_toca(p, d) and f = public._anterior_laborable(d, p.local_id);
   end if;
   return false;
 end $$;
@@ -449,7 +465,8 @@ end $$;
 -- La carga se mide en proporción a su capacidad: 60 min para alguien al 50% pesan como 120 min.
 -- Lo atrasado solo cuenta como carga si su justificación fue aprobada; si no, se recupera sin bajarle trabajo nuevo.
 -- Nadie recibe tareas más largas que su «tope por tarea», salvo que no haya otra persona que pueda.
-create or replace function public._elegir_persona(p public.plantillas, f date) returns uuid
+drop function if exists public._elegir_persona(public.plantillas, date);
+create or replace function public._elegir_persona(p public.plantillas, f date, p_excluir uuid[] default '{}') returns uuid
 language sql stable security definer set search_path = public as $$
   with todos as (
     select pe.id, pe.nombre, (pe.tarea_max is null or p.minutos <= pe.tarea_max) as cabe,
@@ -459,6 +476,7 @@ language sql stable security definer set search_path = public as $$
       (select max(a.fecha) from asignaciones a where a.plantilla_id = p.id and a.asignado_a = pe.id and a.fecha < f) as ultima
     from personas pe
     where pe.activo and pe.rol = 'empleado' and 'tareas' = any (pe.accesos) and pe.local_id = p.local_id and public._trabaja(pe, f)
+      and not (pe.id = any (p_excluir))  -- ya tiene otro puesto de esta misma tarea
       and (cardinality(p.solo_pueden) = 0 or pe.id = any (p.solo_pueden))
       and (cardinality(p.solo_pueden) > 0 or cardinality(p.grupos) = 0 or pe.grupos && p.grupos)
       -- el personal administrativo (rota = false) no entra en las tareas «para cualquiera»
@@ -488,7 +506,7 @@ language plpgsql security definer set search_path = public as $$
 declare
   f date := coalesce(p_fecha, public.hoy());
   p public.plantillas;
-  quien uuid; mot text; n int := 0; nueva uuid; i int; nm int; m jsonb;
+  quien uuid; mot text; n int := 0; nueva uuid; i int; nm int; m jsonb; pu int; elegidos uuid[];
 begin
   if auth.uid() is null then raise exception 'Inicia sesión.'; end if;
   if f <> public.hoy() and not public.es_admin() then raise exception 'Solo gerencia puede generar otros días.'; end if;
@@ -502,26 +520,30 @@ begin
              (cardinality(pl.solo_pueden) = 0 and cardinality(pl.grupos) = 0), cardinality(pl.solo_pueden),
              pl.minutos * greatest(1, jsonb_array_length(pl.momentos)) desc, pl.titulo
   loop
+    elegidos := '{}';
+    for pu in 0 .. greatest(1, least(5, p.personas)) - 1 loop
     if p.frecuencia = 'unica' and p.al_pool then quien := null; mot := 'pool';
-    elsif p.frecuencia = 'unica' and p.asignar_a is not null then quien := p.asignar_a; mot := 'fija';
+    elsif p.frecuencia = 'unica' and p.asignar_a is not null and pu = 0 then quien := p.asignar_a; mot := 'fija';
     else
-      quien := public._elegir_persona(p, f);
+      quien := public._elegir_persona(p, f, elegidos);
       mot := case when quien is null then 'pool' else 'rotacion' end;
     end if;
+    if quien is not null then elegidos := elegidos || quien; end if;
 
     nm := greatest(1, jsonb_array_length(p.momentos));
     for i in 0 .. nm - 1 loop
       m := p.momentos -> i;  -- null si es una sola vez sin hora
       insert into asignaciones (plantilla_id, fecha, titulo, detalle, minutos, arrastra, asignado_a, asignado_original, motivo,
-                                local_id, momento, momento_nombre, antes, desde, registro, equipos)
+                                local_id, momento, momento_nombre, antes, desde, registro, equipos, puesto)
       values (p.id, f, p.titulo, p.detalle, p.minutos, p.frecuencia <> 'diaria', quien, quien, mot,
-              p.local_id, i, nullif(trim(m->>'nombre'), ''), nullif(m->>'antes', '')::time, nullif(m->>'desde', '')::time, p.registro, p.equipos)
-      on conflict (plantilla_id, fecha, momento) do nothing
+              p.local_id, i, nullif(trim(m->>'nombre'), ''), nullif(m->>'antes', '')::time, nullif(m->>'desde', '')::time, p.registro, p.equipos, pu)
+      on conflict (plantilla_id, fecha, momento, puesto) do nothing
       returning id into nueva;
       if nueva is not null then
         insert into tareas_eventos (asignacion_id, tipo, a, texto) values (nueva, 'generada', quien, mot);
         n := n + 1;
       end if;
+    end loop;
     end loop;
   end loop;
   return n;
@@ -776,6 +798,14 @@ begin
     end if;
     update asignaciones set estado = 'hecha', hecha_en = now(), hecha_por = coalesce(a.asignado_a, auth.uid()), repetir = false where id = p_id;
     insert into tareas_eventos (asignacion_id, tipo, a) values (p_id, 'hecha', coalesce(a.asignado_a, auth.uid()));
+    -- Tarea de varias personas: con que una la marque, queda hecha para todos. Cada puesto queda como hecho
+    -- por su dueño (la hicieron juntos: nadie le debe minutos a nadie).
+    with b as (
+      update asignaciones x set estado = 'hecha', hecha_en = (select y.hecha_en from asignaciones y where y.id = p_id),
+             hecha_por = coalesce(x.asignado_a, a.asignado_a, auth.uid()), repetir = false
+      where x.plantilla_id = a.plantilla_id and x.fecha = a.fecha and x.momento = a.momento and x.puesto <> a.puesto and x.estado = 'pendiente'
+      returning x.id, x.hecha_por)
+    insert into tareas_eventos (asignacion_id, tipo, a) select b.id, 'hecha', b.hecha_por from b;
     -- La rescató alguien porque a quien le tocaba se le pasó sin excusa: esa persona le compensa los minutos
     if a.motivo = 'rescate' and a.incumplida and not a.compensada and a.rescatada_de is not null then
       update asignaciones set compensada = true where id = p_id;
@@ -789,7 +819,7 @@ begin
                                 momento, momento_nombre, desde, antes)
       values (p.id, a.fecha, trim(p.seguimiento_titulo), p.seguimiento_minutos, false, quien, quien, 'fija', a.local_id,
               a.momento + 50, a.momento_nombre, t, (t + interval '15 minutes')::time)
-      on conflict (plantilla_id, fecha, momento) do update set desde = excluded.desde, antes = excluded.antes,
+      on conflict (plantilla_id, fecha, momento, puesto) do update set desde = excluded.desde, antes = excluded.antes,
         asignado_a = excluded.asignado_a, asignado_original = excluded.asignado_original
         where asignaciones.estado = 'pendiente';
     end if;
@@ -800,6 +830,13 @@ begin
     end if;
     update asignaciones set estado = 'pendiente', hecha_en = null, hecha_por = null where id = p_id;
     insert into tareas_eventos (asignacion_id, tipo, a) values (p_id, 'deshecha', a.asignado_a);
+    -- los compañeros que quedaron hechos junto con esta vuelven a pendiente
+    with b as (
+      update asignaciones x set estado = 'pendiente', hecha_en = null, hecha_por = null
+      where x.plantilla_id = a.plantilla_id and x.fecha = a.fecha and x.momento = a.momento and x.puesto <> a.puesto
+        and x.estado = 'hecha' and x.hecha_en = a.hecha_en
+      returning x.id, x.asignado_a)
+    insert into tareas_eventos (asignacion_id, tipo, a) select b.id, 'deshecha', b.asignado_a from b;
     delete from lecturas where asignacion_id = p_id;
     -- si se desmarca «Prender», se quita el «Apagar» que todavía no se hizo
     if a.momento < 50 then
@@ -1164,6 +1201,18 @@ $$;
 -- Corre con los permisos de quien la llama: cada quien recibe solo lo que puede ver.
 -- p_completo = false: hoy, lo pendiente y lo hecho hoy (pantalla Hoy y Mi día).
 -- p_completo = true:  además los últimos 35 días (Reporte de otros días e Historial).
+-- Con quién hace cada quien sus tareas de varias personas: {asignacion_id: "María, Luis"}.
+-- security definer porque un empleado no ve las filas ni los nombres de los demás.
+create or replace function public._companeros(p_fecha date) returns json
+language sql stable security definer set search_path = public as $$
+  select coalesce(json_object_agg(a.id, c.nombres), '{}'::json)
+  from asignaciones a
+  join lateral (select string_agg(coalesce(nullif(pe.nombre, ''), pe.email), ', ' order by b.puesto) as nombres
+                from asignaciones b join personas pe on pe.id = b.asignado_a
+                where b.plantilla_id = a.plantilla_id and b.fecha = a.fecha and b.momento = a.momento and b.puesto <> a.puesto) c on c.nombres is not null
+  where a.fecha >= p_fecha - 7 and a.plantilla_id is not null and (a.asignado_a = auth.uid() or public.es_admin())
+$$;
+
 create or replace function public.datos_app(p_completo boolean default false) returns json
 language plpgsql security invoker set search_path = public as $$
 declare
@@ -1177,6 +1226,7 @@ begin
     'hoy', hoy,
     'completo', p_completo,
     'mi_mes', public.mi_puntualidad(),
+    'companeros', public._companeros(hoy),
     'personas', (select coalesce(json_agg(x order by x.nombre), '[]'::json) from personas x),
     'ajustes', (select row_to_json(x) from tareas_ajustes x where x.id = 1),
     'plantillas', (select coalesce(json_agg(x order by x.titulo), '[]'::json) from plantillas x),
