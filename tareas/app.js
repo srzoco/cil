@@ -1328,7 +1328,7 @@
       '<option value="admin"' + (pe.rol === 'admin' ? ' selected' : '') + '>Gerencia (entra a todos los módulos y administra)</option></select></label>' +
       (variosLocales() ? '<label class="campo">Local<select name="local_id">' + locales().map(function (l) {
         return '<option value="' + esc(l.id) + '"' + (l.id === localDe(pe) ? ' selected' : '') + '>' + esc(l.nombre) + '</option>';
-      }).join('') + '</select></label>' : '') +
+      }).join('') + '</select></label>' : '<p class="campo">Local <small>' + esc(nombreLocal(localDe(pe))) + ' · para elegir otro, primero toca «Agregar local» en Equipo → Locales</small></p>') +
       (pe.rol === 'empleado' ? '<label class="campo">Tiempo para tareas <small>(el resto lo dedica a despachar, preparar pedidos, etc.)</small><select name="capacidad">' +
         [100, 90, 80, 70, 60, 50, 40, 30, 25].map(function (c) { return '<option value="' + c + '"' + (L.capacidad(pe) === c ? ' selected' : '') + '>' + c + '% de su jornada</option>'; }).join('') +
         (([100, 90, 80, 70, 60, 50, 40, 30, 25].indexOf(L.capacidad(pe)) < 0) ? '<option value="' + L.capacidad(pe) + '" selected>' + L.capacidad(pe) + '%</option>' : '') +
