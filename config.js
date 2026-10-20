@@ -9,6 +9,6 @@ window.BARQUERO_CONFIG = {
   supabaseUrl: 'https://xooofdppgnpibasambuc.supabase.co',
   supabaseKey: 'sb_publishable_-rf7ZUzMdnuLHs9dGnj44Q_amcRfcTY',
   // Avisos en el teléfono de Tareas (opcional): la clave PÚBLICA que genera la app en Equipo → Avisos.
-  vapidPublicKey: ''
+  vapidPublicKey: 'BMsI8ZFML31Bx8LRcTzH6yJxx5YrBpaWvhwqgDU_TrvNp7_TuCJEKsjTxPfYK3rXtjYhDQsi7egI_FyRDVoGKhk'
 };
 window.TB_CONFIG = window.BARQUERO_CONFIG;
