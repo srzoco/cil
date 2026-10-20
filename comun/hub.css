@@ -37,3 +37,7 @@ a { color: var(--accent); }
 .btn-hub { width: 100%; min-height: 50px; border: 0; border-radius: 14px; background: var(--accent); color: var(--accent-ink); font: 700 1rem var(--sans); cursor: pointer; }
 .hub-error { color: var(--wine); background: var(--wine-bg); border-radius: 12px; padding: 10px 12px; font-weight: 600; margin: 0 0 14px; }
 .hub-tema { position: fixed; top: 14px; right: 16px; }
+.modulo-ic { position: relative; }
+.modulo-badge { position: absolute; top: -6px; right: -6px; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; background: var(--wine); color: #fff; font: 700 .75rem/22px var(--sans); text-align: center; }
+:root[data-theme="oscuro"] .modulo-badge { color: var(--bg); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="claro"]) .modulo-badge { color: var(--bg); } }

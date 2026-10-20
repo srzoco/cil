@@ -1234,6 +1234,71 @@ begin
   insert into avisos_cola (persona_id, titulo, cuerpo) values (auth.uid(), 'Aviso de prueba', 'Si ves esto, los avisos funcionan.');
 end $$;
 
+-- Gerencia agrega a una persona desde la app (sin entrar a Supabase). Queda confirmada y puede entrar de una vez
+-- con el correo y la clave que gerencia le dé en persona.
+create or replace function public.crear_persona(p_email text, p_clave text, p_nombre text, p_local uuid, p_accesos text[], p_rol text default 'empleado')
+returns uuid language plpgsql security definer set search_path = public, extensions as $$
+declare uid uuid := gen_random_uuid(); correo text := lower(trim(coalesce(p_email, '')));
+begin
+  if not public.es_admin() then raise exception 'Solo gerencia.'; end if;
+  if correo !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then raise exception 'Ese correo no es válido.'; end if;
+  if length(coalesce(p_clave, '')) < 8 then raise exception 'La clave debe tener al menos 8 caracteres.'; end if;
+  if trim(coalesce(p_nombre, '')) = '' then raise exception 'Escribe el nombre.'; end if;
+  if p_rol not in ('admin', 'empleado') then raise exception 'Rol no válido.'; end if;
+  if exists (select 1 from auth.users where lower(email) = correo) then raise exception 'Ya hay una persona con ese correo.'; end if;
+  insert into auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data,
+                          created_at, updated_at, confirmation_token, recovery_token, email_change_token_new, email_change)
+  values ('00000000-0000-0000-0000-000000000000', uid, 'authenticated', 'authenticated', correo, crypt(p_clave, gen_salt('bf')), now(),
+          '{"provider":"email","providers":["email"]}', '{}', now(), now(), '', '', '', '');
+  insert into auth.identities (id, user_id, provider_id, provider, identity_data, last_sign_in_at, created_at, updated_at)
+  values (gen_random_uuid(), uid, uid::text, 'email', jsonb_build_object('sub', uid::text, 'email', correo, 'email_verified', true), now(), now(), now());
+  -- el trigger personas_desde_auth ya creó su fila; se completa
+  update personas set nombre = trim(p_nombre), rol = p_rol, local_id = coalesce(p_local, public._local_principal()),
+                      accesos = coalesce(p_accesos, '{}') where id = uid;
+  return uid;
+end $$;
+
+-- Menú de CIL: cuántas cosas esperan por esta persona en cada módulo (un número por módulo, sin detalle).
+create or replace function public.menu_pendientes() returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare yo public.personas; r jsonb := '{}'; n int; rol_c text;
+begin
+  select * into yo from personas where id = auth.uid() and activo;
+  if not found then return r; end if;
+  if yo.rol = 'admin' or 'tareas' = any (yo.accesos) then
+    if yo.rol = 'admin' then
+      -- tareas de hoy que ya pasaron su hora sin hacerse
+      select count(*) into n from asignaciones a where a.fecha = public.hoy() and a.estado = 'pendiente'
+        and a.antes is not null and public._ts_hoy(a.antes) < now();
+    else
+      select count(*) into n from asignaciones a where a.fecha = public.hoy() and a.estado = 'pendiente' and a.asignado_a = yo.id;
+    end if;
+    r := r || jsonb_build_object('tareas', n);
+  end if;
+  if (yo.rol = 'admin' or 'contenido' = any (yo.accesos)) and to_regclass('public.piezas') is not null and to_regclass('public.equipo') is not null then
+    execute 'select rol from public.equipo where user_id = $1' into rol_c using yo.id;
+    if rol_c is not null then
+      execute 'select count(*) from public.piezas where fase = ''produccion'' and turno = $1' into n using rol_c;
+      r := r || jsonb_build_object('contenido', n);
+    end if;
+  end if;
+  return r;
+end $$;
+
+-- Al desactivar a alguien: se cierran sus sesiones en todos los teléfonos y deja de recibir avisos.
+create or replace function public._al_desactivar() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if old.activo and not new.activo then
+    delete from suscripciones where persona_id = new.id;
+    if to_regclass('auth.sessions') is not null then execute 'delete from auth.sessions where user_id = $1' using new.id; end if;
+    if to_regclass('auth.refresh_tokens') is not null then execute 'delete from auth.refresh_tokens where user_id = $1::text' using new.id; end if;
+  end if;
+  return new;
+end $$;
+drop trigger if exists personas_al_desactivar on public.personas;
+create trigger personas_al_desactivar after update of activo on public.personas for each row execute function public._al_desactivar();
+
 -- Gerencia cambia la clave de un empleado (sin correo: se la dice en persona).
 create extension if not exists pgcrypto with schema extensions;
 create or replace function public.cambiar_clave(p_persona uuid, p_clave text) returns void
@@ -1286,16 +1351,23 @@ begin
     and public._ts_hoy(aj.a_tiempo_hasta - interval '5 minutes') <= ahora and public._ts_hoy(aj.a_tiempo_hasta - interval '5 minutes') > hace
     and not exists (select 1 from asistencia s where s.persona_id = pe.id and s.fecha = hoy);
 
-  -- 4) Gerencia: a la hora límite, quién no marcó
+  -- 4) Gerencia: un solo resumen de asistencia a las 9:30 a. m., y solo si alguien faltó o llegó tarde
+  --    (las temperaturas fuera de rango y las salidas antes de hora siguen avisando al momento)
   insert into _avisos
-  select ad.id, 'limite:' || hoy || ':' || ad.id, f.n || case when f.n = 1 then ' persona no marcó llegada' else ' personas no marcaron llegada' end,
-         f.nombres || '. Revisa Hoy para repartir sus tareas.', './#/'
+  select ad.id, 'resumen:' || hoy || ':' || ad.id,
+         'Asistencia de hoy: ' || concat_ws(' · ', case when f.nf > 0 then f.nf || case when f.nf = 1 then ' falta' else ' faltas' end end,
+                                                 case when f.nt > 0 then f.nt || ' tarde' end),
+         concat_ws('. ', case when f.nf > 0 then 'Faltan: ' || f.faltan end, case when f.nt > 0 then 'Tarde: ' || f.tarde end) || '.', './#/'
   from personas ad,
-       (select count(*) as n, string_agg(coalesce(nullif(pe.nombre, ''), pe.email), ', ' order by pe.nombre) as nombres from personas pe
-        where pe.activo and pe.rol = 'empleado' and 'tareas' = any (pe.accesos) and public._trabaja(pe, hoy)
-          and not exists (select 1 from asistencia s where s.persona_id = pe.id and s.fecha = hoy)) f
-  where ad.activo and ad.rol = 'admin' and f.n > 0
-    and public._ts_hoy(aj.hora_limite) <= ahora and public._ts_hoy(aj.hora_limite) > hace;
+       (select count(*) filter (where s.persona_id is null) as nf,
+               string_agg(coalesce(nullif(pe.nombre, ''), pe.email), ', ' order by pe.nombre) filter (where s.persona_id is null) as faltan,
+               count(*) filter (where s.estado = 'presente' and date_trunc('minute', s.llegada at time zone 'America/Caracas')::time > aj.a_tiempo_hasta) as nt,
+               string_agg(coalesce(nullif(pe.nombre, ''), pe.email) || ' ' || to_char(s.llegada at time zone 'America/Caracas', 'HH12:MI'), ', ' order by s.llegada)
+                 filter (where s.estado = 'presente' and date_trunc('minute', s.llegada at time zone 'America/Caracas')::time > aj.a_tiempo_hasta) as tarde
+        from personas pe left join asistencia s on s.persona_id = pe.id and s.fecha = hoy
+        where pe.activo and pe.rol = 'empleado' and 'tareas' = any (pe.accesos) and public._trabaja(pe, hoy)) f
+  where ad.activo and ad.rol = 'admin' and (f.nf > 0 or f.nt > 0)
+    and public._ts_hoy(time '09:30') <= ahora and public._ts_hoy(time '09:30') > hace;
 
   -- 5) Gerencia: temperatura fuera de rango
   insert into _avisos
@@ -1405,7 +1477,8 @@ grant execute on function public.hoy(), public.es_admin(), public.tiene_acceso(t
   public.asignar_revisiones(), public.calificar(uuid, int, text, boolean),
   public.marcar_salida(text), public.datos_app(boolean), public.mi_puntualidad(), public.registrar_lecturas(uuid, jsonb),
   public.marcar_fuera(boolean), public.rescatar(uuid),
-  public.guardar_suscripcion(text, text, text), public.borrar_suscripcion(text), public.aviso_prueba(), public.cambiar_clave(uuid, text) to authenticated;
+  public.guardar_suscripcion(text, text, text), public.borrar_suscripcion(text), public.aviso_prueba(), public.cambiar_clave(uuid, text),
+  public.crear_persona(text, text, text, uuid, text[], text), public.menu_pendientes() to authenticated;
 -- Solo la función del servidor (avisos) puede pedir los avisos pendientes
 do $$ begin
   if exists (select 1 from pg_roles where rolname = 'service_role') then

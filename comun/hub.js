@@ -78,7 +78,7 @@
       html += '<p class="hub-sub">' + (p.activo ? 'Todavía no tienes acceso a ningún módulo. Avísale a gerencia.' : 'Tu usuario está desactivado. Habla con gerencia.') + '</p>';
     } else {
       html += '<p class="hub-sub">¿Qué vas a hacer?</p><div class="modulos">' + mios.map(function (m) {
-        return '<a class="modulo" href="' + esc(m.href) + '"><span class="modulo-ic">' + m.ic + '</span><span class="modulo-txt"><b>' + esc(m.nombre) + '</b><span>' + esc(m.desc) + '</span>' +
+        return '<a class="modulo" href="' + esc(m.href) + '"><span class="modulo-ic">' + m.ic + '<span class="modulo-badge" data-pend="' + m.id + '" hidden></span></span><span class="modulo-txt"><b>' + esc(m.nombre) + '</b><span>' + esc(m.desc) + '</span>' +
           (m.nota ? '<br><span class="modulo-nota">' + esc(m.nota) + '</span>' : '') + '</span><span class="modulo-flecha">›</span></a>';
       }).join('') + '</div>';
     }
@@ -89,6 +89,15 @@
     html += '</div>';
     $.innerHTML = html;
     try { sessionStorage.setItem('barquero_en_menu', '1'); } catch (e) { /* nada */ }
+    // Lo pendiente de cada módulo llega después: el menú no lo espera
+    token().then(function (t) {
+      return fetch(URL_SB + '/rest/v1/rpc/menu_pendientes', { method: 'POST', headers: { apikey: KEY, Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' }, body: '{}' });
+    }).then(function (r) { return r.ok ? r.json() : {}; }).then(function (n) {
+      Object.keys(n || {}).forEach(function (k) {
+        var b = document.querySelector('[data-pend="' + k + '"]');
+        if (b && n[k] > 0) { b.textContent = n[k] > 99 ? '99+' : n[k]; b.hidden = false; b.setAttribute('aria-label', n[k] + ' pendientes'); }
+      });
+    }).catch(function () { /* sin números: el menú funciona igual */ });
     document.getElementById('salir').addEventListener('click', function () {
       var s = leer(); olvidar(); if (s) auth('logout', {}, s.access_token).catch(function () { /* da igual */ }); login();
     });

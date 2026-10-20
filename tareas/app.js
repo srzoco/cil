@@ -886,12 +886,8 @@
         (det.length ? '<span class="persona-det">' + esc(det.join(' · ')) + '</span>' : '') +
         '<span class="persona-det muted">' + esc(pe.email || '') + '</span></span><span class="flecha">›</span></button>';
     }).join('') + '</div>';
-    h += '<details class="card ayuda-card"><summary>¿Cómo agrego a alguien nuevo?</summary><ol>' +
-      '<li>En supabase.com → tu proyecto → <b>Authentication → Users → Add user → Create new user</b>.</li>' +
-      '<li>Pon su correo y una clave, y marca <b>Auto Confirm User</b>.</li>' +
-      '<li>Mándale el link de la app con su correo y clave. La primera vez le pide su nombre.</li>' +
-      '<li>Aparece aquí como <b>Empleado</b> del local principal. Si es de otro local o de gerencia, cámbialo aquí.</li></ol>' +
-      '<p class="ayuda">Si alguien se va, desactívalo: deja de recibir tareas y se guarda su historial.</p></details>';
+    if (store.modo === 'supabase') h += '<div class="acciones"><button class="btn" data-acc="nueva-persona">' + ICON.mas + 'Agregar persona</button></div>';
+    h += '<p class="ayuda">Si alguien se va, desactívalo: se cierra su sesión en todos sus teléfonos, deja de recibir tareas y avisos, y se guarda su historial.</p>';
     return h;
   }
   function seccionGrupos() {
@@ -1030,6 +1026,7 @@
     else if (m.tipo === 'tarea') c = modalTarea(m.id);
     else if (m.tipo === 'asistencia') c = modalAsistencia(m.id);
     else if (m.tipo === 'persona') c = modalPersona(m.id);
+    else if (m.tipo === 'nueva-persona') c = modalNuevaPersona();
     else if (m.tipo === 'justificar') c = modalJustificar(m.id);
     else if (m.tipo === 'salida') c = modalSalida();
     else if (m.tipo === 'registro') c = modalRegistro(m.id);
@@ -1220,7 +1217,7 @@
       else h += '<button class="btn sec" data-acc="generar-claves">Generar claves</button>';
       return h;
     }
-    return h + tarjetaAvisos(true) + '<p class="ayuda">Cada persona los activa en su propio teléfono (le sale el botón en su pantalla). Avisos: le toca algo con hora · algo urgente se está pasando · ¿ya llegaste? · a gerencia: quién no marcó, temperatura fuera de rango, alguien se fue antes.</p>';
+    return h + tarjetaAvisos(true) + '<p class="ayuda">Cada persona los activa en su propio teléfono (le sale el botón en su pantalla). Avisos: le toca algo con hora · algo urgente se está pasando · ¿ya llegaste? · a gerencia: resumen de asistencia a las 9:30 (solo si alguien faltó o llegó tarde), temperatura fuera de rango al momento, alguien se fue antes.</p>';
   }
   function generarClaves() {
     crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']).then(function (k) {
@@ -1357,6 +1354,20 @@
       '<div class="acciones"><button class="btn grande" type="submit">' + (esAdmin() ? 'Guardar y aprobar' : 'Enviar') + '</button></div></form>';
   }
 
+  function modalNuevaPersona() {
+    return '<h2>Agregar persona</h2><p class="muted">Queda lista para entrar con este correo y esta clave. Dáselos en persona.</p>' +
+      '<form data-form="nueva-persona"><label class="campo">Nombre<input name="nombre" required maxlength="40" autocomplete="off"></label>' +
+      '<label class="campo">Correo<input name="email" type="email" required autocomplete="off" autocapitalize="off" spellcheck="false"></label>' +
+      '<label class="campo">Clave <small>(mínimo 8 caracteres)</small><input name="clave" type="text" minlength="8" required autocomplete="off" autocapitalize="off" spellcheck="false"></label>' +
+      (variosLocales() ? '<label class="campo">Local<select name="local_id">' + locales().map(function (l) { return '<option value="' + esc(l.id) + '">' + esc(l.nombre) + '</option>'; }).join('') + '</select></label>' : '') +
+      '<label class="campo">Rol<select name="rol"><option value="empleado">Empleado</option><option value="admin">Gerencia (entra a todo)</option></select></label>' +
+      '<div class="campo"><span>Módulos a los que entra <small>(si es empleado)</small></span>' +
+      [['tareas', 'Tareas'], ['contenido', 'Contenido'], ['mensajes', 'Armador de mensajes']].map(function (m) {
+        return '<label class="check"><input type="checkbox" name="acceso" value="' + m[0] + '"' + (m[0] === 'tareas' ? ' checked' : '') + '>' + m[1] + '</label>';
+      }).join('') + '</div>' +
+      '<div class="acciones"><button class="btn grande" type="submit">Agregar</button></div></form>';
+  }
+
   function modalPersona(id) {
     var pe = persona(id); if (!pe) return '';
     var soyYo = pe.id === yo().id;
@@ -1485,6 +1496,7 @@
     else if (acc === 'ver-tarea') abrirModal({ tipo: 'tarea', id: id });
     else if (acc === 'asistencia') abrirModal({ tipo: 'asistencia', id: id });
     else if (acc === 'editar-persona') abrirModal({ tipo: 'persona', id: id });
+    else if (acc === 'nueva-persona') abrirModal({ tipo: 'nueva-persona' });
     else if (acc === 'asis-set') {
       var v = el.getAttribute('data-v');
       ejecutar(store.rpc('marcar_asistencia', { p_persona: id, p_estado: v }), function (r) {
@@ -1614,6 +1626,12 @@
       var pp = store.actualizar('personas', pid, patch);
       if (sueltas.length) pp = pp.then(function () { return store.rpc('reasignar', { p_items: sueltas.map(function (x) { return { id: x.id, a: null }; }), p_motivo: 'manual' }); });
       ejecutar(pp, sueltas.length ? 'Guardado. Sus ' + plural(sueltas.length, 'tarea pendiente quedó', 'tareas pendientes quedaron') + ' sin asignar: repártelas desde Hoy.' : 'Guardado.', true);
+    }
+    else if (tipo === 'nueva-persona') {
+      var np = { p_nombre: String(fd.get('nombre') || '').trim(), p_email: String(fd.get('email') || '').trim(), p_clave: String(fd.get('clave') || '').trim(),
+        p_local: fd.get('local_id') || null, p_rol: fd.get('rol') || 'empleado', p_accesos: fd.getAll('acceso') };
+      if (np.p_clave.length < 8) { aviso('La clave debe tener al menos 8 caracteres.'); return; }
+      ejecutar(store.rpc('crear_persona', np), np.p_nombre + ' ya puede entrar. Dale su correo y su clave.', true);
     }
     else if (tipo === 'clave') {
       var clave = String(fd.get('clave') || '').trim();

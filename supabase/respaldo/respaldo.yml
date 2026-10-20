@@ -1,0 +1,41 @@
+# Copia de seguridad semanal de la base de datos de CIL (Supabase).
+# Va en un repositorio PRIVADO aparte (por ejemplo srzoco/cil-respaldos), nunca en cil: cil es público.
+# Ese repositorio necesita un secreto SUPABASE_DB_URL con la «Session pooler» connection string
+# (Supabase → Connect → Session pooler), con la contraseña de la base de datos ya puesta.
+name: Respaldo semanal
+
+on:
+  schedule:
+    - cron: "0 7 * * 0"   # domingo 3:00 a. m. Caracas
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  respaldo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Copiar la base de datos
+        env:
+          DB: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          mkdir -p respaldos
+          f="respaldos/cil-$(date -u +%Y-%m-%d).sql"
+          # pg_dump de la misma versión que Supabase (17); public = datos de la app, auth = usuarios y claves
+          docker run --rm -e DB postgres:17 sh -c 'pg_dump "$DB" --schema=public --schema=auth --no-owner --no-privileges' > "$f"
+          test -s "$f"
+          gzip -9 "$f"
+          # Se guardan las últimas 12 semanas
+          ls -1t respaldos/*.sql.gz | tail -n +13 | xargs -r git rm -q --cached --ignore-unmatch
+          ls -1t respaldos/*.sql.gz | tail -n +13 | xargs -r rm -f
+      - name: Guardar
+        run: |
+          git config user.name "respaldo-bot"
+          git config user.email "respaldo-bot@users.noreply.github.com"
+          git add -A respaldos
+          git commit -m "Respaldo $(date -u +%Y-%m-%d)" || exit 0
+          git push
