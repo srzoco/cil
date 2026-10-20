@@ -1,0 +1,33 @@
+# Revisión automática en cada cambio: sintaxis, base de datos (se instala dos veces seguidas) y prueba de humo de Tareas.
+name: Pruebas
+
+on:
+  push: {}
+  pull_request: {}
+
+jobs:
+  pruebas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env: { POSTGRES_PASSWORD: prueba }
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sintaxis
+        run: for f in tareas/*.js comun/*.js sw.js config.js; do node -e "new Function(require('fs').readFileSync('$f','utf8'))" || exit 1; done
+      - name: Base de datos (dos veces seguidas)
+        env: { PGPASSWORD: prueba }
+        run: |
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -q -c "create database cil"
+          cat pruebas/stub-supabase.sql supabase/cil.sql supabase/cil.sql | psql -h localhost -U postgres -d cil -v ON_ERROR_STOP=1 -q
+      - name: Prueba de humo
+        run: |
+          npm install --no-save playwright@1.56.1 >/dev/null
+          npx playwright install --with-deps chromium >/dev/null
+          python3 -m http.server 8765 >/dev/null 2>&1 &
+          sleep 1
+          node pruebas/humo.js

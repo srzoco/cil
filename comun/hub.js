@@ -107,13 +107,19 @@
     if (!URL_SB || !KEY) { location.replace('tareas/'); return; }  // sin base de datos: demo de Tareas
     var s = leer(); if (!s) { login(); return; }
     CLAVES.forEach(function (k) { try { localStorage.setItem(k, JSON.stringify(s)); } catch (e) { /* nada */ } });  // Contenido la encuentra al abrir
-    $.innerHTML = '<div class="hub-centro"><div class="hub-spinner"></div></div>';
+    // Abre al instante con el último menú visto en este teléfono y lo confirma por detrás
+    var CACHE = 'barquero_cache_menu_' + s.user.id, previo = null;
+    try { previo = JSON.parse(localStorage.getItem(CACHE) || 'null'); } catch (e) { /* nada */ }
+    if (previo) menu(previo); else $.innerHTML = '<div class="hub-centro"><div class="hub-spinner"></div></div>';
     rest('personas?select=nombre,email,rol,accesos,activo&id=eq.' + encodeURIComponent(s.user.id)).then(function (r) {
       var p = r && r[0];
+      try { if (p) localStorage.setItem(CACHE, JSON.stringify(p)); } catch (e) { /* nada */ }
+      if (p && previo && JSON.stringify(p) === JSON.stringify(previo)) return;  // ya está pintado
       if (!p) { $.innerHTML = '<div class="hub-centro"><h2>Tu usuario no está en la lista</h2><p>Avísale a gerencia.</p><button class="hub-salir" id="salir2">Salir</button></div>'; document.getElementById('salir2').onclick = function () { olvidar(); login(); }; return; }
       menu(p);
     }, function (e) {
       if (e.message === 'sesion' || e.status === 401) { olvidar(); login('Tu sesión expiró. Vuelve a entrar.'); return; }
+      if (previo) return;  // sin internet: se queda el menú guardado
       if (/does not exist|could not find/i.test(e.message)) { $.innerHTML = '<div class="hub-centro"><h2>Falta preparar la base de datos</h2><p>Hay que ejecutar <b>cil.sql</b> en Supabase (paso 2 de la guía).</p></div>'; return; }
       $.innerHTML = '<div class="hub-centro"><h2>No se pudo cargar</h2><p>' + esc(e.message === 'Failed to fetch' ? 'No hay conexión. Revisa el internet.' : e.message) + '</p><button class="btn-hub" style="max-width:240px" onclick="location.reload()">Reintentar</button></div>';
     });
