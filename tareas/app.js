@@ -152,7 +152,7 @@
     if (p[0] === 'reporte') return vistaReporte(r.q.get('f') || S.hoy);
     if (p[0] === 'historial') return vistaHistorial(Number(r.q.get('d')) || 30);
     if (p[0] === 'temperaturas') return vistaTemperaturas(r.q);
-    if (p[0] === 'equipo') return vistaEquipo();
+    if (p[0] === 'equipo') return vistaEquipo(p[1]);
     if (p[0] === 'perfil') return vistaPerfil(false);
     return vistaHoy();
   }
@@ -451,7 +451,7 @@
         Math.min(100, Math.round(100 * sumMin(hechas) / disp)) + '%"></span></div>' +
         (todas.length ? '<div class="lista">' + todas.map(filaTareaAdmin).join('') + '</div>' : '<p class="muted vacio-chico">Sin tareas hoy.</p>') + '</section>';
     });
-    if (!emps.length) h += '<p class="vacio muted">Este local no tiene empleados activos. Asígnalos en <a href="#/equipo">Equipo</a>.</p>';
+    if (!emps.length) h += '<p class="vacio muted">Este local no tiene empleados activos. Asígnalos en <a href="#/equipo/personas">Equipo → Personas</a>.</p>';
     return h;
   }
 
@@ -667,7 +667,7 @@
         return '<label class="check"><input type="checkbox" name="grupo" value="' + esc(g.id) + '"' + ((v.grupos || []).indexOf(g.id) >= 0 ? ' checked' : '') + '><span>' + esc(g.nombre) +
           ' <small class="muted">' + esc(miembros.join(', ') || 'sin personas') + '</small></span></label>';
       }).join('') + '<p class="ayuda">Rota entre todos los que estén en esos grupos. Si entra alguien nuevo al grupo, le empieza a tocar sin editar la tarea.</p>'
-        : '<p class="ayuda">Todavía no hay grupos. Créalos en <a href="#/equipo">Equipo → Grupos</a>.</p>') + '</div>' +
+        : '<p class="ayuda">Todavía no hay grupos. Créalos en <a href="#/equipo/grupos">Equipo → Grupos</a>.</p>') + '</div>' +
       '<div class="solo-quien"' + (restr === '1' ? '' : ' hidden') + '>' +
       emps.map(function (pe) {
         return '<label class="check" data-local="' + esc(localDe(pe)) + '"' + oculto(pe) + '><input type="checkbox" name="solo" value="' + esc(pe.id) + '"' + ((v.solo_pueden || []).indexOf(pe.id) >= 0 ? ' checked' : '') + '>' + esc(pe.nombre) + '</label>';
@@ -679,7 +679,7 @@
       ((S.data.equipos || []).length ? (S.data.equipos || []).map(function (e) {
         return '<label class="check" data-local="' + esc(e.local_id || '') + '"' + (loc && e.local_id !== loc ? ' hidden' : '') + '><input type="checkbox" name="equipo" value="' + esc(e.id) + '"' + ((v.equipos || []).indexOf(e.id) >= 0 ? ' checked' : '') + '>' + esc(e.nombre) +
           (L.rangoTxt(e) ? ' <small class="muted">' + esc(L.rangoTxt(e)) + '</small>' : '') + '</label>';
-      }).join('') : '<p class="ayuda">Todavía no hay equipos. Agrégalos en <a href="#/equipo">Equipo → Equipos de frío</a>.</p>') + '</div>';
+      }).join('') : '<p class="ayuda">Todavía no hay equipos. Agrégalos en <a href="#/equipo/frio">Equipo → Equipos de frío</a>.</p>') + '</div>';
     // Tarea que sale después
     var conSeg = !!String(v.seguimiento_titulo || '').trim();
     if (!unica) {
@@ -802,7 +802,7 @@
       if (noCuentan.length) h += '<p class="rep-sub">No cuentan</p><ul class="rep-lista">' + noCuentan.map(function (x) {
         return '<li>' + esc(L.fmtFecha(x.fecha)) + (x.motivo ? ' · ' + esc(x.motivo) : '') + ' <button class="btn link" data-acc="sinpunt-quitar" data-id="' + esc(x.id) + '">quitar</button></li>';
       }).join('') + '</ul>';
-      h += '<p class="ayuda">' + (aj().mostrar_record ? 'Cada empleado ve su propio récord.' : 'Por ahora solo lo ve gerencia (se cambia en Equipo → Ajustes).') +
+      h += '<p class="ayuda">' + (aj().mostrar_record ? 'Cada empleado ve su propio récord.' : 'Por ahora solo lo ve gerencia (se cambia en <a href="#/equipo/ajustes">Equipo → Ajustes</a>).') +
         ' <button class="btn link" data-acc="sinpunt">Marcar un día que no cuenta</button></p></section>';
     }
     hist.forEach(function (r) {
@@ -822,24 +822,69 @@
   }
 
   // ---------- Gerencia: Equipo, locales y ajustes ----------
-  function vistaEquipo() {
-    var d = db(), a = aj();
+  // Equipo: un menú corto y cada sección en su propia pantalla (antes era una sola página larguísima).
+  var SECCIONES_EQUIPO = [
+    ['personas', 'Personas', 'Quién trabaja, en qué local, a qué entra y su clave'],
+    ['grupos', 'Grupos', 'Tareas que solo rotan entre algunos'],
+    ['locales', 'Locales', 'Días de trabajo, Wi-Fi y ubicación'],
+    ['frio', 'Equipos de frío', 'Neveras, cavas y contenedores'],
+    ['calendario', 'Calendario', 'Feriados, vacaciones y días extra'],
+    ['avisos', 'Avisos', 'Notificaciones en el teléfono'],
+    ['ajustes', 'Ajustes', 'Horarios, puntualidad y reglas generales']
+  ];
+  function vistaEquipo(sec) {
+    var d = db();
+    var sel = SECCIONES_EQUIPO.filter(function (x) { return x[0] === sec; })[0];
+    if (!sel) {
+      var resumen = {
+        personas: plural(d.personas.filter(function (pe) { return pe.activo; }).length, 'activa', 'activas'),
+        grupos: plural(grupos().length, 'grupo', 'grupos'),
+        locales: plural(locales().length, 'local', 'locales'),
+        frio: plural(((d.equipos) || []).filter(function (e) { return e.activo !== false; }).length, 'equipo activo', 'equipos activos')
+      };
+      return '<h1>Equipo</h1><div class="lista">' + SECCIONES_EQUIPO.map(function (x) {
+        return '<a class="item" href="#/equipo/' + x[0] + '"><span class="item-cuerpo"><span class="item-titulo">' + esc(x[1]) + '</span>' +
+          '<span class="item-meta"><span class="extra">' + esc(x[2]) + (resumen[x[0]] ? ' · ' + esc(resumen[x[0]]) : '') + '</span></span></span><span class="flecha">›</span></a>';
+      }).join('') + '</div>' +
+        '<p class="version muted"><small>' + (store.modo === 'demo' ? 'Modo demo' : 'Conectado a la base de datos') + ' · Tareas CIL v3</small></p>';
+    }
+    var h = '<a class="volver" href="#/equipo">‹ Equipo</a>';
+    if (sec === 'personas') return h + seccionPersonas();
+    if (sec === 'grupos') return h + seccionGrupos();
+    if (sec === 'locales') {
+      S.redCheck();
+      h += '<h1>Locales</h1><p class="ayuda sin-margen">Cada local tiene sus días de trabajo, su Wi-Fi y su ubicación. Las tareas y los empleados de un local no se mezclan con los del otro.</p>';
+      locales().forEach(function (l) { h += tarjetaLocal(l); });
+      return h + '<button class="btn sec" data-acc="agregar-local">' + ICON.mas + 'Agregar local</button>';
+    }
+    if (sec === 'frio') return h + seccionEquipos();
+    if (sec === 'calendario') return h + seccionCalendario();
+    if (sec === 'avisos') return h + seccionAvisos();
+    return h + seccionAjustes();
+  }
+  function seccionPersonas() {
+    var d = db();
     var orden = d.personas.slice().sort(function (x, y) {
       if (x.activo !== y.activo) return x.activo ? -1 : 1;
       if (x.rol !== y.rol) return x.rol === 'admin' ? -1 : 1;
       if (variosLocales() && x.rol === 'empleado' && localDe(x) !== localDe(y)) return nombreLocal(localDe(x)) < nombreLocal(localDe(y)) ? -1 : 1;
       return (x.nombre || '') < (y.nombre || '') ? -1 : 1;
     });
-    var h = '<h1>Equipo</h1><div class="lista">' + orden.map(function (pe) {
-      return '<button class="item" data-acc="editar-persona" data-id="' + esc(pe.id) + '"><span class="item-cuerpo"><span class="item-titulo">' + esc(pe.nombre || '(sin nombre aún)') + '</span>' +
-        '<span class="item-meta"><span class="pill ' + (pe.rol === 'admin' ? 'aprueba' : 'edita') + '">' + (pe.rol === 'admin' ? 'Gerencia' : 'Empleado') + '</span>' +
-        (variosLocales() && pe.rol === 'empleado' ? '<span class="pill">' + esc(nombreLocal(localDe(pe))) + '</span>' : '') +
-        (pe.rol === 'empleado' && L.capacidad(pe) < 100 ? '<span class="pill hora">' + L.capacidad(pe) + '% para tareas</span>' : '') +
-        (pe.rol === 'empleado' && pe.tarea_max ? '<span class="pill hora">máx. ' + pe.tarea_max + ' min</span>' : '') +
-        (pe.rol === 'empleado' && pe.rota === false ? '<span class="pill espera">Fuera de la rotación general</span>' : '') +
-        (store.modo === 'supabase' && pe.rol !== 'admin' ? ((pe.accesos || []).length ? (pe.accesos || []).map(function (m) { return '<span class="pill">' + ({ tareas: 'Tareas', contenido: 'Contenido', mensajes: 'Mensajes' }[m] || m) + '</span>'; }).join('') : '<span class="pill corregir">Sin acceso a nada</span>') : '') +
-        (pe.grupos || []).map(function (g) { return '<span class="pill banco">' + esc(nombreGrupo(g)) + '</span>'; }).join('') +
-        (pe.activo ? '' : '<span class="pill">Inactivo</span>') + '<span class="extra">' + esc(pe.email || '') + '</span></span></span><span class="flecha">›</span></button>';
+    // Pocas etiquetas por persona (rol y alertas); el resto va en una línea de texto que se ajusta al ancho.
+    var h = '<h1>Personas</h1><div class="lista">' + orden.map(function (pe) {
+      var emp = pe.rol === 'empleado', det = [];
+      if (variosLocales() && emp) det.push(nombreLocal(localDe(pe)));
+      if (emp && L.capacidad(pe) < 100) det.push(L.capacidad(pe) + '% para tareas');
+      if (emp && pe.tarea_max) det.push('máx. ' + pe.tarea_max + ' min');
+      if (emp && (pe.grupos || []).length) det.push((pe.grupos || []).map(nombreGrupo).join(', '));
+      if (store.modo === 'supabase' && emp && (pe.accesos || []).length) det.push('Entra a: ' + (pe.accesos || []).map(function (m) { return { tareas: 'Tareas', contenido: 'Contenido', mensajes: 'Mensajes' }[m] || m; }).join(', '));
+      return '<button class="item persona-fila' + (pe.activo ? '' : ' pausada') + '" data-acc="editar-persona" data-id="' + esc(pe.id) + '"><span class="item-cuerpo"><span class="item-titulo">' + esc(pe.nombre || '(sin nombre aún)') + '</span>' +
+        '<span class="item-meta"><span class="pill ' + (pe.rol === 'admin' ? 'gerencia' : 'edita') + '">' + (pe.rol === 'admin' ? 'Gerencia' : 'Empleado') + '</span>' +
+        (pe.activo ? '' : '<span class="pill">Inactivo</span>') +
+        (emp && pe.rota === false ? '<span class="pill espera">Fuera de la rotación</span>' : '') +
+        (store.modo === 'supabase' && emp && !(pe.accesos || []).length ? '<span class="pill corregir">Sin acceso a nada</span>' : '') + '</span>' +
+        (det.length ? '<span class="persona-det">' + esc(det.join(' · ')) + '</span>' : '') +
+        '<span class="persona-det muted">' + esc(pe.email || '') + '</span></span><span class="flecha">›</span></button>';
     }).join('') + '</div>';
     h += '<details class="card ayuda-card"><summary>¿Cómo agrego a alguien nuevo?</summary><ol>' +
       '<li>En supabase.com → tu proyecto → <b>Authentication → Users → Add user → Create new user</b>.</li>' +
@@ -847,11 +892,12 @@
       '<li>Mándale el link de la app con su correo y clave. La primera vez le pide su nombre.</li>' +
       '<li>Aparece aquí como <b>Empleado</b> del local principal. Si es de otro local o de gerencia, cámbialo aquí.</li></ol>' +
       '<p class="ayuda">Si alguien se va, desactívalo: deja de recibir tareas y se guarda su historial.</p></details>';
-
-    // Locales
-    // Grupos
-    h += '<h2 class="titulo-sec">Grupos</h2>';
-    h += '<p class="ayuda sin-margen">Para tareas que solo rotan entre algunos (por ejemplo, solo despachadores). Una persona puede estar en varios grupos; se asignan abriendo a cada persona arriba.</p>';
+    return h;
+  }
+  function seccionGrupos() {
+    var d = db();
+    var h = '<h1>Grupos</h1>';
+    h += '<p class="ayuda sin-margen">Para tareas que solo rotan entre algunos (por ejemplo, solo despachadores). Una persona puede estar en varios grupos; se asignan abriendo a cada persona en <a href="#/equipo/personas">Personas</a>.</p>';
     h += '<div class="lista">' + grupos().map(function (g) {
       var miembros = empleados().filter(function (pe) { return (pe.grupos || []).indexOf(g.id) >= 0; });
       var nTareas = d.plantillas.filter(function (p) { return (p.grupos || []).indexOf(g.id) >= 0; }).length;
@@ -861,18 +907,11 @@
         '<button class="btn chico sec" type="submit">Guardar</button><button class="quitar" type="button" data-acc="borrar-grupo" data-id="' + esc(g.id) + '" aria-label="Borrar grupo">×</button></form>';
     }).join('') + '</div>';
     h += '<button class="btn sec" data-acc="agregar-grupo">' + ICON.mas + 'Agregar grupo</button>';
-
-    S.redCheck();
-    h += '<h2 class="titulo-sec">Locales</h2>';
-    h += '<p class="ayuda sin-margen">Cada local tiene sus días de trabajo, su Wi-Fi y su ubicación. Las tareas y los empleados de un local no se mezclan con los del otro.</p>';
-    locales().forEach(function (l) { h += tarjetaLocal(l); });
-    h += '<button class="btn sec" data-acc="agregar-local">' + ICON.mas + 'Agregar local</button>';
-    h += seccionEquipos();
-    h += seccionCalendario();
-    h += seccionAvisos();
-
-    // Ajustes generales
-    h += '<h2 class="titulo-sec">Ajustes</h2><form data-form="ajustes" class="card">';
+    return h;
+  }
+  function seccionAjustes() {
+    var a = aj();
+    var h = '<h1>Ajustes</h1><form data-form="ajustes" class="card">';
     h += '<div class="fila-dos"><label class="campo">A tiempo hasta<input type="time" name="a_tiempo_hasta" value="' + esc(L.aTiempoHasta(a)) + '" required></label>' +
       '<label class="campo">Hora límite (falta)<input type="time" name="hora_limite" value="' + esc(L.hhmm(a.hora_limite)) + '" required></label></div>';
     h += '<p class="ayuda sin-margen">Hasta la primera hora cuenta «a tiempo»; después, «tarde». Quien no marque «Llegué» antes de la hora límite aparece como falta y te sugiero a quién pasarle sus tareas. Aplica a todos los locales.</p>';
@@ -889,7 +928,6 @@
       h += '<label class="check demo-fuera"><input type="checkbox" data-cambio="demo-fuera"' + (store.fuera() ? ' checked' : '') + '><span>Solo demo: simular que este teléfono está <b>fuera</b> de cualquier local</span></label>';
     }
     h += '<div class="acciones"><button class="btn" type="submit">Guardar ajustes</button></div></form>';
-    h += '<p class="version muted"><small>' + (store.modo === 'demo' ? 'Modo demo' : 'Conectado a la base de datos') + ' · Tareas CIL v2</small></p>';
     return h;
   }
 
@@ -905,7 +943,7 @@
       if (g && g.tipo === x.tipo && g.nombre === x.nombre && g.local_id === (x.local_id || null) && L.addDias(g.hasta, 1) === x.fecha) { g.hasta = x.fecha; g.ids.push(x.id); }
       else grupos.push({ desde: x.fecha, hasta: x.fecha, tipo: x.tipo, nombre: x.nombre, local_id: x.local_id || null, ids: [x.id] });
     });
-    var h = '<h2 class="titulo-sec">Calendario</h2>';
+    var h = '<h1>Calendario</h1>';
     var anioSig = Number(S.hoy.slice(0, 4)) + 1;
     var hayFeriadosSig = ((S.data && S.data.dias_especiales) || []).some(function (x) { return x.tipo === 'libre' && !x.local_id && x.fecha.slice(0, 4) === String(anioSig) && x.fecha.slice(5) === '01-01'; });
     if (Number(S.hoy.slice(5, 7)) >= 10 && !hayFeriadosSig) {
@@ -1173,7 +1211,7 @@
     return '';
   }
   function seccionAvisos() {
-    var h = '<h2 class="titulo-sec">Avisos en el teléfono</h2>';
+    var h = '<h1>Avisos en el teléfono</h1>';
     if (store.modo !== 'supabase') return h + '<p class="ayuda">En el modo demo no hay avisos.</p>';
     if (!CFG.vapidPublicKey) {
       h += '<p class="ayuda sin-margen">Para activarlos sigue el paso «Avisos» de la guía. Primero genera aquí las claves: la pública va en <code>config.js</code> y en Supabase; la privada solo en Supabase. Nunca compartas la privada.</p>';
@@ -1259,7 +1297,7 @@
     var d = db(), loc = q.get('local') && L.localDe(d, q.get('local')) ? q.get('local') : localElegido();
     var h = '<a class="volver" href="#/reporte">‹ Reporte</a><h1>Temperaturas</h1>' + tabsLocales('/temperaturas', loc);
     var eqs = equiposLocal(loc);
-    if (!eqs.length) return h + '<p class="vacio muted">Este local no tiene equipos. Agrégalos en <a href="#/equipo">Equipo → Equipos de frío</a>.</p>';
+    if (!eqs.length) return h + '<p class="vacio muted">Este local no tiene equipos. Agrégalos en <a href="#/equipo/frio">Equipo → Equipos de frío</a>.</p>';
     var lects = (d.lecturas || []).filter(function (l) { return eqs.some(function (e) { return e.id === l.equipo_id; }); });
     var momentoDe = function (l) { var a = asig(l.asignacion_id); return a ? (a.momento || 0) : 0; };
     var nombreMom = {};
@@ -1290,7 +1328,7 @@
     return h;
   }
   function seccionEquipos() {
-    var h = '<h2 class="titulo-sec">Equipos de frío</h2><p class="ayuda sin-margen">Neveras, cavas y contenedores cuya temperatura se anota. El rango es para avisar cuando algo está fuera. Una tarea con «registro de temperaturas» pide la lectura de todos los equipos activos de su local (o de los que elijas en la tarea).</p>';
+    var h = '<h1>Equipos de frío</h1><p class="ayuda sin-margen">Neveras, cavas y contenedores cuya temperatura se anota. El rango es para avisar cuando algo está fuera. Una tarea con «registro de temperaturas» pide la lectura de todos los equipos activos de su local (o de los que elijas en la tarea).</p>';
     locales().forEach(function (l) {
       var eqs = equiposLocal(l.id);
       if (variosLocales()) h += '<h3 class="local-titulo">' + esc(l.nombre) + '</h3>';

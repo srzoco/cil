@@ -510,8 +510,17 @@
     this.url = String(config.supabaseUrl).replace(/\/+$/, '');
     this.key = config.supabaseKey;
     this.claveSesion = 'barquero_sesion';  // la misma sesión para todos los módulos
-    this.ses = LS.get(this.claveSesion);
+    this.ses = sesionCompartida();
     this.fetch = config.fetch || (typeof fetch !== 'undefined' ? fetch.bind(typeof window !== 'undefined' ? window : globalThis) : null);
+  }
+  // Contenido (srzoco.github.io/contenidoBF) está en el mismo sitio y guarda su sesión en «bfcontenido_sesion».
+  // Se comparte la más reciente de las dos: así no hay que poner la clave dos veces, y ninguna app usa un
+  // «refresh token» viejo (Supabase cierra la sesión de las dos si se reutiliza uno ya cambiado).
+  var CLAVES_SESION = ['barquero_sesion', 'bfcontenido_sesion'];
+  function sesionCompartida() {
+    var mejor = null;
+    CLAVES_SESION.forEach(function (k) { var x = LS.get(k); if (x && x.refresh_token && x.user && (!mejor || (x.expires_at || 0) > (mejor.expires_at || 0))) mejor = x; });
+    return mejor;
   }
   SupabaseStore.prototype.sesion = function () { return this.ses ? { user: this.ses.user } : null; };
 
@@ -546,9 +555,10 @@
       expires_at: d.expires_at || (ahora + (d.expires_in || 3600)),
       user: { id: d.user.id, email: d.user.email }
     };
-    LS.set(this.claveSesion, this.ses);
+    var ses = this.ses;
+    CLAVES_SESION.forEach(function (k) { LS.set(k, ses); });
   };
-  SupabaseStore.prototype._olvidarSesion = function () { this.ses = null; LS.del(this.claveSesion); };
+  SupabaseStore.prototype._olvidarSesion = function () { this.ses = null; CLAVES_SESION.forEach(function (k) { LS.del(k); }); };
 
   SupabaseStore.prototype.entrar = function (email, clave) {
     var self = this;
@@ -571,6 +581,9 @@
     var self = this;
     if (!self.ses || !self.ses.refresh_token) return Promise.reject(errorUsuario('Tu sesión expiró. Vuelve a entrar.', { sesion: true }));
     if (self._refrescando) return self._refrescando;
+    // Si Contenido (u otra pestaña) ya la renovó, usar esa en vez de gastar el refresh token viejo
+    var otra = sesionCompartida();
+    if (otra && otra.user.id === self.ses.user.id && otra.expires_at > self.ses.expires_at && otra.expires_at - 60 > Date.now() / 1000) { self.ses = otra; return Promise.resolve(); }
     self._refrescando = self._auth('token?grant_type=refresh_token', { refresh_token: self.ses.refresh_token }).then(function (r) {
       self._refrescando = null;
       if (!r.ok) { self._olvidarSesion(); throw errorUsuario('Tu sesión expiró. Vuelve a entrar.', { sesion: true }); }

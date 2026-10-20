@@ -544,3 +544,20 @@ table.temps td.vencida { color: var(--wine); }
 .hero.fuera-hero .hero-t { color: var(--amber); }
 .avisos-card { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
 .claves code { display: block; word-break: break-all; background: var(--gray-bg); padding: 8px 10px; border-radius: 8px; font-size: .8rem; margin: 4px 0 10px; user-select: all; }
+.persona-det { font-size: .84rem; color: var(--ink); line-height: 1.35; overflow-wrap: anywhere; }
+.persona-det.muted { color: var(--muted); font-size: .8rem; }
+/* Encabezado en teléfonos angostos: nada se sale de la pantalla */
+.top > * { min-width: 0; }
+.quien { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 34vw; }
+@media (max-width: 400px) {
+  .top { gap: 6px; padding-left: 12px; padding-right: 12px; }
+  .top .icono-btn, .top .boton-tema { width: 36px; height: 36px; }
+  .marca-txt { display: none; }
+}
+.pill.gerencia { background: var(--accent); color: var(--accent-ink); }
+/* Filas editables (equipos de frío, grupos): el nombre a todo el ancho y los botones abajo */
+.equipo-fila, .grupo-fila { flex-wrap: wrap; }
+.equipo-fila .item-cuerpo, .grupo-fila .item-cuerpo { flex: 1 1 100%; }
+.equipo-fila input[name=nombre], .grupo-fila input[name=nombre] { width: 100%; }
+.equipo-fila .rango { flex-wrap: nowrap; }
+.equipo-fila > .btn, .grupo-fila > .btn { flex: 1; }

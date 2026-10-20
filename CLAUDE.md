@@ -18,7 +18,7 @@ App web unificada **CIL** en GitHub Pages: https://srzoco.github.io/cil/
 ## Archivos clave
 - `tareas/logic.js`: reglas puras (reparto, puntualidad, urgencias). **Debe coincidir con el SQL**: cualquier regla nueva va en los dos (`logic.js`/`demo.js` y `supabase/cil.sql`).
 - `tareas/store.js`: DemoStore (localStorage, imita el SQL) y SupabaseStore (REST/RPC). `tablaReal()` traduce `ajustes` → `tareas_ajustes` y `eventos` → `tareas_eventos`, porque Contenido ya tiene tablas con esos nombres.
-- `tareas/app.js`: interfaz SPA (rutas hash, delegación `data-acc` / `data-form`). Una sola llamada `datos_app(p_completo)` trae todo, con RLS (security invoker).
+- `tareas/app.js`: interfaz SPA (rutas hash, delegación `data-acc` / `data-form`). Equipo es un menú con subpantallas `#/equipo/<personas|grupos|locales|frio|calendario|avisos|ajustes>`. Una sola llamada `datos_app(p_completo)` trae todo, con RLS (security invoker).
 - `supabase/cil.sql`: esquema completo y re-ejecutable. Ella lo corre entero en el SQL Editor; no borra datos.
 - `supabase/functions/avisos/index.ts`: Edge Function de Web Push (VAPID + aes128gcm propios con WebCrypto). La llama pg_cron cada minuto con el header `x-aviso-secreto`.
 - `sw.js`: caché de la app. **Al publicar cambios sube `VERSION` en sw.js y los `?v=` en los `index.html` y en la lista ARCHIVOS.**
@@ -42,14 +42,16 @@ App web unificada **CIL** en GitHub Pages: https://srzoco.github.io/cil/
 - Los usuarios se crean en Supabase → Authentication (registro abierto apagado). Se descartó entrar con nombre de usuario: se quiere conservar la recuperación de clave por correo.
 
 ## Estado y pendientes (oct 2026)
-- Instalado: repositorio, SQL, usuarios, avisos (en prueba: el cron devolvía 401 por una palabra secreta que no coincidía; se le indicó igualar `AVISOS_SECRETO` y reprogramar el cron).
-- Por decidir: agregar el botón "Olvidé mi clave". Ojo: el correo gratis de Supabase solo llega a miembros del equipo de Supabase; para los empleados hace falta un SMTP propio (Resend, Gmail).
+- Instalado y funcionando: repositorio, SQL, usuarios, avisos (cron `avisos` cada minuto, 200 OK desde el 20 oct).
+- Claves: gerencia las cambia en Equipo → Personas (`cambiar_clave`) y las dice en persona. "Olvidé mi clave" por correo quedó para después (necesita SMTP propio; faltan 2 correos de empleados).
+- Sesión compartida con Contenido: CIL escribe y lee `barquero_sesion` y `bfcontenido_sesion` (gana la de `expires_at` mayor) para no pedir la clave dos veces.
+- Armador: `supabase/tasas-armador.sql` dispara el workflow de mensajesBF de 8:15 a 8:35 (el cron de GitHub llega tarde). El cambio del workflow (fijar el descuento del día, `forzar`) está listo pero sin subir: falta permiso de escritura en mensajesBF.
 - Fase 2: llevar Contenido dentro de CIL (`/contenido/`, sesión `barquero_sesion`, tema compartido) y unificar sus avisos (`push_subs`, `notificar`, `push_config`) con los de tareas.
 - Fase 3: Armador de mensajes. Se le recomendó pasar productos y precios de `data.json` en GitHub a la base de datos (hoy se editan con un token de GitHub guardado en el teléfono). Ella aún no decide.
 - Falta: la lista de quién usa Contenido y quién usa Mensajes, el ícono (hoy dice "CIL" provisional) y cargar su lista real de tareas.
 - Gerencia evalúa: premio del mes, "cubre primero" y cuándo activar `usar_salidas`.
 
 ## Pruebas
-- No hay build ni dependencias. Sirve la carpeta con `python3 -m http.server` y abre `tareas/?demo` para el modo demo.
+- No hay build ni dependencias. Sirve la carpeta con `python3 -m http.server`. El modo demo sale solo con `config.js` vacío (en pruebas, intercepta `config.js` con Playwright).
 - Para el SQL, Postgres local más PostgREST con un stub de `auth.uid()`. Verifica que `logic.js` y SQL den el mismo reparto.
 - Revisa la sintaxis JS con `node -e "new Function(require('fs').readFileSync('tareas/app.js','utf8'))"`.

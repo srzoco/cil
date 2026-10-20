@@ -16,13 +16,20 @@
   ];
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
-  function leer() { try { return JSON.parse(localStorage.getItem(CLAVE) || 'null'); } catch (e) { return null; } }
+  // La sesión se comparte con Contenido («bfcontenido_sesion», mismo sitio): se usa la más reciente de las dos
+  // y se guarda en ambas, para no pedir la clave otra vez al abrir Contenido.
+  var CLAVES = [CLAVE, 'bfcontenido_sesion'];
+  function leer() {
+    var mejor = null;
+    CLAVES.forEach(function (k) { var x = null; try { x = JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { /* nada */ } if (x && x.refresh_token && x.user && (!mejor || (x.expires_at || 0) > (mejor.expires_at || 0))) mejor = x; });
+    return mejor;
+  }
   function guardar(d) {
     var ses = { access_token: d.access_token, refresh_token: d.refresh_token, expires_at: d.expires_at || Math.floor(Date.now() / 1000) + (d.expires_in || 3600), user: { id: d.user.id, email: d.user.email } };
-    try { localStorage.setItem(CLAVE, JSON.stringify(ses)); } catch (e) { /* sin almacenamiento */ }
+    CLAVES.forEach(function (k) { try { localStorage.setItem(k, JSON.stringify(ses)); } catch (e) { /* sin almacenamiento */ } });
     return ses;
   }
-  function olvidar() { try { localStorage.removeItem(CLAVE); Object.keys(localStorage).forEach(function (k) { if (k.indexOf('barquero_cache_') === 0) localStorage.removeItem(k); }); } catch (e) { /* nada */ } }
+  function olvidar() { try { CLAVES.forEach(function (k) { localStorage.removeItem(k); }); Object.keys(localStorage).forEach(function (k) { if (k.indexOf('barquero_cache_') === 0) localStorage.removeItem(k); }); } catch (e) { /* nada */ } }
   function auth(ruta, cuerpo, tok) {
     var h = { apikey: KEY, 'Content-Type': 'application/json' }; if (tok) h.Authorization = 'Bearer ' + tok;
     return fetch(URL_SB + '/auth/v1/' + ruta, { method: 'POST', headers: h, body: JSON.stringify(cuerpo || {}) });
@@ -76,7 +83,7 @@
       }).join('') + '</div>';
     }
     if (admin) {
-      html += '<h2 class="hub-sec">Gerencia</h2><div class="modulos"><a class="modulo" href="tareas/#/equipo"><span class="modulo-ic"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5"/><circle cx="17" cy="9" r="2.4"/><path d="M15.6 14.2c2.4-.3 4.3 1.2 4.9 4.3"/></svg></span>' +
+      html += '<h2 class="hub-sec">Gerencia</h2><div class="modulos"><a class="modulo" href="tareas/#/equipo/personas"><span class="modulo-ic"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5"/><circle cx="17" cy="9" r="2.4"/><path d="M15.6 14.2c2.4-.3 4.3 1.2 4.9 4.3"/></svg></span>' +
         '<span class="modulo-txt"><b>Personas y accesos</b><span>Quién entra a qué, y quién es de gerencia</span></span><span class="modulo-flecha">›</span></a></div>';
     }
     html += '</div>';
@@ -90,6 +97,7 @@
   function cargar() {
     if (!URL_SB || !KEY) { location.replace('tareas/'); return; }  // sin base de datos: demo de Tareas
     var s = leer(); if (!s) { login(); return; }
+    CLAVES.forEach(function (k) { try { localStorage.setItem(k, JSON.stringify(s)); } catch (e) { /* nada */ } });  // Contenido la encuentra al abrir
     $.innerHTML = '<div class="hub-centro"><div class="hub-spinner"></div></div>';
     rest('personas?select=nombre,email,rol,accesos,activo&id=eq.' + encodeURIComponent(s.user.id)).then(function (r) {
       var p = r && r[0];
