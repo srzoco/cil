@@ -240,10 +240,10 @@
       h += '<p class="nota">Hoy no te toca trabajar.</p>';
     } else if (!L.estaPresente(est)) {
       var ahoraM = new Date(), paso = L.pasoLimite(aj(), ahoraM), tardeYa = L.pasoATiempo(aj(), ahoraM);
-      var sub = paso ? 'Ya pasó la hora límite (' + L.fmtHoraTxt(aj().hora_limite) + '). Marca igual: lo tuyo que nadie ha hecho vuelve a ti, y lo que otro ya hizo por ti lo compensas con tareas suyas.'
-        : tardeYa ? 'Ya pasó la hora de entrada. Marca ya: a las ' + L.fmtHoraTxt(aj().hora_limite) + ' tus tareas pasan a otra persona.'
-        : 'Marca apenas llegues. A tiempo hasta las ' + L.fmtHoraTxt(L.aTiempoHasta(aj())) + '.';
-      h += '<div class="hero llegada' + (tardeYa ? ' tarde' : '') + '"><div><p class="hero-t">' + (est === 'ausente' ? 'Gerencia te marcó como ausente' : '¿Ya llegaste?') + '</p>' +
+      var sub = paso ? 'Marca al llegar y te mostramos tu lista. Lo que un compañero cubrió por ti se equilibra con algunas de sus tareas.'
+        : tardeYa ? 'Marca al llegar para ver tu lista. Si no marcas antes de las ' + L.fmtHoraTxt(aj().hora_limite) + ', tus tareas pasan a un compañero.'
+        : 'Toca el botón al llegar y aparece tu lista del día.';
+      h += '<div class="hero llegada' + (tardeYa ? ' tarde' : '') + '"><div><p class="hero-t">' + (est === 'ausente' ? 'Hoy figuras como ausente' : '¿Ya llegaste?') + '</p>' +
         '<p class="hero-sub">' + esc(sub) + '</p></div>' +
         '<button class="btn grande" data-acc="llegue">Llegué</button></div>';
     } else {
@@ -276,19 +276,19 @@
     if (todas.length) {
       var minT = sumMin(todas), minH = sumMin(hechas);
       var pend = todas.length - hechas.length;
-      h += '<div class="resumen-dia"><div><b>' + (pend ? plural(pend, 'pendiente', 'pendientes') : '¡Todo listo!') + '</b>' +
+      h += '<div class="resumen-dia"><div><b>' + (pend ? 'Te ' + (pend === 1 ? 'falta 1' : 'faltan ' + pend) : '¡Listo por hoy! 👏') + '</b>' +
         '<span>' + esc(L.minutosTxt(minH)) + ' de ' + esc(L.minutosTxt(minT)) + ' hechos</span></div>' +
         '<div class="progreso"><span style="width:' + Math.round(100 * minH / Math.max(1, minT)) + '%"></span></div></div>';
     }
     if (t.atrasadas.length) {
-      h += '<section class="bloque alerta"><div class="bloque-head"><h2>Atrasadas</h2></div>' +
-        '<p class="ayuda sin-margen">Se recuperan además de tus tareas de hoy. Si no se pudo hacer por un motivo válido, explícalo y gerencia lo revisa.</p><div class="lista">' +
+      h += '<section class="bloque alerta"><div class="bloque-head"><h2>Quedaron de otro día</h2></div>' +
+        '<p class="ayuda sin-margen">Hazlas cuando puedas. Si hubo un motivo para no hacerlas, tócala y cuéntalo.</p><div class="lista">' +
         t.atrasadas.map(function (a) { return filaTareaEmpleado(a, true); }).join('') + '</div></section>';
     }
     h += '<section class="bloque"><div class="bloque-head"><h2>Tus tareas de hoy</h2></div>';
-    h += '<p class="regla">Gerencia puede reasignar cualquier tarea en cualquier momento. <b>Si está en tu lista, es tu responsabilidad.</b></p>';
+    if (!hechas.length && t.hoy.length) h += '<p class="regla">Toca el cuadrito cuando termines cada una. Si algo cambia en el día, la lista se actualiza sola.</p>';
     h += t.hoy.length ? '<div class="lista">' + t.hoy.map(function (a) { return filaTareaEmpleado(a, false); }).join('') + '</div>'
-      : '<p class="vacio muted">No tienes tareas asignadas hoy.</p>';
+      : '<p class="vacio muted">Hoy no tienes tareas en tu lista.</p>';
     if (L.estaPresente(est) && s && !s.salida) h += '<p class="me-voy"><button class="btn link" data-acc="me-voy">Me voy antes de terminar</button></p>';
     h += '</section>';
     if (aj().pool_activo) {
@@ -1249,16 +1249,19 @@
         var r = L.rangoTxt(e);
         return '<fieldset class="lectura" data-equipo="' + esc(e.id) + '" data-min="' + (e.temp_min == null ? '' : e.temp_min) + '" data-max="' + (e.temp_max == null ? '' : e.temp_max) + '">' +
           '<legend>' + esc(e.nombre) + (r ? ' <small class="muted">' + esc(r) + '</small>' : '') + '</legend>' +
-          '<div class="lectura-fila"><label class="lectura-temp"><input type="number" step="0.1" name="t_' + esc(e.id) + '" aria-label="Temperatura de ' + esc(e.nombre) + '" placeholder="°C"><span>°C</span></label>' +
+          '<div class="lectura-fila"><label class="lectura-temp"><input type="number" step="0.1" inputmode="decimal" name="t_' + esc(e.id) + '" aria-label="Temperatura de ' + esc(e.nombre) + '" placeholder="°C"><span>°C</span></label>' +
           '<div class="seg lectura-estado">' + [['normal', 'Normal'], ['defrost', 'Defrost'], ['apagado', 'Apagado']].map(function (o) {
             return '<label><input type="radio" name="e_' + esc(e.id) + '" value="' + o[0] + '"' + (o[0] === 'normal' ? ' checked' : '') + '>' + o[1] + '</label>';
           }).join('') + '</div></div>' +
+          (e.temp_max != null && e.temp_max < 0 ? '<p class="ayuda sin-margen">Congelador: escribe solo el número (18 = −18 °C).</p>' : '') +
           '<p class="lectura-aviso" hidden>Fuera de rango: escribe qué pasó.</p>' +
           '<input class="lectura-nota" name="n_' + esc(e.id) + '" maxlength="200" placeholder="Nota (obligatoria si está fuera de rango)"></fieldset>';
       }).join('') + '<div class="acciones"><button class="btn grande" type="submit">Guardar y marcar hecha</button></div></form>';
   }
   function revisarLectura(fs) {
-    var t = fs.querySelector('input[type=number]').value, est = (fs.querySelector('input[type=radio]:checked') || {}).value || 'normal';
+    var t = fs.querySelector('input[type=number]').value, mx = fs.getAttribute('data-max');
+    if (t !== '' && mx !== '' && Number(mx) < 0 && Number(t) > 0) t = String(-Number(t));
+    var est = (fs.querySelector('input[type=radio]:checked') || {}).value || 'normal';
     var fuera = t !== '' && L.fueraDeRango({ temp_min: fs.getAttribute('data-min'), temp_max: fs.getAttribute('data-max') }, Number(t), est);
     fs.classList.toggle('fuera', fuera);
     fs.querySelector('.lectura-aviso').hidden = !fuera;
@@ -1667,6 +1670,7 @@
       Array.prototype.forEach.call(f.querySelectorAll('fieldset.lectura'), function (fs) {
         var eid = fs.getAttribute('data-equipo'), t = fd.get('t_' + eid), est = fd.get('e_' + eid) || 'normal', nota = String(fd.get('n_' + eid) || '').trim();
         var e = equipo(eid);
+        if (t !== '' && e && e.temp_max != null && Number(e.temp_max) < 0 && Number(t) > 0) t = String(-Number(t));  // congelador: «18» es −18 (muchos teclados no traen el signo menos)
         if (t === '' && est !== 'apagado' && !falta) falta = 'Escribe la temperatura de «' + (e ? e.nombre : 'un equipo') + '».';
         if (t !== '' && e && L.fueraDeRango(e, Number(t), est) && !nota && !falta) falta = 'Escribe una nota: «' + e.nombre + '» está fuera de rango.';
         lects.push({ equipo: eid, temperatura: t === '' ? null : Number(t), estado: est, nota: nota });
