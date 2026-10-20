@@ -1,0 +1,56 @@
+/* CIL — colores (azul de Barquero Food) y letras de marca, compartidos por todos los módulos.
+   Claro (por defecto, se lee bien al sol) y oscuro. Se cambia con el botón ☀/☾ y se recuerda en el teléfono.
+   Azul de marca #001E54 · gris de marca #B7B6B5 · títulos en Gloock · texto en Montserrat.
+   El amarillo y el naranja de marca son señales de venta: aquí no se usan como decoración. */
+:root {
+  --marca: #001E54;
+  --marca-gris: #B7B6B5;
+  --bg: #F4F6FA;
+  --card: #FFFFFF;
+  --ink: #0E1A33;
+  --titulo: #001E54;
+  --muted: #4D5870;
+  --line: #D9DFEA;
+  --accent: #001E54;
+  --accent-ink: #FFFFFF;
+  --accent-bg: #E5EBF5;
+  --wine: #A3263A;
+  --wine-bg: #FBE9EC;
+  --amber: #8A4B00;
+  --amber-bg: #FCEFD9;
+  --blue: #1F4F8F;
+  --blue-bg: #E4EDF9;
+  --green: #1E6B42;
+  --green-bg: #E0F2E8;
+  --purple: #5B4A99;
+  --purple-bg: #ECE8F8;
+  --gray-bg: #EDF0F5;
+  --wa: #1A7F43;
+  --shadow: 0 1px 2px rgba(0, 30, 84, .06), 0 6px 18px rgba(0, 30, 84, .07);
+  --radius: 16px;
+  --serif: "Gloock", Georgia, "Times New Roman", serif;
+  --sans: "Montserrat", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="claro"]) {
+    --bg: #0A1328; --card: #111E3A; --ink: #EEF2F9; --titulo: #FFFFFF; --muted: #A9B4CA; --line: #22325A;
+    --accent: #A9C2F5; --accent-ink: #001E54; --accent-bg: #1A2A50;
+    --wine: #F29AA7; --wine-bg: #3A1D29; --amber: #F2BE72; --amber-bg: #3A2C17;
+    --blue: #9CC0F0; --blue-bg: #18294A; --green: #86D6A6; --green-bg: #15312A;
+    --purple: #C2B4F0; --purple-bg: #262445; --gray-bg: #1A2747; --wa: #3CC472;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .35), 0 8px 22px rgba(0, 0, 0, .3);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="oscuro"] {
+  --bg: #0A1328; --card: #111E3A; --ink: #EEF2F9; --titulo: #FFFFFF; --muted: #A9B4CA; --line: #22325A;
+  --accent: #A9C2F5; --accent-ink: #001E54; --accent-bg: #1A2A50;
+  --wine: #F29AA7; --wine-bg: #3A1D29; --amber: #F2BE72; --amber-bg: #3A2C17;
+  --blue: #9CC0F0; --blue-bg: #18294A; --green: #86D6A6; --green-bg: #15312A;
+  --purple: #C2B4F0; --purple-bg: #262445; --gray-bg: #1A2747; --wa: #3CC472;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .35), 0 8px 22px rgba(0, 0, 0, .3);
+  color-scheme: dark;
+}
+.boton-tema { width: 40px; height: 40px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--card); color: var(--ink); display: inline-grid; place-items: center; cursor: pointer; padding: 0; }
+.boton-tema svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
