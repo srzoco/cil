@@ -648,8 +648,18 @@ begin
   if h is null then return null; end if;
   ip := coalesce(h->>'cf-connecting-ip', h->>'x-real-ip', split_part(coalesce(h->>'x-forwarded-for', ''), ',', 1));
   ip := nullif(trim(ip), '');
+  -- IPv6: cada teléfono tiene su propia dirección dentro de la misma red; se compara la red (/64), no el teléfono
+  if ip like '%:%' then
+    begin ip := host(network(set_masklen(ip::inet, 64))) || '/64'; exception when others then null; end;
+  end if;
   return ip;
 end $$;
+-- Redes IPv6 guardadas antes como dirección de un solo teléfono: se pasan a su red /64
+update public.locales l set redes = (
+  select coalesce(array_agg(distinct case when x like '%:%' and x not like '%/64'
+                                          then host(network(set_masklen(x::inet, 64))) || '/64' else x end), '{}')
+  from unnest(l.redes) x)
+where exists (select 1 from unnest(l.redes) x where x like '%:%' and x not like '%/64');
 
 create or replace function public._distancia_m(lat1 double precision, lng1 double precision, lat2 double precision, lng2 double precision)
 returns double precision language sql immutable as $$
@@ -1537,6 +1547,14 @@ begin
     execute $p$create policy grab_eventos_ver on public.grabacion_eventos for select to authenticated using (public.tiene_acceso('contenido'))$p$;
     execute $p$drop policy if exists grab_eventos_crear on public.grabacion_eventos$p$;
     execute $p$create policy grab_eventos_crear on public.grabacion_eventos for insert to authenticated with check (autor = auth.uid() and public.tiene_acceso('contenido'))$p$;
+  end if;
+  -- Avisos de Contenido: antes cualquier usuario podía reasignarse los teléfonos suscritos de otros
+  -- (update «using (true)»). Ahora solo el equipo de Contenido toca esa tabla.
+  if to_regclass('public.push_subs') is not null then
+    execute $p$drop policy if exists push_editar on public.push_subs$p$;
+    execute $p$create policy push_editar on public.push_subs for update to authenticated using (public.tiene_acceso('contenido')) with check (user_id = auth.uid() and public.tiene_acceso('contenido'))$p$;
+    execute $p$drop policy if exists push_crear on public.push_subs$p$;
+    execute $p$create policy push_crear on public.push_subs for insert to authenticated with check (user_id = auth.uid() and public.tiene_acceso('contenido'))$p$;
   end if;
 end $$;
 
