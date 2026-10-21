@@ -46,7 +46,7 @@ App web unificada **CIL** en GitHub Pages: https://srzoco.github.io/cil/
 - Claves: gerencia las cambia en Equipo → Personas (`cambiar_clave`) y las dice en persona. "Olvidé mi clave" por correo quedó para después (necesita SMTP propio; faltan 2 correos de empleados).
 - Sesión compartida con Contenido: CIL escribe y lee `barquero_sesion` y `bfcontenido_sesion` (gana la de `expires_at` mayor) para no pedir la clave dos veces.
 - Armador: `supabase/tasas-armador.sql` dispara el workflow de mensajesBF de 8:15 a 8:35 (el cron de GitHub llega tarde). Workflow publicado (fija el descuento del día; `forzar` solo desde gerencia; en equipos sin acceso de administradora el número queda bloqueado). Falta que ella cree el token y corra el SQL (pasos 2 y 3).
-- Fase 2: llevar Contenido dentro de CIL (`/contenido/`, sesión `barquero_sesion`, tema compartido) y unificar sus avisos (`push_subs`, `notificar`, `push_config`) con los de tareas.
+- Avisos unificados: la función `notificar` de Contenido ya no manda push; deja los mensajes en `avisos_cola` (url `../contenidoBF/#…`) y los entrega el reloj de avisos de CIL. Se activan una vez en el menú de CIL (`comun/hub.js`, `?avisos` evita la redirección). Contenido usa el tema de CIL (`../cil/comun/tema.*`). Pendiente: mover Contenido a `/cil/contenido/`.
 - Fase 3: Armador de mensajes. Se le recomendó pasar productos y precios de `data.json` en GitHub a la base de datos (hoy se editan con un token de GitHub guardado en el teléfono). Ella aún no decide.
 - Falta: la lista de quién usa Contenido y quién usa Mensajes, el ícono (hoy dice "CIL" provisional) y cargar su lista real de tareas.
 - Gerencia evalúa: premio del mes, "cubre primero" y cuándo activar `usar_salidas`.

@@ -9,9 +9,9 @@
   var MODULOS = [
     { id: 'tareas', nombre: 'Tareas', desc: 'Llegada, tareas del día, reporte y temperaturas', href: 'tareas/',
       ic: '<svg viewBox="0 0 24 24"><path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/></svg>' },
-    { id: 'contenido', nombre: 'Contenido', desc: 'Reels, carruseles y grabaciones', href: 'https://srzoco.github.io/contenidoBF/', nota: 'Por ahora abre su app de siempre',
+    { id: 'contenido', nombre: 'Contenido', desc: 'Reels, carruseles y grabaciones', href: 'https://srzoco.github.io/contenidoBF/',
       ic: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10 9.5v5l4-2.5z"/></svg>' },
-    { id: 'mensajes', nombre: 'Armador de mensajes', desc: 'Respuestas con precios y descuento del día', href: 'https://srzoco.github.io/mensajesBF/', nota: 'Por ahora abre su app de siempre',
+    { id: 'mensajes', nombre: 'Armador de mensajes', desc: 'Respuestas con precios y descuento del día', href: 'https://srzoco.github.io/mensajesBF/',
       ic: '<svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/><path d="M8.5 11h7M8.5 14h4"/></svg>' }
   ];
 
@@ -68,7 +68,8 @@
     var mios = MODULOS.filter(function (m) { return admin || (p.accesos || []).indexOf(m.id) >= 0; });
     if (!p.activo) mios = [];
     // Un solo módulo (por ejemplo, el personal de mantenimiento): directo a él
-    if (!admin && mios.length === 1 && !sessionStorage.getItem('barquero_en_menu')) { location.replace(mios[0].href); return; }
+    // (?avisos: viene de «Activar avisos» en Contenido; se queda en el menú para mostrar la tarjeta)
+    if (!admin && mios.length === 1 && !sessionStorage.getItem('barquero_en_menu') && !/avisos/.test(location.search)) { location.replace(mios[0].href); return; }
     var nombre = (p.nombre || '').split(' ')[0] || (p.email || '').split('@')[0];
     var h = new Date().getHours(), saludo = h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
     var html = '<div class="hub"><header class="hub-top"><a class="hub-marca" href="./"><span class="hub-logo">CIL</span><b>CIL</b></a>' +
@@ -86,8 +87,10 @@
       html += '<h2 class="hub-sec">Gerencia</h2><div class="modulos"><a class="modulo" href="tareas/#/equipo/personas"><span class="modulo-ic"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5"/><circle cx="17" cy="9" r="2.4"/><path d="M15.6 14.2c2.4-.3 4.3 1.2 4.9 4.3"/></svg></span>' +
         '<span class="modulo-txt"><b>Personas y accesos</b><span>Quién entra a qué, y quién es de gerencia</span></span><span class="modulo-flecha">›</span></a></div>';
     }
+    if (mios.length) html += '<div id="hub-avisos"></div>';
     html += '<p class="hub-ayuda"><a href="tareas/#/ayuda">¿Cómo se usa la app?</a></p></div>';
     $.innerHTML = html;
+    pintarAvisos();
     try { sessionStorage.setItem('barquero_en_menu', '1'); } catch (e) { /* nada */ }
     // Lo pendiente de cada módulo llega después: el menú no lo espera
     token().then(function (t) {
@@ -100,6 +103,56 @@
     }).catch(function () { /* sin números: el menú funciona igual */ });
     document.getElementById('salir').addEventListener('click', function () {
       var s = leer(); olvidar(); if (s) auth('logout', {}, s.access_token).catch(function () { /* da igual */ }); login();
+    });
+  }
+
+  // ---------- Avisos en el teléfono: uno solo para todos los módulos (Tareas y Contenido) ----------
+  function b64aBytes(t) { t = String(t).replace(/-/g, '+').replace(/_/g, '/'); while (t.length % 4) t += '='; var b = atob(t), o = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) o[i] = b.charCodeAt(i); return o; }
+  function esIOS() { return /iphone|ipad|ipod/i.test(navigator.userAgent) || (/macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1); }
+  function instalada() { return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone; }
+  function rpc(nombre, cuerpo) {
+    return token().then(function (t) {
+      return fetch(URL_SB + '/rest/v1/rpc/' + nombre, { method: 'POST', headers: { apikey: KEY, Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo || {}) });
+    }).then(function (r) { if (!r.ok) return r.text().then(function (x) { var m = x; try { m = JSON.parse(x).message || x; } catch (e) { /* nada */ } throw new Error(m); }); });
+  }
+  function estadoAvisos() {
+    if (!CFG.vapidPublicKey || !('serviceWorker' in navigator) || location.protocol !== 'https:') return Promise.resolve('no');
+    if (esIOS() && !instalada()) return Promise.resolve('ios');
+    if (!('PushManager' in window) || !('Notification' in window)) return Promise.resolve('no');
+    if (Notification.permission === 'denied') return Promise.resolve('bloqueado');
+    return navigator.serviceWorker.ready.then(function (reg) { return reg.pushManager.getSubscription(); }).then(function (sub) {
+      if (sub && Notification.permission === 'granted') {
+        // se vuelve a guardar por si el teléfono cambió la suscripción
+        var j = sub.toJSON(); rpc('guardar_suscripcion', { p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth }).catch(function () { /* nada */ });
+        return 'on';
+      }
+      return 'off';
+    }, function () { return 'no'; });
+  }
+  function pintarAvisos(msg) {
+    var c = document.getElementById('hub-avisos'); if (!c) return;
+    estadoAvisos().then(function (e) {
+      var t = {
+        ios: '<b>Avisos en el teléfono</b><span>En iPhone, primero instala la app: Compartir → «Agregar a inicio», y ábrela desde el ícono.</span>',
+        bloqueado: '<b>Avisos bloqueados</b><span>Actívalos en los ajustes del navegador para esta página.</span>',
+        off: '<b>Avisos en el teléfono</b><span>Te avisa cuando te toca algo, en Tareas y en Contenido.</span><button class="btn-hub chico" id="activar-avisos">Activar</button>',
+        on: '<b>Avisos activados</b><span>en este teléfono, para todos los módulos.</span><button class="hub-salir" id="probar-avisos">Enviarme uno de prueba</button>'
+      }[e];
+      c.innerHTML = t ? '<div class="hub-avisos' + (e === 'on' ? ' on' : '') + '">' + t + (msg ? '<small>' + esc(msg) + '</small>' : '') + '</div>' : '';
+      var a = document.getElementById('activar-avisos');
+      if (a) a.onclick = function () {
+        a.disabled = true; a.textContent = 'Activando…';
+        Notification.requestPermission().then(function (perm) {
+          if (perm !== 'granted') throw new Error(perm === 'denied' ? 'Bloqueaste los avisos. Actívalos en los ajustes del navegador.' : 'No se activaron los avisos.');
+          return navigator.serviceWorker.ready;
+        }).then(function (reg) {
+          return reg.pushManager.getSubscription().then(function (sub) { return sub || reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64aBytes(CFG.vapidPublicKey) }); });
+        }).then(function (sub) {
+          var j = sub.toJSON(); return rpc('guardar_suscripcion', { p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth });
+        }).then(function () { pintarAvisos('Listo: te llegarán los avisos en este teléfono.'); }, function (err) { pintarAvisos(err && err.message ? err.message : 'No se pudieron activar.'); });
+      };
+      var pr = document.getElementById('probar-avisos');
+      if (pr) pr.onclick = function () { pr.disabled = true; rpc('aviso_prueba').then(function () { pintarAvisos('Te debería llegar en menos de un minuto.'); }, function (err) { pintarAvisos(err.message); }); };
     });
   }
 

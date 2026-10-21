@@ -1375,7 +1375,7 @@ $$;
 create or replace function public.aviso_prueba() returns void
 language plpgsql security definer set search_path = public as $$
 begin
-  if not public.es_admin() then raise exception 'Solo gerencia.'; end if;
+  if not exists (select 1 from personas where id = auth.uid() and activo) then raise exception 'Tu usuario no está activo.'; end if;
   if not exists (select 1 from suscripciones where persona_id = auth.uid()) then raise exception 'Primero activa los avisos en este teléfono.'; end if;
   insert into avisos_cola (persona_id, titulo, cuerpo) values (auth.uid(), 'Aviso de prueba', 'Si ves esto, los avisos funcionan.');
 end $$;

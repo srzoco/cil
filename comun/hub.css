@@ -42,3 +42,10 @@ a { color: var(--accent); }
 :root[data-theme="oscuro"] .modulo-badge { color: var(--bg); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="claro"]) .modulo-badge { color: var(--bg); } }
 .hub-ayuda { text-align: center; margin-top: 28px; font-weight: 600; }
+.hub-avisos { margin-top: 22px; display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; padding: 14px 16px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); }
+.hub-avisos b { grid-column: 1; }
+.hub-avisos span { grid-column: 1; color: var(--muted); font-size: .88rem; }
+.hub-avisos button { grid-column: 2; grid-row: 1 / span 2; width: auto; min-height: 40px; padding: 0 16px; }
+.hub-avisos small { grid-column: 1 / -1; color: var(--accent); font-weight: 600; }
+.hub-avisos.on { background: transparent; }
+.btn-hub.chico { min-height: 40px; font-size: .9rem; }
