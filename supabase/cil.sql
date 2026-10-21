@@ -1474,6 +1474,24 @@ language sql stable security definer set search_path = public as $$
     from plantillas p, personas pe where p.id = p_plantilla and pe.id = p_persona), true)
 $$;
 
+-- Gerencia reprograma una tarea oculta: vuelve a su dueño original en otro día
+create or replace function public.reprogramar_oculta(p_id uuid, p_fecha date) returns void
+language plpgsql security definer set search_path = public as $$
+declare a public.asignaciones; quien uuid;
+begin
+  if not public.es_admin() then raise exception 'Solo gerencia.'; end if;
+  select * into a from asignaciones where id = p_id for update;
+  if a.id is null then raise exception 'Esa tarea ya no existe.'; end if;
+  if p_fecha is null or p_fecha <= public.hoy() then raise exception 'Elige un día a partir de mañana.'; end if;
+  if a.plantilla_id is not null and exists (select 1 from asignaciones b where b.plantilla_id = a.plantilla_id and b.fecha = p_fecha
+                                            and b.momento = a.momento and b.puesto = a.puesto and b.id <> a.id) then
+    raise exception 'Esa tarea ya está programada ese día. Elige otro.';
+  end if;
+  quien := coalesce(a.asignado_original, a.asignado_a);
+  update asignaciones set fecha = p_fecha, asignado_a = quien, oculta = false, motivo = 'manual' where id = p_id;
+  insert into tareas_eventos (asignacion_id, tipo, de, a, texto) values (p_id, 'reasignada', a.asignado_a, quien, 'reprogramada para ' || to_char(p_fecha, 'DD/MM'));
+end $$;
+
 -- Gerencia aprueba una tarea oculta (y puede cambiar a quién va)
 create or replace function public.aprobar_oculta(p_id uuid, p_persona uuid default null) returns void
 language plpgsql security definer set search_path = public as $$
@@ -1734,7 +1752,7 @@ grant execute on function public.hoy(), public.es_admin(), public.tiene_acceso(t
   public.marcar_salida(text), public.datos_app(boolean), public.mi_puntualidad(), public.registrar_lecturas(uuid, jsonb),
   public.marcar_fuera(boolean), public.rescatar(uuid),
   public.guardar_suscripcion(text, text, text), public.borrar_suscripcion(text), public.aviso_prueba(), public.cambiar_clave(uuid, text),
-  public.crear_persona(text, text, text, uuid, text[], text), public.menu_pendientes(), public.aprobar_oculta(uuid, uuid) to authenticated;
+  public.crear_persona(text, text, text, uuid, text[], text), public.menu_pendientes(), public.aprobar_oculta(uuid, uuid), public.reprogramar_oculta(uuid, date) to authenticated;
 -- Solo la función del servidor (avisos) puede pedir los avisos pendientes
 do $$ begin
   if exists (select 1 from pg_roles where rolname = 'service_role') then

@@ -562,3 +562,8 @@ table.temps td.vencida { color: var(--wine); }
 .equipo-fila .rango { flex-wrap: nowrap; }
 .equipo-fila > .btn, .grupo-fila > .btn { flex: 1; }
 .alerta-card { border-color: var(--wine); } .alerta-card h2 { font-size: 1.1rem; }
+.oculta-fila { display: grid; gap: 8px; padding: 12px 0; border-top: 1px solid var(--line); }
+.oculta-fila > div:first-child { display: flex; justify-content: space-between; gap: 8px; }
+.oculta-fila .acciones { margin-top: 0; flex-wrap: nowrap; align-items: center; }
+.oculta-fila .acciones select, .oculta-fila .acciones input { flex: 1 1 auto; min-width: 0; }
+.oculta-fila .acciones .btn { flex: 0 0 auto; }

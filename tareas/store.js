@@ -348,6 +348,15 @@
         if (db.ajustes.solo_en_tienda && !(presT && presT.estado === 'presente')) throw errorUsuario('Primero marca «Llegué».');
         t.asignado_a = yo.id; t.asignado_original = yo.id; t.motivo = 'tomada';
         this._evento(t.id, 'tomada', null, yo.id);
+      } else if (nombre === 'reprogramar_oculta') {
+        if (!adm) throw errorUsuario('Solo gerencia.');
+        var ro = this._asig(args.p_id); if (!ro) throw errorUsuario('Esa tarea ya no existe.');
+        if (!args.p_fecha || args.p_fecha <= hoy) throw errorUsuario('Elige un día a partir de mañana.');
+        if (ro.plantilla_id && db.asignaciones.some(function (b) { return b.id !== ro.id && b.plantilla_id === ro.plantilla_id && b.fecha === args.p_fecha && b.momento === ro.momento && (b.puesto || 0) === (ro.puesto || 0); }))
+          throw errorUsuario('Esa tarea ya está programada ese día. Elige otro.');
+        var deRo = ro.asignado_a;
+        ro.fecha = args.p_fecha; ro.asignado_a = ro.asignado_original || ro.asignado_a; ro.oculta = false; ro.motivo = 'manual';
+        this._evento(ro.id, 'reasignada', deRo, ro.asignado_a, 'reprogramada');
       } else if (nombre === 'aprobar_oculta') {
         if (!adm) throw errorUsuario('Solo gerencia.');
         var ao = this._asig(args.p_id); if (!ao) throw errorUsuario('Esa tarea ya no existe.');
