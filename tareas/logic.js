@@ -12,7 +12,8 @@
   var DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
   var DIAS_CORTOS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-  var AJUSTES_BASE = { hora_limite: '08:50', a_tiempo_hasta: '08:35', pool_activo: false, minutos_jornada: 480, solo_en_tienda: false };
+  var AJUSTES_BASE = { hora_limite: '08:50', a_tiempo_hasta: '08:35', pool_activo: false, minutos_jornada: 480, solo_en_tienda: false,
+    carga_dias: { '0': 0, '1': 100, '2': 100, '3': 100, '4': 60, '5': 60, '6': 80 } };
   var LAB_BASE = [1, 2, 3, 4, 5, 6];
 
   // ---------- Fechas (siempre 'AAAA-MM-DD', hora local) ----------
@@ -208,6 +209,93 @@
     var out = [], f = desde;
     for (var i = 0; i < 400 && out.length < (n || 3); i++) { if (toca(p, f, lab)) out.push(f); f = addDias(f, 1); }
     return out;
+  }
+
+  // ---------- Balance de carga: tareas fijas por día frente al tiempo disponible ----------
+  // carga_dias: % de la jornada que se quiere dedicar a tareas fijas cada día de la semana
+  // (lunes a miércoles más; jueves y viernes menos porque salen más pedidos).
+  function factorDia(aj, iso) { var c = (aj && aj.carga_dias) || AJUSTES_BASE.carga_dias; var v = c[String(dow(iso))]; return v == null ? 100 : Number(v); }
+  function minutosPlantilla(p) { return p.minutos * Math.max(1, (p.momentos || []).length) * personasDe(p); }
+  function disponibleDia(db, localId, f) {
+    var aj = db.ajustes || AJUSTES_BASE;
+    var base = db.personas.filter(function (pe) { return esEmpleadoActivo(pe) && localDePersona(db, pe) === localId && trabaja(db, pe, f); })
+      .reduce(function (s, pe) { return s + (aj.minutos_jornada || 480) * capacidad(pe) / 100; }, 0);
+    return Math.round(base * factorDia(aj, f) / 100);
+  }
+  // [{ fecha, prog, disp, pct, tareas: [{ id, titulo, min }] }] para los días laborables de [desde, desde + dias)
+  function balance(db, localId, desde, dias, plantillas) {
+    var lab = laborableFn(db, localId), out = [];
+    var pls = (plantillas || db.plantillas).filter(function (p) { return p.activa && (p.local_id || (localPrincipal(db) || {}).id) === localId; });
+    for (var i = 0; i < dias; i++) {
+      var f = addDias(desde, i);
+      if (!lab(f)) continue;
+      var ts = pls.filter(function (p) { return toca(p, f, lab); }).map(function (p) { return { id: p.id, titulo: p.titulo, min: minutosPlantilla(p), frecuencia: p.frecuencia }; });
+      var prog = ts.reduce(function (s, t) { return s + t.min; }, 0), disp = disponibleDia(db, localId, f);
+      out.push({ fecha: f, prog: prog, disp: disp, pct: disp ? Math.round(prog * 100 / disp) : (prog ? 999 : 0), tareas: ts });
+    }
+    return out;
+  }
+  function sobrecargados(bal) { return bal.filter(function (d) { return d.pct > 100; }); }
+  // Sugerencias para equilibrar: mover una tarea semanal o mensual de un día sobrecargado al día cercano con menos carga,
+  // separar las mensuales que caen en la misma semana y alternar las de cada 2 semanas.
+  function sugerenciasBalance(db, localId, desde, dias) {
+    var sug = [], pls = db.plantillas;
+    var pico = function (lista) { var b = balance(db, localId, desde, dias, lista); return b.reduce(function (m, d) { return Math.max(m, d.pct); }, 0); };
+    var conCambio = function (id, cambio) { return pls.map(function (p) { return p.id === id ? Object.assign({}, p, cambio) : p; }); };
+    var lab = laborableFn(db, localId);
+    var bal = balance(db, localId, desde, dias), base = pico();
+    var usados = {};
+    sobrecargados(bal).forEach(function (d) {
+      var mejor = null;
+      d.tareas.forEach(function (t) {
+        if (usados[t.id]) return;
+        var p = pls.filter(function (x) { return x.id === t.id; })[0];
+        if (!p || (p.frecuencia !== 'mensual' && p.frecuencia !== 'semanal')) return;
+        var opciones = [];
+        if (p.frecuencia === 'mensual') {
+          [-3, -2, -1, 1, 2, 3].forEach(function (k) { var dm = p.dia_mes + k; if (dm >= 1 && dm <= 28) opciones.push({ cambio: { dia_mes: dm }, txt: 'el día ' + dm + ' de cada mes' }); });
+        } else {
+          var dd = dow(d.fecha);
+          [1, 2, 3, 4, 5, 6].forEach(function (w) {
+            if (w === dd || (p.dias_semana || []).indexOf(w) >= 0) return;
+            var nuevos = (p.dias_semana || []).filter(function (x) { return x !== dd; }).concat([w]);
+            opciones.push({ cambio: { dias_semana: nuevos }, txt: 'los ' + DIAS[w].toLowerCase() });
+          });
+        }
+        opciones.forEach(function (o) {
+          var pk = pico(conCambio(p.id, o.cambio));
+          if (pk < base && (!mejor || pk < mejor.pico)) mejor = { id: p.id, titulo: p.titulo, cambio: o.cambio, pico: pk, texto: 'Pasar «' + p.titulo + '» a ' + o.txt, motivo: fmtFecha(d.fecha) + ' queda al ' + d.pct + ' %' };
+        });
+      });
+      if (mejor) { usados[mejor.id] = true; sug.push(mejor); }
+    });
+    // Mensuales en la misma semana del mes
+    var mens = pls.filter(function (p) { return p.activa && p.frecuencia === 'mensual' && (p.local_id || (localPrincipal(db) || {}).id) === localId; });
+    var porSemana = {};
+    mens.forEach(function (p) { var s = Math.min(3, Math.floor((p.dia_mes - 1) / 7)); (porSemana[s] = porSemana[s] || []).push(p); });
+    var cargaSem = [0, 1, 2, 3].map(function (s) { return (porSemana[s] || []).reduce(function (a, p) { return a + minutosPlantilla(p); }, 0); });
+    var maxS = cargaSem.indexOf(Math.max.apply(null, cargaSem)), minS = cargaSem.indexOf(Math.min.apply(null, cargaSem));
+    if (mens.length >= 3 && (porSemana[maxS] || []).length >= 2 && cargaSem[maxS] - cargaSem[minS] > 60) {
+      var mover = (porSemana[maxS] || []).filter(function (p) { return !usados[p.id]; }).sort(function (a, b) { return minutosPlantilla(a) - minutosPlantilla(b); })[0];
+      if (mover) {
+        var nuevoDia = Math.min(28, Math.max(1, mover.dia_mes + (minS - maxS) * 7));
+        usados[mover.id] = true;
+        sug.push({ id: mover.id, titulo: mover.titulo, cambio: { dia_mes: nuevoDia }, texto: 'Pasar «' + mover.titulo + '» al día ' + nuevoDia + ' de cada mes',
+          motivo: (porSemana[maxS].length) + ' tareas mensuales caen en la ' + ['1.ª', '2.ª', '3.ª', '4.ª'][maxS] + ' semana del mes y la ' + ['1.ª', '2.ª', '3.ª', '4.ª'][minS] + ' queda casi libre' });
+      }
+    }
+    // Las de cada 2 semanas: que se alternen (la mitad en una semana y la mitad en la otra)
+    var quin = pls.filter(function (p) { return p.activa && p.frecuencia === 'semanal' && (p.cada_n || 1) === 2 && (p.local_id || (localPrincipal(db) || {}).id) === localId; });
+    var fase = function (p) { return Math.floor(difDias(lunesDe(desde), lunesDe(p.fecha_inicio)) / 7) % 2 === 0 ? 0 : 1; };
+    var f0 = quin.filter(function (p) { return fase(p) === 0; }), f1 = quin.filter(function (p) { return fase(p) === 1; });
+    var m0 = f0.reduce(function (a, p) { return a + minutosPlantilla(p); }, 0), m1 = f1.reduce(function (a, p) { return a + minutosPlantilla(p); }, 0);
+    var grande = m0 > m1 ? f0 : f1, dif = Math.abs(m0 - m1);
+    if (quin.length >= 2 && grande.length >= 2 && dif > 30) {
+      var mq = grande.filter(function (p) { return !usados[p.id] && minutosPlantilla(p) * 2 <= dif + 1; }).sort(function (a, b) { return minutosPlantilla(b) - minutosPlantilla(a); })[0];
+      if (mq) sug.push({ id: mq.id, titulo: mq.titulo, cambio: { fecha_inicio: addDias(mq.fecha_inicio, 7) }, texto: 'Pasar «' + mq.titulo + '» a la otra semana',
+        motivo: 'Las tareas de cada 2 semanas se juntan en la misma semana (' + Math.max(m0, m1) + ' min contra ' + Math.min(m0, m1) + ')' });
+    }
+    return sug;
   }
 
   // ---------- Equipos de frío ----------
@@ -621,7 +709,7 @@
 
   return {
     TOLERANCIA: TOLERANCIA, DIAS: DIAS, DIAS_CORTOS: DIAS_CORTOS, AJUSTES_BASE: AJUSTES_BASE,
-    hoyISO: hoyISO, addDias: addDias, difDias: difDias, dow: dow, fmtFecha: fmtFecha, fmtFechaLarga: fmtFechaLarga,
+    hoyISO: hoyISO, addDias: addDias, difDias: difDias, dow: dow, lunesDe: lunesDe, fmtFecha: fmtFecha, fmtFechaLarga: fmtFechaLarga,
     fmtHora: fmtHora, fmtHoraTxt: fmtHoraTxt, minutosTxt: minutosTxt, pasoLimite: pasoLimite, llegoTarde: llegoTarde,
     aTiempoHasta: aTiempoHasta, pasoATiempo: pasoATiempo, puntualidadMes: puntualidadMes, sinPuntualidad: sinPuntualidad,
     toca: toca, distanciaM: distanciaM, estadoHora: estadoHora, antesDeHora: antesDeHora,
@@ -629,7 +717,7 @@
     localDe: localDe, localPrincipal: localPrincipal, labDe: labDe, laborable: laborable, laborableFn: laborableFn, trabaja: trabaja, especial: especial, localDePersona: localDePersona, frecuenciaTxt: frecuenciaTxt, proximas: proximas, siguienteLaborable: siguienteLaborable,
     seFue: seFue, anteriorLaborable: anteriorLaborable, carga: carga, capacidad: capacidad, cabeEn: cabeEn, estadoAsistencia: estadoAsistencia, estaPresente: estaPresente, asistenciaDe: asistenciaDe,
     esEmpleadoActivo: esEmpleadoActivo, plantillaDe: plantillaDe, puedeHacer: puedeHacer,
-    elegirPersona: elegirPersona, puedeSegun: puedeSegun, generarDia: generarDia, repartoAutomatico: repartoAutomatico, personasDe: personasDe, companerosDe: companerosDe, tareasDe: tareasDe, delPool: delPool,
+    elegirPersona: elegirPersona, puedeSegun: puedeSegun, generarDia: generarDia, repartoAutomatico: repartoAutomatico, balance: balance, sobrecargados: sobrecargados, sugerenciasBalance: sugerenciasBalance, factorDia: factorDia, personasDe: personasDe, companerosDe: companerosDe, tareasDe: tareasDe, delPool: delPool,
     sugerirReasignacion: sugerirReasignacion, reporteDia: reporteDia, textoReporte: textoReporte,
     historial: historial, cargaTipica: cargaTipica
   };

@@ -189,6 +189,7 @@
     var r = ruta(), p = r.parts;
     if (!p.length) return vistaHoy();
     if (p[0] === 'tareas') return vistaTareas(r.q);
+    if (p[0] === 'balance') return vistaBalance(r.q);
     if (p[0] === 'tarea') return vistaFormTarea(p[1], r.q);
     if (necesitaCompleto() && !S.data.completo) return pedirCompleto();
     if (p[0] === 'reporte') return vistaReporte(r.q.get('f') || S.hoy);
@@ -594,6 +595,35 @@
     }).join('') + '</div>';
   }
 
+  // ---------- Balance: minutos de tareas fijas por día frente al tiempo disponible ----------
+  function vistaBalance(q) {
+    var d = db(), loc = q.get('local') && L.localDe(d, q.get('local')) ? q.get('local') : (localElegido() || (L.localPrincipal(d) || {}).id);
+    var bal = L.balance(d, loc, S.hoy, 28), sobre = L.sobrecargados(bal), sug = L.sugerenciasBalance(d, loc, S.hoy, 28);
+    var h = '<a class="volver" href="#/tareas">‹ Tareas</a><h1>Balance de carga</h1>' + tabsLocales('/balance', loc);
+    h += '<p class="ayuda sin-margen">Minutos de tareas fijas de cada día frente al tiempo que se quiere dedicar a ellas (se ajusta por día de la semana en <a href="#/equipo/ajustes">Equipo → Ajustes</a>). Las tareas de una vez y las de quien falte no cuentan aquí.</p>';
+    h += sobre.length ? '<p class="nota alerta-nota">' + plural(sobre.length, 'día pasa', 'días pasan') + ' del 100 % en las próximas 4 semanas.</p>' : '<p class="nota">Ningún día pasa del 100 % en las próximas 4 semanas.</p>';
+    if (sug.length) {
+      h += '<h2 class="titulo-sec">Sugerencias</h2><div class="lista">' + sug.map(function (x, i) {
+        return '<div class="item"><span class="item-cuerpo"><span class="item-titulo">' + esc(x.texto) + '</span><span class="item-meta"><span class="extra">' + esc(x.motivo) + '</span></span></span>' +
+          '<button class="btn chico" data-acc="aplicar-balance" data-id="' + esc(x.id) + '" data-v="' + esc(JSON.stringify(x.cambio)) + '">Aplicar</button></div>';
+      }).join('') + '</div>';
+    }
+    // semana por semana
+    var semanas = {};
+    bal.forEach(function (x) { var k = L.lunesDe(x.fecha); (semanas[k] = semanas[k] || []).push(x); });
+    h += '<h2 class="titulo-sec">Próximas 4 semanas</h2>';
+    Object.keys(semanas).sort().forEach(function (k) {
+      h += '<h3 class="local-titulo">Semana del ' + esc(L.fmtFecha(k)) + '</h3><div class="balance-semana">' + semanas[k].map(function (x) {
+        var cls = x.pct > 100 ? 'alto' : x.pct > 85 ? 'medio' : '';
+        return '<details class="balance-dia ' + cls + '"><summary><span class="bd-dia">' + esc(L.DIAS_CORTOS[L.dow(x.fecha)]) + ' ' + Number(x.fecha.slice(8)) + '</span>' +
+          '<span class="bd-barra"><span style="width:' + Math.min(100, x.pct) + '%"></span></span><span class="bd-pct">' + x.pct + ' %</span></summary>' +
+          '<p class="ayuda">' + esc(L.minutosTxt(x.prog)) + ' de ' + esc(L.minutosTxt(x.disp)) + ' disponibles</p><ul class="bd-lista">' +
+          x.tareas.slice().sort(function (a, b) { return b.min - a.min; }).map(function (t) { return '<li><a href="#/tarea/' + esc(t.id) + '">' + esc(t.titulo) + '</a> <small class="muted">' + t.min + ' min</small></li>'; }).join('') + '</ul></details>';
+      }).join('') + '</div>';
+    });
+    return h;
+  }
+
   function vistaTareas(q) {
     var d = db(), modo = q.get('ver') === 'unica' ? 'unica' : 'rec';
     var loc = q.get('local') && L.localDe(d, q.get('local')) ? q.get('local') : localElegido();
@@ -608,6 +638,9 @@
     if (emps.length && porPersona > aj().minutos_jornada * 0.85) h += '<p class="nota alerta-nota">Con esta carga casi no queda margen: si falta alguien, no da el tiempo. Revisa minutos o frecuencias.</p>';
     else if (emps.length && porPersona < aj().minutos_jornada * 0.5) h += '<p class="nota">Las tareas registradas ocupan menos de la mitad de la jornada. Si hay trabajo que no está aquí, agrégalo: lo que no está en la app no se puede exigir.</p>';
 
+    var balLoc = loc || ((L.localPrincipal(d) || {}).id), sobre = balLoc ? L.sobrecargados(L.balance(d, balLoc, S.hoy, 28)) : [];
+    h += '<a class="card enlace-card' + (sobre.length ? ' alerta-card' : '') + '" href="#/balance' + (loc ? '?local=' + loc : '') + '"><b>Balance de carga</b><span class="muted">' +
+      (sobre.length ? '⚠️ ' + plural(sobre.length, 'día sobrecargado', 'días sobrecargados') + ' en las próximas 4 semanas ›' : 'Cómo se reparten las tareas fijas en los días ›') + '</span></a>';
     var qLoc = loc ? '&local=' + loc : '';
     h += '<div class="seg-tabs"><a href="#/tareas' + (loc ? '?local=' + loc : '') + '" class="' + (modo === 'rec' ? 'on' : '') + '">Se repiten</a><a href="#/tareas?ver=unica' + qLoc + '" class="' + (modo === 'unica' ? 'on' : '') + '">De una vez</a></div>';
     h += '<a class="btn grande" href="#/tarea/nueva?tipo=' + (modo === 'unica' ? 'unica' : 'rec') + qLoc + '">' + ICON.mas + (modo === 'unica' ? 'Nueva tarea de una vez' : 'Nueva tarea que se repite') + '</a>';
@@ -988,6 +1021,10 @@
     h += '<p class="ayuda sin-margen">Hasta la primera hora cuenta «a tiempo»; después, «tarde». Quien no marque «Llegué» antes de la hora límite aparece como falta y sus tareas se reparten solas: primero a quienes llegaron tarde (el de último primero, hasta 30 min sobre el promedio) y lo demás a quien tenga menos carga. Si nadie puede hacer alguna, te la muestro en Hoy para que la apruebes. Aplica a todos los locales.</p>';
     h += '<label class="check"><input type="checkbox" name="usar_salidas"' + (a.usar_salidas ? ' checked' : '') + '><span>Botón «Salí a despachar» / «Volví» <small class="muted">— si alguien lo marcó antes de que empiece la ventana de una tarea con horario, esa tarea pasa a otro sin penalizarlo. Si no lo marcó y otra persona tuvo que hacerla, queda como «se le pasó» y le compensa los minutos a quien la hizo. Apagado, nada de eso aplica: las urgentes igual las puede hacer cualquiera, sin penalización.</small></span></label>';
     h += '<label class="check"><input type="checkbox" name="mostrar_record"' + (a.mostrar_record ? ' checked' : '') + '><span>Cada empleado ve su récord de puntualidad del mes <small class="muted">— apagado, solo lo ves tú en Historial.</small></span></label>';
+    var cd = a.carga_dias || L.AJUSTES_BASE.carga_dias;
+    h += '<div class="campo"><span>Tiempo para tareas fijas cada día <small>(% de la jornada; el resto queda para pedidos y despachos)</small></span><div class="dias-pct">' +
+      [1, 2, 3, 4, 5, 6, 0].map(function (dd) { return '<label><span>' + L.DIAS_CORTOS[dd] + '</span><input type="number" name="cd_' + dd + '" min="0" max="100" step="5" value="' + esc(cd[String(dd)] == null ? 100 : cd[String(dd)]) + '" inputmode="numeric"></label>'; }).join('') +
+      '</div><small class="ayuda">Sirve para el balance de carga: avisa cuando un día pasa de ese tiempo. Por ejemplo, jueves y viernes menos porque salen más pedidos.</small></div>';
     h += '<label class="campo">Jornada (horas)<input type="number" name="jornada" min="1" max="15" step="0.5" value="' + (a.minutos_jornada / 60) + '" required inputmode="decimal"></label>';
     h += '<label class="check"><input type="checkbox" name="pool"' + (a.pool_activo ? ' checked' : '') + '><span>Pool de tareas libres <small class="muted">— los empleados ven las tareas sin dueño de su local y pueden tomarlas. Si lo apagas, lo que quede sin asignar solo lo ves tú.</small></span></label>';
     h += '<label class="check"><input type="checkbox" name="solo_tienda"' + (a.solo_en_tienda ? ' checked' : '') + '><span>«Llegué» solo en el local <small class="muted">— solo funciona conectado al Wi-Fi de un local. Fuera, les sale «No se pudo marcar tu llegada», sin explicar por qué. Marcar «Hecho» también exige haber marcado «Llegué». Registra el Wi-Fi de cada local antes de activarlo.</small></span></label>';
@@ -1626,6 +1663,10 @@
       if (!fRep || !fRep.value) { aviso('Elige el día.'); return; }
       ejecutar(store.rpc('reprogramar_oculta', { p_id: id, p_fecha: fRep.value }), 'Reprogramada para el ' + L.fmtFecha(fRep.value) + '.');
     }
+    else if (acc === 'aplicar-balance') {
+      var cambio = {}; try { cambio = JSON.parse(el.getAttribute('data-v')); } catch (e) { /* nada */ }
+      ejecutar(store.actualizar('plantillas', id, cambio), 'Listo. El balance se recalculó.');
+    }
     else if (acc === 'sin-wifi') {
       var on = el.getAttribute('data-v') === '1';
       ejecutar(store.rpc('sin_wifi_hoy', { p_local: id, p_activo: on }), on ? 'Listo: hoy pueden marcar «Llegué» sin el Wi-Fi en «' + nombreLocal(id) + '».' : 'Listo: «Llegué» vuelve a pedir el Wi-Fi.');
@@ -1714,7 +1755,8 @@
       }
       if (String(fd.get('a_tiempo_hasta')) > String(fd.get('hora_limite'))) { aviso('«A tiempo hasta» tiene que ser antes de la hora límite.'); return; }
       ejecutar(store.actualizar('ajustes', 1, { usar_salidas: !!fd.get('usar_salidas'), mostrar_record: !!fd.get('mostrar_record'), a_tiempo_hasta: fd.get('a_tiempo_hasta'), hora_limite: fd.get('hora_limite'), pool_activo: !!fd.get('pool'), minutos_jornada: Math.round(horas * 60), solo_en_tienda: solo,
-        usar_gps: !!fd.get('usar_gps'), revisiones_dia: Number(fd.get('revisiones_dia')) }), 'Ajustes guardados.');
+        usar_gps: !!fd.get('usar_gps'), revisiones_dia: Number(fd.get('revisiones_dia')),
+        carga_dias: [0, 1, 2, 3, 4, 5, 6].reduce(function (o, dd) { var v = Number(fd.get('cd_' + dd)); o[dd] = isNaN(v) ? 100 : Math.max(0, Math.min(100, v)); return o; }, {}) }), 'Ajustes guardados.');
     }
     else if (tipo === 'local') {
       var labL = fd.getAll('lab').map(Number);
@@ -1887,7 +1929,14 @@
       var items = repartidas.filter(function (x) { return x.asignado_a !== destino; }).map(function (x) { return { id: x.id, a: destino }; });
       if (items.length) p = p.then(function () { return store.rpc('reasignar', { p_items: items, p_motivo: 'manual' }); });
     }
-    ejecutar(p, id ? 'Cambios guardados.' : (unica ? 'Tarea creada.' : 'Tarea creada. Entra en la rotación.'))
+    // ¿Esta tarea sobrecarga algún día? Se compara el balance de las próximas 4 semanas con y sin el cambio
+    var msgOk = id ? 'Cambios guardados.' : (unica ? 'Tarea creada.' : 'Tarea creada. Entra en la rotación.');
+    if (!unica && fila.local_id) {
+      var antesPl = db().plantillas, conPl = antesPl.filter(function (x) { return x.id !== id; }).concat([Object.assign({ id: id || 'nueva', activa: true }, actual || {}, fila)]);
+      var sAntes = L.sobrecargados(L.balance(db(), fila.local_id, S.hoy, 28, antesPl)).length, sDesp = L.sobrecargados(L.balance(db(), fila.local_id, S.hoy, 28, conPl));
+      if (sDesp.length > sAntes) msgOk += ' Ojo: con esta tarea ' + plural(sDesp.length, 'día queda', 'días quedan') + ' sobrecargado' + (sDesp.length > 1 ? 's' : '') + ' (' + sDesp.slice(0, 3).map(function (x) { return L.fmtFecha(x.fecha); }).join(', ') + '). Mira el balance en Tareas.';
+    }
+    ejecutar(p, msgOk)
       .then(function (r) { if (r !== undefined) ir(unica ? '/' : '/tareas'); });
   }
 

@@ -567,3 +567,22 @@ table.temps td.vencida { color: var(--wine); }
 .oculta-fila .acciones { margin-top: 0; flex-wrap: nowrap; align-items: center; }
 .oculta-fila .acciones select, .oculta-fila .acciones input { flex: 1 1 auto; min-width: 0; }
 .oculta-fila .acciones .btn { flex: 0 0 auto; }
+/* Balance de carga */
+.balance-semana { display: grid; gap: 6px; margin-bottom: 14px; }
+.balance-dia { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; }
+.balance-dia summary { display: grid; grid-template-columns: 56px 1fr 52px; align-items: center; gap: 10px; cursor: pointer; list-style: none; }
+.balance-dia summary::-webkit-details-marker { display: none; }
+.bd-dia { font-weight: 600; text-transform: capitalize; }
+.bd-barra { height: 10px; border-radius: 999px; background: var(--gray-bg); overflow: hidden; }
+.bd-barra span { display: block; height: 100%; background: var(--accent); border-radius: inherit; }
+.balance-dia.medio .bd-barra span { background: var(--amber); }
+.balance-dia.alto { border-color: var(--wine); }
+.balance-dia.alto .bd-barra span { background: var(--wine); }
+.bd-pct { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+.balance-dia.alto .bd-pct { color: var(--wine); }
+.bd-lista { margin: 4px 0 0; padding-left: 18px; font-size: .9rem; }
+.dias-pct { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.dias-pct label { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: .78rem; font-weight: 600; text-transform: capitalize; }
+.dias-pct input { width: 100%; min-width: 0; text-align: center; padding: 6px 2px; }
+.dias-pct input { padding: 6px 0; font-size: .95rem; }
+@media (max-width: 420px) { .dias-pct { grid-template-columns: repeat(4, 1fr); } }

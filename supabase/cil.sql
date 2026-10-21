@@ -116,6 +116,9 @@ alter table public.tareas_ajustes add column if not exists solo_en_tienda boolea
 alter table public.tareas_ajustes add column if not exists usar_gps boolean not null default false;
 -- Puntualidad: «a tiempo» hasta esta hora (entrada 8:30 + 5 min). Después es «tarde»; la hora límite (8:50) es para dar la falta.
 alter table public.tareas_ajustes add column if not exists a_tiempo_hasta time not null default '08:35';
+-- % de la jornada para tareas fijas por día de la semana (0 = domingo). Lo usa el balance de carga para avisar
+-- cuando un día se sobrecarga: lunes a miércoles más, jueves y viernes menos porque salen más pedidos.
+alter table public.tareas_ajustes add column if not exists carga_dias jsonb not null default '{"0":0,"1":100,"2":100,"3":100,"4":60,"5":60,"6":80}';
 -- ¿Cada empleado ve su récord de puntualidad del mes? (apagado = solo lo ve gerencia)
 alter table public.tareas_ajustes add column if not exists mostrar_record boolean not null default false;
 -- Botón «Salí a despachar» / «Volví» (y las reglas que dependen de él: tarea incumplida y compensación al que la rescata)

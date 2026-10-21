@@ -4,7 +4,7 @@
 const { chromium } = require(process.env.PLAYWRIGHT || 'playwright');
 const BASE = process.env.BASE || 'http://localhost:8765';
 const RUTAS = ['/', '/tareas', '/tarea/nueva?tipo=unica', '/reporte', '/historial', '/temperaturas', '/equipo',
-  '/equipo/personas', '/equipo/grupos', '/equipo/locales', '/equipo/frio', '/equipo/calendario', '/equipo/avisos', '/equipo/ajustes', '/perfil'];
+  '/equipo/personas', '/equipo/grupos', '/equipo/locales', '/equipo/frio', '/equipo/calendario', '/equipo/avisos', '/equipo/ajustes', '/perfil', '/balance'];
 (async () => {
   const b = await chromium.launch({ executablePath: process.env.CHROMIUM || undefined });
   const p = await b.newPage({ viewport: { width: 360, height: 760 } });
