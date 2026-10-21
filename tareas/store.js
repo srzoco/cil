@@ -403,7 +403,11 @@
           r = { ok: true };
         } else {
           db.asistencia = db.asistencia.filter(function (s) { return !(s.persona_id === args.p_persona && s.fecha === hoy); });
-          if (args.p_estado === 'ausente') db.asistencia.push({ persona_id: args.p_persona, fecha: hoy, estado: 'ausente', llegada: null, marcado_por: yo.id });
+          if (args.p_estado === 'ausente') {
+            db.asistencia.push({ persona_id: args.p_persona, fecha: hoy, estado: 'ausente', llegada: null, marcado_por: yo.id });
+            var pa = db.personas.filter(function (x) { return x.id === args.p_persona; })[0];
+            if (L.pasoLimite(db.ajustes, new Date())) this._repartirLocal(L.localDePersona(db, pa), true);
+          }
           r = { ok: true };
         }
       } else if (nombre === 'justificar') {

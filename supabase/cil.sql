@@ -1121,6 +1121,10 @@ begin
     insert into asistencia (persona_id, fecha, estado, llegada, marcado_por)
     values (p_persona, public.hoy(), 'ausente', null, auth.uid())
     on conflict (persona_id, fecha) do update set estado = 'ausente', llegada = null, salida = null, salida_motivo = null, marcado_por = auth.uid();
+    -- si el reparto de la hora límite ya pasó, lo suyo se reparte ahora con la misma regla
+    if now() >= public._ts_hoy((select hora_limite from tareas_ajustes where id = 1)) then
+      perform public._repartir_local((select local_id from personas where id = p_persona), true);
+    end if;
     return json_build_object('ok', true);
   end if;
   if p_estado = 'sin_marcar' then

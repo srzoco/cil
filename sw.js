@@ -1,9 +1,9 @@
 /* CIL — guarda la app en el teléfono para que abra al instante (menú y módulos).
    Los datos (Supabase) nunca se guardan aquí: siempre se piden a internet.
    Al publicar una versión nueva, se sube el número de VERSION y el ?v= de index.html. */
-var VERSION = 'cil-v17';
+var VERSION = 'cil-v18';
 var ARCHIVOS = ['./', 'index.html', 'comun/tema.css?v=2', 'comun/tema.js?v=1', 'comun/hub.css?v=5', 'comun/hub.js?v=7',
-  'tareas/', 'tareas/styles.css?v=15', 'tareas/logic.js?v=14', 'tareas/store.js?v=17', 'tareas/app.js?v=23', 'manifest.webmanifest', 'icon-192.png'];
+  'tareas/', 'tareas/styles.css?v=15', 'tareas/logic.js?v=14', 'tareas/store.js?v=18', 'tareas/app.js?v=23', 'manifest.webmanifest', 'icon-192.png'];
 
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(VERSION).then(function (c) { return c.addAll(ARCHIVOS); }).catch(function () { /* se llena después */ }));
