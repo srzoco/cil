@@ -1945,7 +1945,7 @@
       S.ocupado = false;
       if (e && e.red && store.modo === 'supabase') {
         encolar({ tipo: 'llegada', fecha: S.hoy, t: new Date().toISOString() });
-        aviso('Sin internet: tu llegada quedó guardada con la hora de ahora y se envía sola cuando vuelva la conexión.', 'ok');
+        aviso('Sin internet: tu llegada se envía sola cuando vuelva la conexión. Cuenta la hora de ahora solo si gerencia marcó que no hay Wi-Fi.', 'ok');
         render(); return;
       }
       pintarCapas(); aviso(e && e.message ? e.message : 'Algo salió mal.');

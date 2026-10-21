@@ -771,8 +771,12 @@ begin
     return json_build_object('error', 'No se pudo marcar tu llegada. Si el problema sigue, avísale a gerencia.');
   end if;
   perform public.generar_dia(public.hoy());
-  return public._llegada(auth.uid(), case when p_hora is not null and p_hora < now() - interval '2 minutes' then 'sin_conexion' else nullif(v->>'verif', 'libre') end,
-                         (v->>'local')::uuid, p_hora);
+  -- La hora del teléfono (marcado sin internet) solo vale si gerencia marcó que hoy no hay Wi-Fi en ese local.
+  -- Si no, cuenta la hora en que llega al servidor desde el Wi-Fi del local.
+  if v->>'verif' = 'sin_wifi' and p_hora is not null and p_hora < now() - interval '2 minutes' then
+    return public._llegada(auth.uid(), 'sin_conexion', (v->>'local')::uuid, p_hora);
+  end if;
+  return public._llegada(auth.uid(), nullif(v->>'verif', 'libre'), (v->>'local')::uuid);
 end $$;
 
 -- Gerencia: ver desde qué red está conectada y registrarla como red de la tienda.
