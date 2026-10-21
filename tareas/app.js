@@ -79,8 +79,10 @@
       indicador(false);
       // si marcó algo mientras cargaba, esta foto ya está vieja: se pide otra
       if (S.ultimaMarca > inicio) { recargarPronto(); return; }
+      aplicarCola(d);
       S.data = d; S.hoy = L.hoyISO(); S.error = null; S.cargando = false;
       guardarCache(d);
+      if (colaLeer().length) setTimeout(enviarCola, 0);
       // no borrar lo que alguien está escribiendo en un formulario
       if (silencioso && S.sucio) return;
       render();
@@ -91,6 +93,46 @@
       if (silencioso && S.data) aviso(e.message); else { S.error = e.message || String(e); render(); }
     });
   }
+  // ---------- Sin internet: lo marcado se guarda en el teléfono y se envía al volver la conexión ----------
+  function claveCola() { var s = store && store.modo === 'supabase' && store.sesion(); return s ? 'barquero_cola_tareas_' + s.user.id : null; }
+  function colaLeer() { var k = claveCola(); return (k && ST.LS.get(k)) || []; }
+  function colaGuardar(c) { var k = claveCola(); if (k) { if (c.length) ST.LS.set(k, c); else ST.LS.del(k); } }
+  function encolar(item) {
+    var c = colaLeer().filter(function (x) { return !(item.tipo === 'hecha' && x.tipo === 'hecha' && x.id === item.id) && !(item.tipo === 'llegada' && x.tipo === 'llegada'); });
+    c.push(item); colaGuardar(c);
+  }
+  function llegadaEnCola() { return colaLeer().filter(function (x) { return x.tipo === 'llegada' && x.fecha === S.hoy; })[0] || null; }
+  // Al cargar datos nuevos, lo que sigue en la cola se ve como ya marcado
+  function aplicarCola(d) {
+    colaLeer().forEach(function (x) {
+      if (x.tipo !== 'hecha') return;
+      var a = (d.asignaciones || []).filter(function (y) { return y.id === x.id; })[0];
+      if (a) { a.estado = x.hecha ? 'hecha' : 'pendiente'; a.hecha_en = x.hecha ? x.t : null; }
+    });
+  }
+  function enviarCola() {
+    if (S.enviandoCola || !colaLeer().length) return Promise.resolve();
+    S.enviandoCola = true;
+    var c = colaLeer(), enviados = 0;
+    var siguiente = function () {
+      if (!c.length) return Promise.resolve();
+      var x = c[0];
+      var p = x.tipo === 'llegada'
+        ? store.rpc('marcar_llegada', { p_hora: x.t }).then(function (r) { if (r && r.error) { var e = new Error(r.error); throw e; } })
+        : store.rpc('marcar_hecha', { p_id: x.id, p_hecha: x.hecha });
+      return p.then(function () { c.shift(); colaGuardar(c); enviados++; return siguiente(); }, function (e) {
+        if (e && e.red) throw e;  // sigue sin internet: se reintenta después
+        c.shift(); colaGuardar(c); aviso((x.tipo === 'llegada' ? 'No se pudo enviar tu llegada: ' : 'No se pudo enviar una tarea: ') + (e && e.message ? e.message : 'error'));
+        return siguiente();
+      });
+    };
+    return siguiente().then(function () {
+      S.enviandoCola = false;
+      if (enviados) { aviso('✓ Se envió lo que marcaste sin internet.', 'ok'); return recargar(true); }
+    }, function () { S.enviandoCola = false; });
+  }
+  window.addEventListener('online', function () { enviarCola(); });
+
   function recargarPronto() {
     clearTimeout(recargarPronto.t);
     recargarPronto.t = setTimeout(function () {
@@ -238,6 +280,8 @@
 
     if (est === 'libre' && !todas.length) {
       h += '<p class="nota">Hoy no te toca trabajar.</p>';
+    } else if (!L.estaPresente(est) && llegadaEnCola()) {
+      h += '<p class="llego presente">' + ICON.check + '<span>Llegaste ' + esc(L.fmtHora(llegadaEnCola().t)) + ' · sin internet, se envía al volver la conexión</span></p>';
     } else if (!L.estaPresente(est)) {
       var ahoraM = new Date(), paso = L.pasoLimite(aj(), ahoraM), tardeYa = L.pasoATiempo(aj(), ahoraM);
       var sub = paso ? 'Ya pasó la hora límite (' + L.fmtHoraTxt(aj().hora_limite) + '). Marca igual: lo tuyo que nadie ha hecho vuelve a ti, y lo que otro ya hizo por ti lo compensas con tareas suyas.'
@@ -869,6 +913,7 @@
     if (sec === 'locales') {
       S.redCheck();
       h += '<h1>Locales</h1><p class="ayuda sin-margen">Cada local tiene sus días de trabajo, su Wi-Fi y su ubicación. Las tareas y los empleados de un local no se mezclan con los del otro.</p>';
+      h += bloqueRedesNuevas();
       locales().forEach(function (l) { h += tarjetaLocal(l); });
       return h + '<button class="btn sec" data-acc="agregar-local">' + ICON.mas + 'Agregar local</button>';
     }
@@ -897,7 +942,8 @@
         '<span class="item-meta"><span class="pill ' + (pe.rol === 'admin' ? 'gerencia' : 'edita') + '">' + (pe.rol === 'admin' ? 'Gerencia' : 'Empleado') + '</span>' +
         (pe.activo ? '' : '<span class="pill">Inactivo</span>') +
         (emp && pe.rota === false ? '<span class="pill espera">Fuera de la rotación</span>' : '') +
-        (store.modo === 'supabase' && emp && !(pe.accesos || []).length ? '<span class="pill corregir">Sin acceso a nada</span>' : '') + '</span>' +
+        (store.modo === 'supabase' && emp && !(pe.accesos || []).length ? '<span class="pill corregir">Sin acceso a nada</span>' : '') +
+        (store.modo === 'supabase' && pe.activo && (pe.rol === 'admin' || (pe.accesos || []).indexOf('tareas') >= 0) && S.data.con_avisos && S.data.con_avisos.indexOf(pe.id) < 0 ? '<span class="pill espera">Avisos apagados</span>' : '') + '</span>' +
         (det.length ? '<span class="persona-det">' + esc(det.join(' · ')) + '</span>' : '') +
         '<span class="persona-det muted">' + esc(pe.email || '') + '</span></span><span class="flecha">›</span></button>';
     }).join('') + '</div>';
@@ -994,6 +1040,22 @@
     ejecutar(p, plural(fechas.length, 'día agregado', 'días agregados') + ' al calendario.').then(function (r) { if (r !== undefined) f.reset(); });
   }
 
+  // Alguien intentó marcar «Llegué» desde una red que la app no conoce (el proveedor pudo cambiarla)
+  function bloqueRedesNuevas() {
+    var rs = (S.data && S.data.redes_nuevas) || [];
+    if (!rs.length) return '';
+    var porIp = {};
+    rs.forEach(function (r) { (porIp[r.ip] = porIp[r.ip] || []).push(r); });
+    return '<section class="card alerta-card"><h2>Redes nuevas por revisar</h2><p class="ayuda sin-margen">Alguien no pudo marcar «Llegué» desde estas redes. Si es el Wi-Fi del local (el proveedor a veces lo cambia), regístrala aquí y vuelven a poder marcar.</p>' +
+      Object.keys(porIp).map(function (ip) {
+        var lista = porIp[ip], r = lista[0];
+        return '<div class="tienda-fila"><div><b>' + esc(lista.map(function (x) { return nombreDe(x.persona_id); }).filter(function (v, i, a) { return a.indexOf(v) === i; }).join(', ')) + '</b>' +
+          '<span class="muted">' + esc(L.fmtFecha(String(r.creado_en).slice(0, 10))) + ' · ' + esc(L.fmtHora(r.creado_en)) + '</span></div>' +
+          '<div class="acciones">' + locales().map(function (l) { return '<button class="btn chico" data-acc="aceptar-red" data-id="' + esc(r.id) + '" data-local="' + esc(l.id) + '">Es de ' + esc(l.nombre) + '</button>'; }).join('') +
+          '<button class="btn fantasma chico" data-acc="ignorar-red" data-id="' + esc(lista.map(function (x) { return x.id; }).join(',')) + '">No es del local</button></div></div>';
+      }).join('') + '</section>';
+  }
+
   function tarjetaLocal(l) {
     var red = S.red || {}, aqui = (red.locales || []).indexOf(l.id) >= 0, nRedes = (l.redes || []).length, hayGps = l.lat != null;
     var nEmp = empleadosDe(l.id).length;
@@ -1011,6 +1073,9 @@
       return '<option value="' + m + '"' + (l.radio_m === m ? ' selected' : '') + '>' + m + ' m</option>';
     }).join('') + '</select><small class="muted">alrededor del local</small></label>';
     h += '<p class="ayuda">Wi-Fi y ubicación se registran estando en ese local. Si deja de reconocer el Wi-Fi, vuelve a registrarlo desde ahí.</p>';
+    var sinWifi = l.sin_wifi_fecha === S.hoy;
+    h += '<div class="tienda-fila"><div><b>¿Se cayó el Wi-Fi?</b><span class="muted">' + (sinWifi ? '<span class="ok-txt">Hoy pueden marcar «Llegué» sin el Wi-Fi</span>' : 'Permite marcar «Llegué» sin el Wi-Fi solo por hoy') + '</span></div>' +
+      '<button class="btn ' + (sinWifi ? 'sec' : 'warn') + ' chico" type="button" data-acc="sin-wifi" data-id="' + esc(l.id) + '" data-v="' + (sinWifi ? '0' : '1') + '">' + (sinWifi ? 'Ya volvió' : 'Hoy no hay Wi-Fi') + '</button></div>';
     h += '<div class="acciones"><button class="btn chico" type="submit">Guardar local</button>' +
       (l.principal ? '' : '<button class="btn fantasma rojo chico" type="button" data-acc="borrar-local" data-id="' + esc(l.id) + '">Borrar</button>') + '</div></form>';
     return h;
@@ -1147,7 +1212,7 @@
   function modalAsistencia(id) {
     var pe = persona(id); if (!pe) return '';
     var e = L.estadoAsistencia(db(), id, S.hoy, new Date()), s = L.asistenciaDe(db(), id, S.hoy);
-    var VERIF = { wifi: ' (Wi-Fi del local)', gps: ' (ubicación)', gerencia: ' (marcado por gerencia)' };
+    var VERIF = { wifi: ' (Wi-Fi del local)', gps: ' (ubicación)', gerencia: ' (marcado por gerencia)', sin_wifi: ' (día sin Wi-Fi)', sin_conexion: ' (marcado sin internet)' };
     var h = '<h2>' + esc(pe.nombre) + '</h2><p class="muted">Hoy: ' + ESTADO_TXT[e] + (s && s.llegada ? ' · llegó ' + esc(L.fmtHora(s.llegada)) + (VERIF[s.verificado] || '') : '') + '</p><div class="seg vertical botones">';
     if (!L.estaPresente(e)) h += '<button class="btn" data-acc="asis-set" data-id="' + esc(id) + '" data-v="presente">Llegó (marcar ahora)</button>';
     if (e !== 'ausente') h += '<button class="btn sec" data-acc="asis-set" data-id="' + esc(id) + '" data-v="ausente">No viene hoy</button>';
@@ -1542,6 +1607,17 @@
         .then(function (r) { S.modal = null; if (r !== undefined) ir('/tareas'); });
       });
     }
+    else if (acc === 'sin-wifi') {
+      var on = el.getAttribute('data-v') === '1';
+      ejecutar(store.rpc('sin_wifi_hoy', { p_local: id, p_activo: on }), on ? 'Listo: hoy pueden marcar «Llegué» sin el Wi-Fi en «' + nombreLocal(id) + '».' : 'Listo: «Llegué» vuelve a pedir el Wi-Fi.');
+    }
+    else if (acc === 'aceptar-red') {
+      var locR = el.getAttribute('data-local');
+      ejecutar(store.rpc('aceptar_red', { p_red: id, p_local: locR }), 'Red registrada en «' + nombreLocal(locR) + '». Ya pueden marcar «Llegué».');
+    }
+    else if (acc === 'ignorar-red') {
+      ejecutar(Promise.all(id.split(',').map(function (x) { return store.borrar('redes_nuevas', x); })), 'Listo: esa red no se registró.');
+    }
     else if (acc === 'registrar-red') {
       ejecutar(store.rpc('registrar_red', { p_local: id }), 'Listo: esta red quedó registrada como Wi-Fi de «' + nombreLocal(id) + '».').then(function () { S.red = null; render(); });
     }
@@ -1810,7 +1886,7 @@
     if (hecha && !esAdmin() && L.antesDeHora(a, new Date())) { aviso('Todavía no toca: es desde las ' + L.fmtHoraTxt(L.hhmm(a.desde))); return; }
     if (hecha && !esAdmin() && aj().solo_en_tienda) {
       var s = L.asistenciaDe(db(), yo().id, S.hoy);
-      if (!(s && s.estado === 'presente')) { aviso('Primero marca «Llegué».'); return; }
+      if (!(s && s.estado === 'presente') && !llegadaEnCola()) { aviso('Primero marca «Llegué».'); return; }
     }
     if (hecha && a.registro) { abrirModal({ tipo: 'registro', id: id }); return; }
     var antes = { estado: a.estado, hecha_en: a.hecha_en, hecha_por: a.hecha_por, repetir: a.repetir };
@@ -1823,7 +1899,13 @@
     store.rpc('marcar_hecha', { p_id: id, p_hecha: hecha }).then(function () {
       delete S.marcando[id]; recargarPronto();
     }, function (e) {
-      delete S.marcando[id]; Object.assign(a, antes); render();
+      delete S.marcando[id];
+      if (e && e.red && store.modo === 'supabase') {
+        encolar({ tipo: 'hecha', id: id, hecha: hecha, t: a.hecha_en || new Date().toISOString() });
+        aviso('Sin internet: quedó guardado en el teléfono y se envía solo cuando vuelva la conexión.', 'ok');
+        return;
+      }
+      Object.assign(a, antes); render();
       aviso(e && e.message ? e.message : 'No se pudo guardar. Revisa el internet.');
     });
   }
@@ -1844,7 +1926,10 @@
     };
     if (S.ocupado) return;
     S.ocupado = true; pintarCapas();
-    store.rpc('marcar_llegada', {}).then(null, function (e) {
+    store.rpc('marcar_llegada', {}).then(function (r) {
+      if (r && r.error) { var e0 = new Error(r.error); e0.usuario = true; throw e0; }
+      return r;
+    }).then(null, function (e) {
       if (!e || !e.noTienda) throw e;
       // No está en el Wi-Fi del local y gerencia activó la ubicación: probar con el GPS del teléfono
       return ubicacion().then(function (c) {
@@ -1854,9 +1939,16 @@
         e2.usuario = true; throw e2;
       });
     }).then(function (r) {
+      if (r && r.error) { var e1 = new Error(r.error); throw e1; }
       S.ocupado = false; aviso(okTxt(r), 'ok'); return recargar(true);
     }, function (e) {
-      S.ocupado = false; pintarCapas(); aviso(e && e.message ? e.message : 'Algo salió mal.');
+      S.ocupado = false;
+      if (e && e.red && store.modo === 'supabase') {
+        encolar({ tipo: 'llegada', fecha: S.hoy, t: new Date().toISOString() });
+        aviso('Sin internet: tu llegada quedó guardada con la hora de ahora y se envía sola cuando vuelva la conexión.', 'ok');
+        render(); return;
+      }
+      pintarCapas(); aviso(e && e.message ? e.message : 'Algo salió mal.');
     });
   }
 

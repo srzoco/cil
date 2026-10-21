@@ -652,7 +652,8 @@
       aj.a_tiempo_hasta = String(aj.a_tiempo_hasta || '08:35').slice(0, 5);
       (d.asignaciones || []).forEach(function (a) { if (a.antes) a.antes = String(a.antes).slice(0, 5); if (a.desde) a.desde = String(a.desde).slice(0, 5); });
       return { completo: !!d.completo, mi_mes: d.mi_mes || null, dias_sin_puntualidad: d.dias_sin_puntualidad || [], equipos: d.equipos || [], lecturas: d.lecturas || [], salidas_rato: d.salidas_rato || [], yo: yo, personas: personas, ajustes: aj, locales: d.locales || [], grupos: d.grupos || [], dias_especiales: d.dias_especiales || [],
-        revisiones: d.revisiones || [], plantillas: d.plantillas || [], asignaciones: d.asignaciones || [], asistencia: d.asistencia || [] };
+        revisiones: d.revisiones || [], plantillas: d.plantillas || [], asignaciones: d.asignaciones || [], asistencia: d.asistencia || [],
+        companeros: d.companeros || {}, redes_nuevas: d.redes_nuevas || [], con_avisos: d.con_avisos || null };
     });
   };
   // En la base unificada, dos tablas de Tareas llevan prefijo (Contenido ya usa esos nombres)

@@ -561,3 +561,4 @@ table.temps td.vencida { color: var(--wine); }
 .equipo-fila input[name=nombre], .grupo-fila input[name=nombre] { width: 100%; }
 .equipo-fila .rango { flex-wrap: nowrap; }
 .equipo-fila > .btn, .grupo-fila > .btn { flex: 1; }
+.alerta-card { border-color: var(--wine); } .alerta-card h2 { font-size: 1.1rem; }

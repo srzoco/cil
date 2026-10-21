@@ -614,9 +614,13 @@ end $$;
 -- de esa persona por los mismos minutos o hasta 20% más (nunca menos, si alcanza), que pueda hacer y de su mismo local.
 drop function if exists public._llegada(uuid);
 drop function if exists public._llegada(uuid, text);
-create or replace function public._llegada(p_persona uuid, p_verif text default null, p_local uuid default null) returns json
+drop function if exists public._llegada(uuid, text, uuid);
+create or replace function public._llegada(p_persona uuid, p_verif text default null, p_local uuid default null, p_hora timestamptz default null) returns json
 language plpgsql security definer set search_path = public as $$
-declare aj public.tareas_ajustes; ya public.asistencia; dev int := 0; comp int := 0; min_comp int := 0; r record; u record; ahora timestamptz := now();
+declare aj public.tareas_ajustes; ya public.asistencia; dev int := 0; comp int := 0; min_comp int := 0; r record; u record;
+  -- Marcado sin conexión: vale la hora en que lo tocó (hasta 3 horas antes y del mismo día); si no, la de ahora
+  ahora timestamptz := case when p_hora is not null and p_hora <= now() and p_hora >= now() - interval '3 hours'
+                              and (p_hora at time zone 'America/Caracas')::date = public.hoy() then p_hora else now() end;
   pe public.personas; inicio timestamptz := (public.hoy()::timestamp at time zone 'America/Caracas');
   v json;
 begin
@@ -693,6 +697,24 @@ $$;
 -- Devuelve {verif: 'wifi'|'gps'|'libre', local: uuid} o null si no está en ningún local.
 drop function if exists public._en_tienda(uuid, double precision, double precision, double precision);
 drop function if exists public._en_tienda(double precision, double precision, double precision);
+-- «Hoy no hay Wi-Fi»: gerencia lo marca y ese día en ese local se puede marcar «Llegué» sin revisar la red.
+alter table public.locales add column if not exists sin_wifi_fecha date;
+-- Redes desde las que alguien intentó marcar «Llegué» y no se reconocieron (el proveedor pudo cambiar la dirección).
+-- Gerencia recibe un aviso y decide si es la del local. Solo se guarda la red, nunca la ubicación.
+create table if not exists public.redes_nuevas (
+  id         uuid primary key default gen_random_uuid(),
+  persona_id uuid not null references public.personas (id) on delete cascade,
+  ip         text not null,
+  fecha      date not null default public.hoy(),
+  creado_en  timestamptz not null default now(),
+  unique (ip, fecha, persona_id)
+);
+alter table public.redes_nuevas enable row level security;
+revoke all on public.redes_nuevas from anon, authenticated;
+grant select, delete on public.redes_nuevas to authenticated;
+drop policy if exists redes_nuevas_admin on public.redes_nuevas;
+create policy redes_nuevas_admin on public.redes_nuevas for all to authenticated using (public.es_admin()) with check (public.es_admin());
+
 create or replace function public._ubicar(p_persona uuid, p_lat double precision, p_lng double precision, p_precision double precision) returns json
 language plpgsql stable security definer set search_path = public as $$
 declare propio uuid; ip text := public._ip_cliente(); lo record;
@@ -703,6 +725,10 @@ begin
   for lo in select id, redes from locales order by (id = propio) desc, principal desc loop
     if ip is not null and ip = any (lo.redes) then return json_build_object('verif', 'wifi', 'local', lo.id); end if;
   end loop;
+  -- Gerencia marcó que hoy no hay Wi-Fi en su local
+  if exists (select 1 from locales where id = propio and sin_wifi_fecha = public.hoy()) then
+    return json_build_object('verif', 'sin_wifi', 'local', propio);
+  end if;
   -- Ubicación (solo si gerencia la activó): su local primero, si no el más cercano dentro de su radio.
   -- No se guarda la ubicación de nadie: solo se compara y se descarta.
   if (select usar_gps from tareas_ajustes where id = 1) and p_lat is not null and p_lng is not null then
@@ -719,9 +745,11 @@ end $$;
 -- Empleado: "Llegué". Si la regla del local está activa, primero se prueba el Wi-Fi;
 -- si no está en una red conocida, la app manda la ubicación y se prueba el GPS.
 drop function if exists public.marcar_llegada();
-create or replace function public.marcar_llegada(p_lat double precision default null, p_lng double precision default null, p_precision double precision default null) returns json
+drop function if exists public.marcar_llegada(double precision, double precision, double precision);
+create or replace function public.marcar_llegada(p_lat double precision default null, p_lng double precision default null, p_precision double precision default null,
+                                                 p_hora timestamptz default null) returns json
 language plpgsql security definer set search_path = public as $$
-declare v json;
+declare v json; v_ip text := public._ip_cliente(); nom text; nuevo uuid;
 begin
   if not exists (select 1 from personas where id = auth.uid() and activo) then raise exception 'Tu usuario no está activo.'; end if;
   if exists (select 1 from asistencia where persona_id = auth.uid() and fecha = public.hoy() and estado = 'presente') then
@@ -729,12 +757,22 @@ begin
   end if;
   v := public._ubicar(auth.uid(), p_lat, p_lng, p_precision);
   if v is null then
-    raise exception using message = case when p_lat is null and (select usar_gps from tareas_ajustes where id = 1)
-      then 'NO_TIENDA: Falta tu ubicación'
-      else 'No se pudo marcar tu llegada. Si el problema sigue, avísale a gerencia.' end;
+    if p_lat is null and (select usar_gps from tareas_ajustes where id = 1) then raise exception 'NO_TIENDA: Falta tu ubicación'; end if;
+    -- Red desconocida: se anota para gerencia (una vez por red y día) y se devuelve el error sin deshacer ese registro
+    if v_ip is not null then
+      insert into redes_nuevas (persona_id, ip) values (auth.uid(), v_ip) on conflict do nothing returning id into nuevo;
+      if nuevo is not null and not exists (select 1 from redes_nuevas r where r.ip = v_ip and r.fecha = public.hoy() and r.id <> nuevo) then
+        select coalesce(nullif(nombre, ''), email) into nom from personas where id = auth.uid();
+        insert into avisos_cola (persona_id, titulo, cuerpo, url)
+        select ad.id, nom || ' no pudo marcar «Llegué»', 'Lo intentó desde una red que la app no conoce. Si es el Wi-Fi del local, regístrala en Equipo → Locales.', './#/equipo/locales'
+        from personas ad where ad.activo and ad.rol = 'admin';
+      end if;
+    end if;
+    return json_build_object('error', 'No se pudo marcar tu llegada. Si el problema sigue, avísale a gerencia.');
   end if;
   perform public.generar_dia(public.hoy());
-  return public._llegada(auth.uid(), nullif(v->>'verif', 'libre'), (v->>'local')::uuid);
+  return public._llegada(auth.uid(), case when p_hora is not null and p_hora < now() - interval '2 minutes' then 'sin_conexion' else nullif(v->>'verif', 'libre') end,
+                         (v->>'local')::uuid, p_hora);
 end $$;
 
 -- Gerencia: ver desde qué red está conectada y registrarla como red de la tienda.
@@ -745,6 +783,26 @@ begin
   if not public.es_admin() then raise exception 'Solo gerencia.'; end if;
   return json_build_object('ip', ip, 'locales',
     coalesce((select json_agg(id) from locales where ip is not null and ip = any (redes)), '[]'::json));
+end $$;
+
+-- Gerencia: hoy no hay Wi-Fi en este local (se puede marcar «Llegué» sin revisar la red). Se apaga solo al día siguiente.
+create or replace function public.sin_wifi_hoy(p_local uuid, p_activo boolean) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.es_admin() then raise exception 'Solo gerencia.'; end if;
+  update locales set sin_wifi_fecha = case when p_activo then public.hoy() else null end where id = p_local;
+end $$;
+-- Gerencia: la red nueva sí es del local. Se registra y se borran los intentos desde esa red.
+create or replace function public.aceptar_red(p_red uuid, p_local uuid) returns void
+language plpgsql security definer set search_path = public as $$
+declare x text;
+begin
+  if not public.es_admin() then raise exception 'Solo gerencia.'; end if;
+  select ip into x from redes_nuevas where id = p_red;
+  if x is null then raise exception 'Esa red ya no está en la lista.'; end if;
+  update locales set redes = array_remove(redes, x) where id <> p_local and x = any (redes);
+  update locales set redes = array_append(array_remove(redes, x), x) where id = p_local;
+  delete from redes_nuevas where ip = x;
 end $$;
 
 drop function if exists public.registrar_red();
@@ -1201,6 +1259,14 @@ $$;
 -- Corre con los permisos de quien la llama: cada quien recibe solo lo que puede ver.
 -- p_completo = false: hoy, lo pendiente y lo hecho hoy (pantalla Hoy y Mi día).
 -- p_completo = true:  además los últimos 35 días (Reporte de otros días e Historial).
+-- Gerencia: quién tiene los avisos activos en al menos un teléfono (para ver a quién se le apagaron)
+create or replace function public._con_avisos() returns json
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.es_admin() then return '[]'::json; end if;
+  return (select coalesce(json_agg(distinct s.persona_id), '[]'::json) from suscripciones s);
+end $$;
+
 -- Con quién hace cada quien sus tareas de varias personas: {asignacion_id: "María, Luis"}.
 -- security definer porque un empleado no ve las filas ni los nombres de los demás.
 create or replace function public._companeros(p_fecha date) returns json
@@ -1227,6 +1293,9 @@ begin
     'completo', p_completo,
     'mi_mes', public.mi_puntualidad(),
     'companeros', public._companeros(hoy),
+    'redes_nuevas', (select coalesce(json_agg(json_build_object('id', r.id, 'ip', r.ip, 'persona_id', r.persona_id, 'creado_en', r.creado_en) order by r.creado_en desc), '[]'::json)
+                     from redes_nuevas r where r.fecha >= hoy - 3),
+    'con_avisos', public._con_avisos(),
     'personas', (select coalesce(json_agg(x order by x.nombre), '[]'::json) from personas x),
     'ajustes', (select row_to_json(x) from tareas_ajustes x where x.id = 1),
     'plantillas', (select coalesce(json_agg(x order by x.titulo), '[]'::json) from plantillas x),
@@ -1269,6 +1338,7 @@ create table if not exists public.avisos_cola (
   cuerpo     text not null default '',
   creado_en  timestamptz not null default now()
 );
+alter table public.avisos_cola add column if not exists url text not null default './#/';
 
 -- El teléfono guarda su suscripción (cada quien solo la suya)
 create or replace function public.guardar_suscripcion(p_endpoint text, p_p256dh text, p_auth text) returns void
@@ -1444,7 +1514,7 @@ begin
   where s.fecha = hoy and s.salida is not null and s.salida > hace and ad.activo and ad.rol = 'admin';
 
   -- 7) Avisos sueltos (prueba)
-  insert into _avisos select c.persona_id, 'cola:' || c.id, c.titulo, c.cuerpo, './#/' from avisos_cola c where c.creado_en > now() - interval '1 day';
+  insert into _avisos select c.persona_id, 'cola:' || c.id, c.titulo, c.cuerpo, c.url from avisos_cola c where c.creado_en > now() - interval '1 day';
   delete from avisos_cola where creado_en <= now() - interval '1 day' or id::text in (select substr(clave, 6) from _avisos where clave like 'cola:%');
 
   -- Solo los que no se han mandado; se marcan como mandados y se devuelven con cada teléfono de esa persona
@@ -1530,7 +1600,8 @@ create policy eventos_ver on public.tareas_eventos for select to authenticated u
 revoke all on all tables in schema public from anon;
 revoke execute on all functions in schema public from anon, public;
 grant execute on function public.hoy(), public.es_admin(), public.tiene_acceso(text), public._urgente(public.asignaciones), public.generar_dia(date),
-  public.marcar_llegada(double precision, double precision, double precision), public.mi_red(), public.registrar_red(uuid),
+  public.marcar_llegada(double precision, double precision, double precision, timestamptz), public.mi_red(), public.registrar_red(uuid),
+  public.sin_wifi_hoy(uuid, boolean), public.aceptar_red(uuid, uuid),
   public.marcar_hecha(uuid, boolean), public.tomar_del_pool(uuid), public.reasignar(jsonb, text),
   public.marcar_asistencia(uuid, text), public.mi_perfil(text, text),
   public.justificar(uuid, text), public.revisar_justificacion(uuid, boolean),
