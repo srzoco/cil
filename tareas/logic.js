@@ -549,7 +549,8 @@
   // Reparto automático a la hora límite (igual que repartir_faltas en el SQL). Devuelve [{ id, a, oculta }] sin modificar db.
   // Primero a quienes llegaron tarde (el de último primero) mientras no pasen 30 de carga sobre el promedio;
   // lo demás a quien tenga menos carga (empate: quien llegó más tarde). Si nadie puede, al de menos carga pero oculta.
-  function repartoAutomatico(db, f, localId) {
+  function repartoAutomatico(db, f, localId, conFaltas) {
+    if (conFaltas === undefined) conFaltas = true;
     var aj = db.ajustes || AJUSTES_BASE;
     var pres = db.personas.filter(function (pe) {
       if (!esEmpleadoActivo(pe) || localDePersona(db, pe) !== localId) return false;
@@ -560,7 +561,8 @@
     });
     var faltan = db.personas.filter(function (pe) {
       if (!esEmpleadoActivo(pe) || localDePersona(db, pe) !== localId || !trabaja(db, pe, f)) return false;
-      var s = asistenciaDe(db, pe.id, f); return !(s && s.estado === 'presente');
+      // faltó (si ya pasó la hora límite) o se fue antes: se trata igual
+      var s = asistenciaDe(db, pe.id, f); return (conFaltas && !(s && s.estado === 'presente')) || !!(s && s.estado === 'presente' && s.salida);
     }).map(function (pe) { return pe.id; });
     var puede = function (a, x) { return puedeHacer(db, a, x.id); };
     var items = db.asignaciones.filter(function (a) {

@@ -41,3 +41,4 @@ a { color: var(--accent); }
 .modulo-badge { position: absolute; top: -6px; right: -6px; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; background: var(--wine); color: #fff; font: 700 .75rem/22px var(--sans); text-align: center; }
 :root[data-theme="oscuro"] .modulo-badge { color: var(--bg); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="claro"]) .modulo-badge { color: var(--bg); } }
+.hub-ayuda { text-align: center; margin-top: 28px; font-weight: 600; }

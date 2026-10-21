@@ -197,11 +197,13 @@
     if (p[0] === 'temperaturas') return vistaTemperaturas(r.q);
     if (p[0] === 'equipo') return vistaEquipo(p[1]);
     if (p[0] === 'perfil') return vistaPerfil(false);
+    if (p[0] === 'ayuda') return vistaAyuda();
     return vistaHoy();
   }
   function vistaEmpleado() {
     var p = ruta().parts;
     if (p[0] === 'perfil') return vistaPerfil(false);
+    if (p[0] === 'ayuda') return vistaAyuda();
     return vistaMiDia();
   }
 
@@ -335,6 +337,7 @@
     h += t.hoy.length ? '<div class="lista">' + t.hoy.map(function (a) { return filaTareaEmpleado(a, false); }).join('') + '</div>'
       : '<p class="vacio muted">No tienes tareas asignadas hoy.</p>';
     if (L.estaPresente(est) && s && !s.salida) h += '<p class="me-voy"><button class="btn link" data-acc="me-voy">Me voy antes de terminar</button></p>';
+    h += '<p class="me-voy"><a class="btn link" href="#/ayuda">¿Cómo se usa la app?</a></p>';
     h += '</section>';
     if (aj().pool_activo) {
       var pool = L.delPool(d, hoy, y.local_id);
@@ -1132,6 +1135,32 @@
     return h;
   }
 
+  // ---------- Guía: cómo se usa (detecta iPhone o Android y muestra solo esos pasos) ----------
+  function sistemaTel() {
+    if (S.guiaSo) return S.guiaSo;
+    var ua = navigator.userAgent || '';
+    return /iphone|ipad|ipod/i.test(ua) || (/macintosh/i.test(ua) && navigator.maxTouchPoints > 1) ? 'ios' : 'android';
+  }
+  function vistaAyuda() {
+    var so = sistemaTel(), a = aj();
+    var instalar = so === 'ios'
+      ? '<li>Abre este enlace en <b>Safari</b> (no en otra app).</li><li>Toca el botón <b>Compartir</b> (el cuadrito con la flecha hacia arriba).</li><li>Baja y toca <b>«Agregar a inicio»</b> → <b>Agregar</b>.</li><li>Desde ahora ábrela siempre con el ícono <b>CIL</b> de tu pantalla.</li>'
+      : '<li>Abre este enlace en <b>Chrome</b>.</li><li>Toca el menú <b>⋮</b> (arriba a la derecha).</li><li>Toca <b>«Instalar app»</b> o <b>«Agregar a pantalla principal»</b>.</li><li>Desde ahora ábrela con el ícono <b>CIL</b> de tu pantalla.</li>';
+    var pasos = [
+      ['Instala la app', '<ol>' + instalar + '</ol>'],
+      ['Activa los avisos', '<p>En tu pantalla de inicio de la app toca <b>«Activar»</b> en la tarjeta «Avisos en el teléfono» y acepta el permiso.' + (so === 'ios' ? ' En iPhone solo funciona si la abriste desde el ícono (paso 1).' : '') + ' Así te avisa cuando te toca algo con hora.</p>'],
+      ['Al llegar: «Llegué»', '<p>Conéctate al <b>Wi-Fi del local</b> y toca <b>«Llegué»</b>. Aparece tu lista del día.' + (a.solo_en_tienda ? ' Desde otra red no funciona.' : '') + '</p>'],
+      ['Marca cada tarea al terminarla', '<p>Toca el <b>cuadrito</b> de la tarea. Un toque y listo. Si te equivocaste, tócalo otra vez.</p><p>Si dice <b>«con María»</b>, la hacen entre dos: con que uno la marque, queda hecha para los dos.</p>'],
+      ['Si no hay internet', '<p>Marca igual: se guarda en el teléfono y se envía solo cuando vuelva la conexión.</p>'],
+      ['Si te tienes que ir antes', '<p>Toca <b>«Me voy antes de terminar»</b> al final de tu lista. Lo que no hiciste se reparte solo entre tus compañeros.</p>']
+    ];
+    if (a.usar_salidas) pasos.splice(4, 0, ['Si sales a despachar', '<p>Toca <b>«Salí a despachar»</b> y al volver <b>«Volví»</b>. Mientras estás fuera, lo que tenga hora lo puede hacer otra persona sin que cuente en tu contra.</p>']);
+    pasos.push(['¿Olvidaste tu clave?', '<p>Avísale a gerencia: te da una nueva en persona.</p>']);
+    return '<a class="volver" href="#/">‹ Volver</a><h1>Cómo se usa</h1>' +
+      '<div class="seg-tabs"><a href="#" data-acc="guia-so" data-v="android" class="' + (so === 'android' ? 'on' : '') + '">Android</a><a href="#" data-acc="guia-so" data-v="ios" class="' + (so === 'ios' ? 'on' : '') + '">iPhone</a></div>' +
+      '<ol class="guia">' + pasos.map(function (x) { return '<li><h2>' + esc(x[0]) + '</h2>' + x[1] + '</li>'; }).join('') + '</ol>';
+  }
+
   function vistaPerfil(primeraVez) {
     var y = yo();
     var h = primeraVez ? '<h1>¡Bienvenido!</h1><p class="muted">Antes de empezar, dinos cómo te llamas.</p>' : '<a class="volver" href="#/">‹ Volver</a><h1>Mi perfil</h1>';
@@ -1473,7 +1502,7 @@
   }
 
   function modalSalida() {
-    return '<h2>¿Te vas antes?</h2><p class="muted">Queda registrada la hora. Lo que no hayas hecho hoy pasa a gerencia para repartirlo.</p>' +
+    return '<h2>¿Te vas antes?</h2><p class="muted">Queda registrada la hora. Lo que no hayas hecho hoy se reparte entre tus compañeros.</p>' +
       '<form data-form="salida"><label class="campo">Motivo <small>(opcional)</small><textarea name="motivo" rows="2" maxlength="200" placeholder="Ej.: cita médica, me mandaron a despachar"></textarea></label>' +
       '<div class="acciones"><button class="btn grande" type="submit">Marcar salida</button></div></form>';
   }
@@ -1667,6 +1696,7 @@
       var cambio = {}; try { cambio = JSON.parse(el.getAttribute('data-v')); } catch (e) { /* nada */ }
       ejecutar(store.actualizar('plantillas', id, cambio), 'Listo. El balance se recalculó.');
     }
+    else if (acc === 'guia-so') { ev.preventDefault(); S.guiaSo = el.getAttribute('data-v'); render(); }
     else if (acc === 'sin-wifi') {
       var on = el.getAttribute('data-v') === '1';
       ejecutar(store.rpc('sin_wifi_hoy', { p_local: id, p_activo: on }), on ? 'Listo: hoy pueden marcar «Llegué» sin el Wi-Fi en «' + nombreLocal(id) + '».' : 'Listo: «Llegué» vuelve a pedir el Wi-Fi.');

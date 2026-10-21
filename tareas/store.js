@@ -71,13 +71,17 @@
     (db.locales || []).forEach(function (l) {
       if (db.repartos_auto.indexOf(hoy + '|' + l.id) >= 0) return;
       db.repartos_auto.push(hoy + '|' + l.id);
-      L.repartoAutomatico(db, hoy, l.id).forEach(function (r) {
-        var a = self._asig(r.id); if (!a) return;
-        a.asignado_a = r.a; a.motivo = 'ausencia'; a.oculta = r.oculta;
-        self._evento(a.id, 'reasignada', r.de, r.a, 'ausencia');
-      });
+      self._repartirLocal(l.id, true);
     });
     this._guardar();
+  };
+  DemoStore.prototype._repartirLocal = function (localId, conFaltas) {
+    var self = this;
+    L.repartoAutomatico(this.db, L.hoyISO(), localId, conFaltas).forEach(function (r) {
+      var a = self._asig(r.id); if (!a) return;
+      a.asignado_a = r.a; a.motivo = 'ausencia'; a.oculta = r.oculta;
+      self._evento(a.id, 'reasignada', r.de, r.a, 'ausencia');
+    });
   };
   // completo = false: solo hoy, lo pendiente y lo hecho hoy (igual que datos_app en supabase.sql)
   DemoStore.prototype.cargar = function (completo) {
@@ -381,7 +385,10 @@
       } else if (nombre === 'marcar_salida') {
         var sa = L.asistenciaDe(db, yo.id, hoy);
         if (!sa || sa.estado !== 'presente') throw errorUsuario('Primero marca «Llegué».');
-        if (!sa.salida) { sa.salida = new Date().toISOString(); sa.salida_motivo = String(args.p_motivo || '').trim() || null; r = { salida: sa.salida, ya: false }; }
+        if (!sa.salida) {
+          sa.salida = new Date().toISOString(); sa.salida_motivo = String(args.p_motivo || '').trim() || null; r = { salida: sa.salida, ya: false };
+          this._repartirLocal(L.localDePersona(db, yo), L.pasoLimite(db.ajustes, new Date()));
+        }
         else r = { salida: sa.salida, ya: true };
       } else if (nombre === 'marcar_asistencia') {
         if (!adm) throw errorUsuario('Solo gerencia.');
@@ -391,6 +398,7 @@
           if (args.p_estado === 'salida') {
             if (!sb || sb.estado !== 'presente') throw errorUsuario('Primero marca su llegada.');
             sb.salida = sb.salida || new Date().toISOString();
+            this._repartirLocal(L.localDePersona(db, L.personaDe ? L.personaDe(db, args.p_persona) : db.personas.filter(function (x) { return x.id === args.p_persona; })[0]), L.pasoLimite(db.ajustes, new Date()));
           } else if (sb) { sb.salida = null; sb.salida_motivo = null; }
           r = { ok: true };
         } else {

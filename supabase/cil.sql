@@ -1105,6 +1105,9 @@ begin
   if s.salida is not null then return json_build_object('salida', s.salida, 'ya', true); end if;
   update asistencia set salida = now(), salida_motivo = nullif(trim(coalesce(p_motivo, '')), '')
   where persona_id = auth.uid() and fecha = public.hoy();
+  -- lo que deja pendiente se reparte solo, con la misma regla de las faltas
+  perform public._repartir_local((select local_id from personas where id = auth.uid()),
+                                 now() >= public._ts_hoy((select hora_limite from tareas_ajustes where id = 1)));
   return json_build_object('salida', now(), 'ya', false);
 end $$;
 
@@ -1127,6 +1130,8 @@ begin
   if p_estado = 'salida' then
     update asistencia set salida = coalesce(salida, now()) where persona_id = p_persona and fecha = public.hoy() and estado = 'presente';
     if not found then raise exception 'Primero marca su llegada.'; end if;
+    perform public._repartir_local((select local_id from personas where id = p_persona),
+                                   now() >= public._ts_hoy((select hora_limite from tareas_ajustes where id = 1)));
     return json_build_object('ok', true);
   end if;
   if p_estado = 'sin_salida' then
@@ -1393,76 +1398,88 @@ create table if not exists public.repartos_auto (
 alter table public.repartos_auto enable row level security;
 revoke all on public.repartos_auto from anon, authenticated;
 
+create or replace function public._repartir_local(p_local uuid, p_con_faltas boolean) returns int
+language plpgsql security definer set search_path = public as $$
+declare aj public.tareas_ajustes; f date := public.hoy(); it record; n int := 0; nocultas int := 0;
+  quien uuid; oc boolean; prom numeric; grupo text; asignados jsonb; ocultos jsonb;
+begin
+  select * into aj from tareas_ajustes where id = 1;
+  perform pg_advisory_xact_lock(hashtext('repartir:' || p_local::text || ':' || f::text));
+  create temp table if not exists _pres (id uuid primary key, nombre text, carga numeric, cap int, tarea_max int, grupos uuid[], rota boolean,
+                                         llegada timestamptz, tarde boolean) on commit drop;
+  delete from _pres where true;
+  create temp table if not exists _ok (id uuid) on commit drop;
+  insert into _pres
+  select pe.id, coalesce(pe.nombre, ''), 
+         coalesce((select sum(a.minutos) from asignaciones a where a.asignado_a = pe.id and (a.fecha = f or (a.arrastra and a.estado = 'pendiente' and a.fecha < f and a.just_estado = 'aprobada'))), 0)
+           * 100.0 / greatest(least(pe.capacidad, 100), 10),
+         greatest(least(pe.capacidad, 100), 10), pe.tarea_max, pe.grupos, pe.rota, s.llegada,
+         date_trunc('minute', s.llegada at time zone 'America/Caracas')::time > aj.a_tiempo_hasta
+  from personas pe join asistencia s on s.persona_id = pe.id and s.fecha = f and s.estado = 'presente' and s.salida is null
+  where pe.activo and pe.rol = 'empleado' and 'tareas' = any (pe.accesos) and pe.local_id = p_local;
+  asignados := '{}'; ocultos := '{}';
+  for it in
+    select a.*, (select count(*) from _pres x where public._puede(a.plantilla_id, x.id)) as pueden
+    from asignaciones a join personas pf on pf.id = a.asignado_a
+    where a.estado = 'pendiente' and not a.oculta and (a.fecha = f or (a.fecha < f and a.arrastra))
+      and pf.activo and pf.rol = 'empleado' and pf.local_id = p_local and public._trabaja(pf, f)
+      -- faltó (si ya pasó la hora límite) o se fue antes («Me voy antes»): se trata igual
+      and ((p_con_faltas and not exists (select 1 from asistencia s where s.persona_id = pf.id and s.fecha = f and s.estado = 'presente'))
+           or exists (select 1 from asistencia s where s.persona_id = pf.id and s.fecha = f and s.estado = 'presente' and s.salida is not null))
+    order by pueden, a.minutos desc, a.id
+  loop
+    grupo := coalesce(it.plantilla_id::text, it.id::text) || '|' || it.fecha || '|' || it.puesto;
+    quien := (asignados->>grupo)::uuid; oc := false;
+    if quien is null then
+      prom := (select avg(carga) from _pres);
+      -- quienes pueden, sin el compañero que ya tiene otro puesto de esta misma tarea; si a alguno le cabe en su tope, solo esos
+      delete from _ok where true;
+      insert into _ok select x.id from _pres x where public._puede(it.plantilla_id, x.id)
+        and not exists (select 1 from asignaciones b where b.plantilla_id = it.plantilla_id and b.fecha = it.fecha and b.momento = it.momento and b.asignado_a = x.id);
+      if exists (select 1 from _ok o join _pres x on x.id = o.id where x.tarea_max is null or it.minutos <= x.tarea_max) then
+        delete from _ok o using _pres x where x.id = o.id and not (x.tarea_max is null or it.minutos <= x.tarea_max);
+      end if;
+      select x.id into quien from _ok o join _pres x on x.id = o.id
+        where x.tarde and x.carga + it.minutos * 100.0 / x.cap <= prom + 30
+        order by x.llegada desc, x.id limit 1;
+      if quien is null then
+        select x.id into quien from _ok o join _pres x on x.id = o.id order by x.carga, x.llegada desc, x.nombre, x.id limit 1;
+      end if;
+      if quien is null then
+        select x.id into quien from _pres x order by x.carga, x.llegada desc, x.nombre, x.id limit 1;
+        oc := quien is not null;
+      end if;
+      if quien is not null then asignados := asignados || jsonb_build_object(grupo, quien); ocultos := ocultos || jsonb_build_object(grupo, oc); end if;
+    else
+      oc := coalesce((ocultos->>grupo)::boolean, false);  -- las varias veces del día de una tarea van juntas
+    end if;
+    continue when quien is null;
+    update asignaciones set asignado_a = quien, motivo = 'ausencia', oculta = oc where id = it.id;
+    insert into tareas_eventos (asignacion_id, tipo, de, a, texto) values (it.id, 'reasignada', it.asignado_a, quien, 'ausencia');
+    update _pres set carga = carga + it.minutos * 100.0 / cap where id = quien;
+    n := n + 1;
+    if oc then nocultas := nocultas + 1; end if;
+  end loop;
+  if nocultas > 0 then
+    insert into avisos_cola (persona_id, titulo, cuerpo, url)
+    select ad.id, nocultas || case when nocultas = 1 then ' tarea necesita tu aprobación' else ' tareas necesitan tu aprobación' end,
+           'Nadie de los presentes podía hacerla. La asigné a quien tiene menos carga, pero no la ve hasta que la apruebes en Hoy.', './#/'
+    from personas ad where ad.activo and ad.rol = 'admin';
+    nocultas := 0;
+  end if;
+  return n;
+end $$;
+
 create or replace function public.repartir_faltas() returns int
 language plpgsql security definer set search_path = public as $$
-declare aj public.tareas_ajustes; f date := public.hoy(); lo record; it record; p public.plantillas; n int := 0; nocultas int := 0;
-  quien uuid; oc boolean; prom numeric; grupo text; asignados jsonb; ocultos jsonb;
+declare aj public.tareas_ajustes; f date := public.hoy(); lo record; n int := 0;
 begin
   select * into aj from tareas_ajustes where id = 1;
   if now() < public._ts_hoy(aj.hora_limite) then return 0; end if;
   perform pg_advisory_xact_lock(hashtext('repartir_faltas:' || f::text));
   for lo in select l.id from locales l where not exists (select 1 from repartos_auto r where r.fecha = f and r.local_id = l.id) loop
     insert into repartos_auto (fecha, local_id) values (f, lo.id);
-    create temp table if not exists _pres (id uuid primary key, nombre text, carga numeric, cap int, tarea_max int, grupos uuid[], rota boolean,
-                                           llegada timestamptz, tarde boolean) on commit drop;
-    delete from _pres where true;
-    create temp table if not exists _ok (id uuid) on commit drop;
-    insert into _pres
-    select pe.id, coalesce(pe.nombre, ''), 
-           coalesce((select sum(a.minutos) from asignaciones a where a.asignado_a = pe.id and (a.fecha = f or (a.arrastra and a.estado = 'pendiente' and a.fecha < f and a.just_estado = 'aprobada'))), 0)
-             * 100.0 / greatest(least(pe.capacidad, 100), 10),
-           greatest(least(pe.capacidad, 100), 10), pe.tarea_max, pe.grupos, pe.rota, s.llegada,
-           date_trunc('minute', s.llegada at time zone 'America/Caracas')::time > aj.a_tiempo_hasta
-    from personas pe join asistencia s on s.persona_id = pe.id and s.fecha = f and s.estado = 'presente' and s.salida is null
-    where pe.activo and pe.rol = 'empleado' and 'tareas' = any (pe.accesos) and pe.local_id = lo.id;
-    asignados := '{}'; ocultos := '{}';
-    for it in
-      select a.*, (select count(*) from _pres x where public._puede(a.plantilla_id, x.id)) as pueden
-      from asignaciones a join personas pf on pf.id = a.asignado_a
-      where a.estado = 'pendiente' and not a.oculta and (a.fecha = f or (a.fecha < f and a.arrastra))
-        and pf.activo and pf.rol = 'empleado' and pf.local_id = lo.id and public._trabaja(pf, f)
-        and not exists (select 1 from asistencia s where s.persona_id = pf.id and s.fecha = f and s.estado = 'presente')
-      order by pueden, a.minutos desc, a.id
-    loop
-      grupo := coalesce(it.plantilla_id::text, it.id::text) || '|' || it.fecha || '|' || it.puesto;
-      quien := (asignados->>grupo)::uuid; oc := false;
-      if quien is null then
-        prom := (select avg(carga) from _pres);
-        -- quienes pueden, sin el compañero que ya tiene otro puesto de esta misma tarea; si a alguno le cabe en su tope, solo esos
-        delete from _ok where true;
-        insert into _ok select x.id from _pres x where public._puede(it.plantilla_id, x.id)
-          and not exists (select 1 from asignaciones b where b.plantilla_id = it.plantilla_id and b.fecha = it.fecha and b.momento = it.momento and b.asignado_a = x.id);
-        if exists (select 1 from _ok o join _pres x on x.id = o.id where x.tarea_max is null or it.minutos <= x.tarea_max) then
-          delete from _ok o using _pres x where x.id = o.id and not (x.tarea_max is null or it.minutos <= x.tarea_max);
-        end if;
-        select x.id into quien from _ok o join _pres x on x.id = o.id
-          where x.tarde and x.carga + it.minutos * 100.0 / x.cap <= prom + 30
-          order by x.llegada desc, x.id limit 1;
-        if quien is null then
-          select x.id into quien from _ok o join _pres x on x.id = o.id order by x.carga, x.llegada desc, x.nombre, x.id limit 1;
-        end if;
-        if quien is null then
-          select x.id into quien from _pres x order by x.carga, x.llegada desc, x.nombre, x.id limit 1;
-          oc := quien is not null;
-        end if;
-        if quien is not null then asignados := asignados || jsonb_build_object(grupo, quien); ocultos := ocultos || jsonb_build_object(grupo, oc); end if;
-      else
-        oc := coalesce((ocultos->>grupo)::boolean, false);  -- las varias veces del día de una tarea van juntas
-      end if;
-      continue when quien is null;
-      update asignaciones set asignado_a = quien, motivo = 'ausencia', oculta = oc where id = it.id;
-      insert into tareas_eventos (asignacion_id, tipo, de, a, texto) values (it.id, 'reasignada', it.asignado_a, quien, 'ausencia');
-      update _pres set carga = carga + it.minutos * 100.0 / cap where id = quien;
-      n := n + 1;
-      if oc then nocultas := nocultas + 1; end if;
-    end loop;
-    if nocultas > 0 then
-      insert into avisos_cola (persona_id, titulo, cuerpo, url)
-      select ad.id, nocultas || case when nocultas = 1 then ' tarea necesita tu aprobación' else ' tareas necesitan tu aprobación' end,
-             'Nadie de los presentes podía hacerla. La asigné a quien tiene menos carga, pero no la ve hasta que la apruebes en Hoy.', './#/'
-      from personas ad where ad.activo and ad.rol = 'admin';
-      nocultas := 0;
-    end if;
+    n := n + public._repartir_local(lo.id, true);
   end loop;
   return n;
 end $$;
@@ -1646,6 +1663,38 @@ begin
   where ad.activo and ad.rol = 'admin' and (f.nf > 0 or f.nt > 0)
     and public._ts_hoy(time '09:30') <= ahora and public._ts_hoy(time '09:30') > hace;
 
+  -- 4b) Gerencia: cierre a las 5:10 p. m., solo si quedan tareas de hoy sin hacer
+  insert into _avisos
+  select ad.id, 'cierre:' || hoy || ':' || ad.id,
+         c.n || case when c.n = 1 then ' tarea sin hacer hoy' else ' tareas sin hacer hoy' end, c.detalle || '.', './#/'
+  from personas ad,
+       (select coalesce(sum(x.k), 0)::int as n, string_agg(x.quien || ' ' || x.k, ', ' order by x.k desc, x.quien) as detalle
+        from (select coalesce(nullif(pe.nombre, ''), pe.email, 'Sin asignar') as quien, count(*) as k
+              from asignaciones a left join personas pe on pe.id = a.asignado_a
+              where a.fecha = hoy and a.estado = 'pendiente' and not a.oculta
+              group by 1) x) c
+  where ad.activo and ad.rol = 'admin' and c.n > 0
+    and public._ts_hoy(time '17:10') <= ahora and public._ts_hoy(time '17:10') > hace;
+
+  -- 4c) Gerencia: resumen de la semana anterior, los lunes a las 9:00 a. m.
+  if extract(isodow from hoy) = 1 and public._ts_hoy(time '09:00') <= ahora and public._ts_hoy(time '09:00') > hace then
+    insert into _avisos
+    select ad.id, 'semana:' || hoy || ':' || ad.id, 'Semana pasada: ' || coalesce(w.pct, 0) || ' % de tareas hechas',
+           w.tardes || case when w.tardes = 1 then ' llegada tarde' else ' llegadas tarde' end || ' · ' ||
+           w.faltas || case when w.faltas = 1 then ' falta' else ' faltas' end || '. Detalle en Reporte → Historial.', './#/historial'
+    from personas ad,
+         (select (select round(100.0 * count(*) filter (where a.estado = 'hecha') / nullif(count(*), 0))::int
+                  from asignaciones a where a.fecha between hoy - 7 and hoy - 1 and not a.oculta) as pct,
+                 (select count(*) from asistencia s where s.fecha between hoy - 7 and hoy - 1 and s.estado = 'presente'
+                    and date_trunc('minute', s.llegada at time zone 'America/Caracas')::time > aj.a_tiempo_hasta
+                    and not exists (select 1 from dias_sin_puntualidad d where d.fecha = s.fecha)) as tardes,
+                 (select count(*) from personas pe, generate_series(hoy - 7, hoy - 1, interval '1 day') g(d)
+                    where pe.activo and pe.rol = 'empleado' and 'tareas' = any (pe.accesos) and public._trabaja(pe, g.d::date)
+                      and pe.creado_en::date <= g.d::date
+                      and not exists (select 1 from asistencia s where s.persona_id = pe.id and s.fecha = g.d::date and s.estado = 'presente')) as faltas) w
+    where ad.activo and ad.rol = 'admin';
+  end if;
+
   -- 5) Gerencia: temperatura fuera de rango
   insert into _avisos
   select ad.id, 'temp:' || l.id || ':' || ad.id, 'Temperatura fuera de rango: ' || e.nombre,
@@ -1656,7 +1705,7 @@ begin
   -- 6) Gerencia: alguien se fue antes
   insert into _avisos
   select ad.id, 'salida:' || hoy || ':' || s.persona_id || ':' || ad.id, coalesce(nullif(pe.nombre, ''), pe.email) || ' se fue antes',
-         coalesce('«' || s.salida_motivo || '». ', '') || 'Reparte lo que dejó pendiente en Hoy.', './#/'
+         coalesce('«' || s.salida_motivo || '». ', '') || 'Lo que dejó pendiente ya se repartió entre los presentes.', './#/'
   from asistencia s join personas pe on pe.id = s.persona_id, personas ad
   where s.fecha = hoy and s.salida is not null and s.salida > hace and ad.activo and ad.rol = 'admin';
 

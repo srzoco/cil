@@ -586,3 +586,10 @@ table.temps td.vencida { color: var(--wine); }
 .dias-pct input { width: 100%; min-width: 0; text-align: center; padding: 6px 2px; }
 .dias-pct input { padding: 6px 0; font-size: .95rem; }
 @media (max-width: 420px) { .dias-pct { grid-template-columns: repeat(4, 1fr); } }
+/* Guía de uso */
+.guia { list-style: none; counter-reset: paso; padding: 0; margin: 16px 0 0; display: grid; gap: 12px; }
+.guia > li { counter-increment: paso; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius, 16px); padding: 14px 16px 14px 56px; position: relative; }
+.guia > li::before { content: counter(paso); position: absolute; left: 14px; top: 14px; width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-weight: 700; }
+.guia h2 { font-size: 1.1rem; margin: 2px 0 6px; }
+.guia p, .guia ol { margin: 0 0 6px; }
+.guia ol { padding-left: 18px; }

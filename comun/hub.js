@@ -86,7 +86,7 @@
       html += '<h2 class="hub-sec">Gerencia</h2><div class="modulos"><a class="modulo" href="tareas/#/equipo/personas"><span class="modulo-ic"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5"/><circle cx="17" cy="9" r="2.4"/><path d="M15.6 14.2c2.4-.3 4.3 1.2 4.9 4.3"/></svg></span>' +
         '<span class="modulo-txt"><b>Personas y accesos</b><span>Quién entra a qué, y quién es de gerencia</span></span><span class="modulo-flecha">›</span></a></div>';
     }
-    html += '</div>';
+    html += '<p class="hub-ayuda"><a href="tareas/#/ayuda">¿Cómo se usa la app?</a></p></div>';
     $.innerHTML = html;
     try { sessionStorage.setItem('barquero_en_menu', '1'); } catch (e) { /* nada */ }
     // Lo pendiente de cada módulo llega después: el menú no lo espera
