@@ -1741,7 +1741,10 @@ create policy eventos_ver on public.tareas_eventos for select to authenticated u
 
 -- Nadie entra sin sesión
 revoke all on all tables in schema public from anon;
-revoke execute on all functions in schema public from anon, public;
+-- Supabase da permiso a «authenticated» sobre toda función nueva: se le quita a todas y se devuelve solo a las de la lista.
+-- Sin esto, un empleado podría llamar funciones internas (por ejemplo _llegada) y saltarse las reglas.
+revoke execute on all functions in schema public from anon, authenticated, public;
+alter default privileges in schema public revoke execute on functions from anon, authenticated, public;
 grant execute on function public.hoy(), public.es_admin(), public.tiene_acceso(text), public._urgente(public.asignaciones), public.generar_dia(date),
   public.marcar_llegada(double precision, double precision, double precision, timestamptz), public.mi_red(), public.registrar_red(uuid),
   public.sin_wifi_hoy(uuid, boolean), public.aceptar_red(uuid, uuid),
@@ -1752,7 +1755,9 @@ grant execute on function public.hoy(), public.es_admin(), public.tiene_acceso(t
   public.marcar_salida(text), public.datos_app(boolean), public.mi_puntualidad(), public.registrar_lecturas(uuid, jsonb),
   public.marcar_fuera(boolean), public.rescatar(uuid),
   public.guardar_suscripcion(text, text, text), public.borrar_suscripcion(text), public.aviso_prueba(), public.cambiar_clave(uuid, text),
-  public.crear_persona(text, text, text, uuid, text[], text), public.menu_pendientes(), public.aprobar_oculta(uuid, uuid), public.reprogramar_oculta(uuid, date) to authenticated;
+  public.crear_persona(text, text, text, uuid, text[], text), public.menu_pendientes(), public.aprobar_oculta(uuid, uuid), public.reprogramar_oculta(uuid, date),
+  -- las llama datos_app, que corre con los permisos de quien entra
+  public._companeros(date), public._con_avisos(), public.repartir_faltas() to authenticated;
 -- Solo la función del servidor (avisos) puede pedir los avisos pendientes
 do $$ begin
   if exists (select 1 from pg_roles where rolname = 'service_role') then
@@ -1760,7 +1765,8 @@ do $$ begin
     execute 'grant select, delete on public.suscripciones to service_role';
   end if;
 end $$;
--- Las funciones internas (_toca, _elegir_persona, _llegada, _hecha…) no se pueden llamar desde la app.
+-- Las funciones internas (_toca, _elegir_persona, _llegada, _hecha…) no se pueden llamar desde la app:
+-- no están en la lista de arriba y se les quitó el permiso que Supabase da por defecto.
 
 -- =====================================================================
 --  Contenido: permisos por módulo
@@ -1812,6 +1818,18 @@ begin
     execute $p$drop policy if exists grab_eventos_crear on public.grabacion_eventos$p$;
     execute $p$create policy grab_eventos_crear on public.grabacion_eventos for insert to authenticated with check (autor = auth.uid() and public.tiene_acceso('contenido'))$p$;
   end if;
+  -- Papel en Contenido («aprueba» / «edita»): cada quien lo elegía en su perfil, así que quien edita podía
+  -- ponerse «aprueba» y aprobarse su propio trabajo. Ahora «aprueba» solo lo pone gerencia.
+  execute $f$create or replace function public._equipo_rol() returns trigger
+    language plpgsql security definer set search_path = public as $b$
+    begin
+      if new.rol = 'aprueba' and (tg_op = 'INSERT' or old.rol is distinct from 'aprueba') and not public.es_admin() then
+        raise exception 'Solo gerencia puede tener el papel «Apruebo». Elige «Edito y publico».';
+      end if;
+      return new;
+    end $b$ $f$;
+  execute 'drop trigger if exists equipo_rol on public.equipo';
+  execute 'create trigger equipo_rol before insert or update of rol on public.equipo for each row execute function public._equipo_rol()';
   -- Avisos de Contenido: antes cualquier usuario podía reasignarse los teléfonos suscritos de otros
   -- (update «using (true)»). Ahora solo el equipo de Contenido toca esa tabla.
   if to_regclass('public.push_subs') is not null then

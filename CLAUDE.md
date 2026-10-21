@@ -5,7 +5,7 @@
 - Respuestas **muy cortas** (tipo aviso, 3–4 líneas). Pasos cortos con ✅ de verificación, nunca listas eternas.
 - Rétala: si algo tiene un problema o hay una alternativa mejor, dilo directo. Pregunta antes de recomendar cuando falte contexto.
 - No es programadora: explica sin jerga ("la base de datos", "el reloj de avisos"), y dale el texto exacto para pegar.
-- Haz commit/push solo cuando ella lo pida o lo apruebe. Autor de los commits: `srzoco <srzoco00@gmail.com>`.
+- Publicar (push a main): lo que ella pidió explícitamente y los arreglos de errores se publican directo; lo que tú sugieras va primero a la página de aprobación (https://claude.ai/artifact/B3s85DdSYu8ucAxCsfFDiq). Autor de los commits: `srzoco <srzoco00@gmail.com>`.
 
 ## Qué es
 App web unificada **CIL** en GitHub Pages: https://srzoco.github.io/cil/
@@ -56,4 +56,5 @@ App web unificada **CIL** en GitHub Pages: https://srzoco.github.io/cil/
 - Decisiones de gerencia: página de aprobación https://claude.ai/artifact/B3s85DdSYu8ucAxCsfFDiq (colección `decisiones`). Todo lo que necesite su OK va ahí.
 - No hay build ni dependencias. Sirve la carpeta con `python3 -m http.server`. El modo demo sale solo con `config.js` vacío (en pruebas, intercepta `config.js` con Playwright).
 - Para el SQL, Postgres local más PostgREST con un stub de `auth.uid()`. Verifica que `logic.js` y SQL den el mismo reparto.
+- Permisos: `cil.sql` le quita a `authenticated` el EXECUTE de todas las funciones y devuelve solo las de la lista (Supabase lo da por defecto). Toda RPC nueva va en esa lista; las internas (`_algo`) nunca.
 - Revisa la sintaxis JS con `node -e "new Function(require('fs').readFileSync('tareas/app.js','utf8'))"`.
