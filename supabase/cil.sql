@@ -1308,7 +1308,7 @@ begin
     'ajustes', (select row_to_json(x) from tareas_ajustes x where x.id = 1),
     'plantillas', (select coalesce(json_agg(x order by x.titulo), '[]'::json) from plantillas x),
     'asignaciones', (select coalesce(json_agg(x order by x.fecha, x.id), '[]'::json) from asignaciones x
-                     where x.fecha >= v_desde or (x.estado = 'pendiente' and x.arrastra) or x.hecha_en >= inicio),
+                     where x.fecha >= v_desde or (x.estado = 'pendiente' and (x.arrastra or x.oculta)) or x.hecha_en >= inicio),
     'asistencia', (select coalesce(json_agg(x), '[]'::json) from asistencia x where x.fecha >= v_desde),
     'locales', (select coalesce(json_agg(x order by x.principal desc, x.creado_en), '[]'::json) from locales x),
     'grupos', (select coalesce(json_agg(x order by x.nombre), '[]'::json) from grupos x),
@@ -1500,7 +1500,8 @@ begin
   if not public.es_admin() then raise exception 'Solo gerencia.'; end if;
   select * into a from asignaciones where id = p_id;
   if a.id is null then raise exception 'Esa tarea ya no existe.'; end if;
-  update asignaciones set oculta = false, asignado_a = coalesce(p_persona, asignado_a) where id = p_id;
+  -- si es de un día anterior, queda como atrasada para que aparezca en su lista
+  update asignaciones set oculta = false, asignado_a = coalesce(p_persona, asignado_a), arrastra = arrastra or fecha < public.hoy() where id = p_id;
   if p_persona is not null and p_persona is distinct from a.asignado_a then
     insert into tareas_eventos (asignacion_id, tipo, de, a, texto) values (p_id, 'reasignada', a.asignado_a, p_persona, 'ausencia');
   end if;

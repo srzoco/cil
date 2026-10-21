@@ -85,7 +85,7 @@
     return this.rpc('generar_dia', {}).then(function () { self._repartirFaltas(); return self._admin() ? self.rpc('asignar_revisiones', {}) : null; }).then(function () {
       var db = copia(self.db), yo = self._yo(), adm = self._admin(), hoy = L.hoyISO(), desde = completo ? desdeHistorial() : hoy;
       var asigs = db.asignaciones.filter(function (a) {
-        if (!(a.fecha >= desde || (a.estado === 'pendiente' && a.arrastra) || (a.hecha_en && L.hoyISO(new Date(a.hecha_en)) === hoy))) return false;
+        if (!(a.fecha >= desde || (a.estado === 'pendiente' && (a.arrastra || a.oculta)) || (a.hecha_en && L.hoyISO(new Date(a.hecha_en)) === hoy))) return false;
         if (adm) return true;
         return (a.asignado_a === yo.id && !a.oculta) || a.hecha_por === yo.id || a.rescatada_de === yo.id || (a.local_id === yo.local_id && L.esUrgente(db, a, new Date())) ||
           (a.asignado_a === null && a.estado === 'pendiente' && (a.fecha === hoy || (a.fecha < hoy && a.arrastra)) && db.ajustes.pool_activo && a.local_id === yo.local_id);
@@ -361,7 +361,7 @@
         if (!adm) throw errorUsuario('Solo gerencia.');
         var ao = this._asig(args.p_id); if (!ao) throw errorUsuario('Esa tarea ya no existe.');
         var antesAo = ao.asignado_a;
-        ao.oculta = false; if (args.p_persona) ao.asignado_a = args.p_persona;
+        ao.oculta = false; if (args.p_persona) ao.asignado_a = args.p_persona; if (ao.fecha < hoy) ao.arrastra = true;
         if (args.p_persona && args.p_persona !== antesAo) this._evento(ao.id, 'reasignada', antesAo, args.p_persona, 'ausencia');
       } else if (nombre === 'reasignar') {
         if (!adm) throw errorUsuario('Solo gerencia puede reasignar.');

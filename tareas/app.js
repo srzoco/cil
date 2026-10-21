@@ -408,7 +408,7 @@
     return '<section class="card alerta-card"><h2>' + (oc.length === 1 ? '1 tarea necesita tu aprobación' : oc.length + ' tareas necesitan tu aprobación') + '</h2>' +
       '<p class="ayuda sin-margen">Eran de alguien que faltó y nadie de los presentes podía hacerlas. Las asigné a quien tiene menos carga, pero no las ve hasta que apruebes.</p>' +
       oc.map(function (a) {
-        return '<form class="oculta-fila" data-form="aprobar-oculta" data-id="' + esc(a.id) + '"><div><b>' + tituloHtml(a) + '</b><span class="muted">' + a.minutos + ' min</span></div>' +
+        return '<form class="oculta-fila" data-form="aprobar-oculta" data-id="' + esc(a.id) + '"><div><b>' + tituloHtml(a) + '</b><span class="muted">' + a.minutos + ' min' + (a.fecha < S.hoy ? ' · del ' + esc(L.fmtFecha(a.fecha)) : '') + '</span></div>' +
           '<div class="acciones"><select name="persona" aria-label="A quién">' + opcionesPersona(a.asignado_a, null, false, a.local_id) + '</select><button class="btn chico" type="submit">Asignar</button></div>' +
           '<div class="acciones"><input type="date" name="fecha" min="' + L.addDias(S.hoy, 1) + '" value="' + L.addDias(S.hoy, 1) + '" aria-label="Nuevo día">' +
           '<button class="btn chico sec" type="button" data-acc="reprogramar-oculta" data-id="' + esc(a.id) + '">Reprogramar</button></div><small class="muted">Reprogramar: vuelve a ' + esc(nombreDe(a.asignado_original || a.asignado_a)) + ' ese día.</small></form>';
