@@ -13,7 +13,7 @@
   var DIAS_CORTOS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   var AJUSTES_BASE = { hora_limite: '08:50', a_tiempo_hasta: '08:35', pool_activo: false, minutos_jornada: 480, solo_en_tienda: false,
-    carga_dias: { '0': 0, '1': 100, '2': 100, '3': 100, '4': 60, '5': 60, '6': 80 } };
+    minutos_almuerzo: 60, carga_dias: { '0': 0, '1': 100, '2': 100, '3': 100, '4': 60, '5': 60, '6': 80 } };
   var LAB_BASE = [1, 2, 3, 4, 5, 6];
 
   // ---------- Fechas (siempre 'AAAA-MM-DD', hora local) ----------
@@ -209,6 +209,19 @@
     var out = [], f = desde;
     for (var i = 0; i < 400 && out.length < (n || 3); i++) { if (toca(p, f, lab)) out.push(f); f = addDias(f, 1); }
     return out;
+  }
+
+  // ---------- Almuerzo: dos personas de un mismo grupo no almuerzan a la vez (igual que _almorzando_grupo) ----------
+  function almorzandoGrupo(db, personaId, ahora) {
+    var yo = persona(db, personaId), aj = db.ajustes || AJUSTES_BASE, f = hoyISO(ahora), min = aj.minutos_almuerzo || 60;
+    if (!yo || !(yo.grupos || []).length) return [];
+    var t = (ahora || new Date()).getTime();
+    return (db.asistencia || []).filter(function (s) {
+      if (s.persona_id === personaId || s.fecha !== f || !s.almuerzo) return false;
+      var o = persona(db, s.persona_id);
+      return o && o.activo && (o.grupos || []).some(function (g) { return yo.grupos.indexOf(g) >= 0; }) && t - new Date(s.almuerzo).getTime() < min * 60000;
+    }).map(function (s) { var o = persona(db, s.persona_id); return { persona_id: o.id, nombre: o.nombre || o.email, desde: s.almuerzo, hasta: new Date(new Date(s.almuerzo).getTime() + min * 60000).toISOString() }; })
+      .sort(function (a, b) { return a.desde < b.desde ? -1 : 1; });
   }
 
   // ---------- Balance de carga: tareas fijas por día frente al tiempo disponible ----------
@@ -719,7 +732,7 @@
     localDe: localDe, localPrincipal: localPrincipal, labDe: labDe, laborable: laborable, laborableFn: laborableFn, trabaja: trabaja, especial: especial, localDePersona: localDePersona, frecuenciaTxt: frecuenciaTxt, proximas: proximas, siguienteLaborable: siguienteLaborable,
     seFue: seFue, anteriorLaborable: anteriorLaborable, carga: carga, capacidad: capacidad, cabeEn: cabeEn, estadoAsistencia: estadoAsistencia, estaPresente: estaPresente, asistenciaDe: asistenciaDe,
     esEmpleadoActivo: esEmpleadoActivo, plantillaDe: plantillaDe, puedeHacer: puedeHacer,
-    elegirPersona: elegirPersona, puedeSegun: puedeSegun, generarDia: generarDia, repartoAutomatico: repartoAutomatico, balance: balance, sobrecargados: sobrecargados, sugerenciasBalance: sugerenciasBalance, factorDia: factorDia, personasDe: personasDe, companerosDe: companerosDe, tareasDe: tareasDe, delPool: delPool,
+    elegirPersona: elegirPersona, puedeSegun: puedeSegun, generarDia: generarDia, repartoAutomatico: repartoAutomatico, almorzandoGrupo: almorzandoGrupo, balance: balance, sobrecargados: sobrecargados, sugerenciasBalance: sugerenciasBalance, factorDia: factorDia, personasDe: personasDe, companerosDe: companerosDe, tareasDe: tareasDe, delPool: delPool,
     sugerirReasignacion: sugerirReasignacion, reporteDia: reporteDia, textoReporte: textoReporte,
     historial: historial, cargaTipica: cargaTipica
   };

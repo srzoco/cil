@@ -97,6 +97,7 @@
       return {
         completo: !!completo,
         mi_mes: (adm || db.ajustes.mostrar_record) ? L.puntualidadMes(self.db, yo.id, hoy) : null,
+        almorzando_grupo: L.almorzandoGrupo(self.db, yo.id, new Date()),
         dias_sin_puntualidad: db.dias_sin_puntualidad || [],
         equipos: db.equipos || [],
         salidas_rato: (db.salidas_rato || []).filter(function (x) { return x.fecha >= desde && (adm || x.persona_id === yo.id); }),
@@ -361,6 +362,19 @@
         var deRo = ro.asignado_a;
         ro.fecha = args.p_fecha; ro.asignado_a = ro.asignado_original || ro.asignado_a; ro.oculta = false; ro.motivo = 'manual';
         this._evento(ro.id, 'reasignada', deRo, ro.asignado_a, 'reprogramada');
+      } else if (nombre === 'marcar_almuerzo') {
+        var quienAl = args.p_persona || yo.id;
+        if (quienAl !== yo.id && !adm) throw errorUsuario('Solo gerencia puede marcarlo por otra persona.');
+        var sal = L.asistenciaDe(db, quienAl, hoy);
+        if (!sal || sal.estado !== 'presente') throw errorUsuario('Primero marca «Llegué».');
+        if (args.p_quitar) { if (!adm) throw errorUsuario('Solo gerencia puede quitarlo.'); sal.almuerzo = null; r = { ok: true }; }
+        else if (sal.salida) throw errorUsuario('Ya marcó su salida de hoy.');
+        else if (sal.almuerzo) r = { almuerzo: sal.almuerzo, ya: true };
+        else {
+          var otrosAl = L.almorzandoGrupo(db, quienAl, new Date());
+          if (otrosAl.length) throw errorUsuario(otrosAl[0].nombre + ' está almorzando hasta las ' + L.fmtHora(otrosAl[0].hasta) + '; espera a que termine (alguien del grupo tiene que quedarse).');
+          sal.almuerzo = new Date().toISOString(); sal.almuerzo_por = yo.id; r = { almuerzo: sal.almuerzo, ya: false };
+        }
       } else if (nombre === 'aprobar_oculta') {
         if (!adm) throw errorUsuario('Solo gerencia.');
         var ao = this._asig(args.p_id); if (!ao) throw errorUsuario('Esa tarea ya no existe.');
@@ -696,7 +710,7 @@
       (d.asignaciones || []).forEach(function (a) { if (a.antes) a.antes = String(a.antes).slice(0, 5); if (a.desde) a.desde = String(a.desde).slice(0, 5); });
       return { completo: !!d.completo, mi_mes: d.mi_mes || null, dias_sin_puntualidad: d.dias_sin_puntualidad || [], equipos: d.equipos || [], lecturas: d.lecturas || [], salidas_rato: d.salidas_rato || [], yo: yo, personas: personas, ajustes: aj, locales: d.locales || [], grupos: d.grupos || [], dias_especiales: d.dias_especiales || [],
         revisiones: d.revisiones || [], plantillas: d.plantillas || [], asignaciones: d.asignaciones || [], asistencia: d.asistencia || [],
-        companeros: d.companeros || {}, redes_nuevas: d.redes_nuevas || [], con_avisos: d.con_avisos || null };
+        companeros: d.companeros || {}, almorzando_grupo: d.almorzando_grupo || [], redes_nuevas: d.redes_nuevas || [], con_avisos: d.con_avisos || null };
     });
   };
   // En la base unificada, dos tablas de Tareas llevan prefijo (Contenido ya usa esos nombres)

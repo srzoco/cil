@@ -297,6 +297,15 @@
       h += '<p class="llego ' + est + '">' + ICON.check + '<span>Llegaste ' + esc(L.fmtHora(s.llegada)) + (s.local_id && s.local_id !== y.local_id ? ' a ' + esc(nombreLocal(s.local_id)) : '') +
         (est === 'tarde' ? ' · después de las ' + esc(L.fmtHoraTxt(L.aTiempoHasta(aj()))) : '') + (s.salida ? ' · te fuiste ' + esc(L.fmtHora(s.salida)) : '') + '</span></p>';
     }
+    // Almuerzo: solo se anota cuándo empieza; si alguien del grupo está almorzando, hay que esperar
+    if (L.estaPresente(est) && s && !s.salida) {
+      if (s.almuerzo) h += '<p class="almuerzo-linea">Almuerzo: empezaste a las ' + esc(L.fmtHora(s.almuerzo)) + '</p>';
+      else {
+        var ocup = (S.data.almorzando_grupo || [])[0];
+        h += ocup ? '<p class="almuerzo-linea espera">Almuerzo: <b>' + esc(ocup.nombre) + '</b> está almorzando hasta las ' + esc(L.fmtHora(ocup.hasta)) + '; espera tu turno.</p>'
+          : '<p class="sin-margen"><button class="btn sec chico" data-acc="almuerzo">Empiezo a almorzar</button></p>';
+      }
+    }
     // «Salí a despachar» / «Volví»
     if (aj().usar_salidas && L.estaPresente(est) && s && !s.salida) {
       var abierta = (S.data.salidas_rato || []).filter(function (x) { return x.persona_id === y.id && x.fecha === hoy && !x.volvio; })[0];
@@ -1028,6 +1037,7 @@
     h += '<div class="campo"><span>Tiempo para tareas fijas cada día <small>(% de la jornada; el resto queda para pedidos y despachos)</small></span><div class="dias-pct">' +
       [1, 2, 3, 4, 5, 6, 0].map(function (dd) { return '<label><span>' + L.DIAS_CORTOS[dd] + '</span><input type="number" name="cd_' + dd + '" min="0" max="100" step="5" value="' + esc(cd[String(dd)] == null ? 100 : cd[String(dd)]) + '" inputmode="numeric"></label>'; }).join('') +
       '</div><small class="ayuda">Sirve para el balance de carga: avisa cuando un día pasa de ese tiempo. Por ejemplo, jueves y viernes menos porque salen más pedidos.</small></div>';
+    h += '<label class="campo">Duración del almuerzo (minutos) <small>— mientras alguien de un grupo almuerza, los demás de ese grupo no pueden empezar</small><input type="number" name="minutos_almuerzo" min="10" max="180" step="5" value="' + esc(a.minutos_almuerzo || 60) + '" inputmode="numeric"></label>';
     h += '<label class="campo">Jornada (horas)<input type="number" name="jornada" min="1" max="15" step="0.5" value="' + (a.minutos_jornada / 60) + '" required inputmode="decimal"></label>';
     h += '<label class="check"><input type="checkbox" name="pool"' + (a.pool_activo ? ' checked' : '') + '><span>Pool de tareas libres <small class="muted">— los empleados ven las tareas sin dueño de su local y pueden tomarlas. Si lo apagas, lo que quede sin asignar solo lo ves tú.</small></span></label>';
     h += '<label class="check"><input type="checkbox" name="solo_tienda"' + (a.solo_en_tienda ? ' checked' : '') + '><span>«Llegué» solo en el local <small class="muted">— solo funciona conectado al Wi-Fi de un local. Fuera, les sale «No se pudo marcar tu llegada», sin explicar por qué. Marcar «Hecho» también exige haber marcado «Llegué». Registra el Wi-Fi de cada local antes de activarlo.</small></span></label>';
@@ -1151,6 +1161,7 @@
       ['Activa los avisos', '<p>En tu pantalla de inicio de la app toca <b>«Activar»</b> en la tarjeta «Avisos en el teléfono» y acepta el permiso.' + (so === 'ios' ? ' En iPhone solo funciona si la abriste desde el ícono (paso 1).' : '') + ' Así te avisa cuando te toca algo con hora.</p>'],
       ['Al llegar: «Llegué»', '<p>Conéctate al <b>Wi-Fi del local</b> y toca <b>«Llegué»</b>. Aparece tu lista del día.' + (a.solo_en_tienda ? ' Desde otra red no funciona.' : '') + '</p>'],
       ['Marca cada tarea al terminarla', '<p>Toca el <b>cuadrito</b> de la tarea. Un toque y listo. Si te equivocaste, tócalo otra vez.</p><p>Si dice <b>«con María»</b>, la hacen entre dos: con que uno la marque, queda hecha para los dos.</p>'],
+      ['Al empezar a almorzar', '<p>Toca <b>«Empiezo a almorzar»</b>. Si alguien de tu grupo está almorzando, espera a que termine: siempre se queda alguien del grupo.</p>'],
       ['Si no hay internet', '<p>Marca igual: se guarda en el teléfono y se envía solo cuando vuelva la conexión.</p>'],
       ['Si te tienes que ir antes', '<p>Toca <b>«Me voy antes de terminar»</b> al final de tu lista. Lo que no hiciste se reparte solo entre tus compañeros.</p>']
     ];
@@ -1296,6 +1307,12 @@
     var h = '<h2>' + esc(pe.nombre) + '</h2><p class="muted">Hoy: ' + ESTADO_TXT[e] + (s && s.llegada ? ' · llegó ' + esc(L.fmtHora(s.llegada)) + (VERIF[s.verificado] || '') : '') + '</p><div class="seg vertical botones">';
     if (!L.estaPresente(e)) h += '<button class="btn" data-acc="asis-set" data-id="' + esc(id) + '" data-v="presente">Llegó (marcar ahora)</button>';
     if (e !== 'ausente') h += '<button class="btn sec" data-acc="asis-set" data-id="' + esc(id) + '" data-v="ausente">No viene hoy</button>';
+    if (L.estaPresente(e) && s && !s.salida && !s.almuerzo) {
+      var ocupA = L.almorzandoGrupo(db(), id, new Date())[0];
+      h += ocupA ? '<p class="just-box">No puede almorzar todavía: ' + esc(ocupA.nombre) + ' (de su grupo) almuerza hasta las ' + esc(L.fmtHora(ocupA.hasta)) + '</p>'
+        : '<button class="btn sec" data-acc="almuerzo" data-id="' + esc(id) + '">Empezó a almorzar (marcar ahora)</button>';
+    }
+    if (s && s.almuerzo) h += '<p class="just-box">Empezó a almorzar ' + esc(L.fmtHora(s.almuerzo)) + '</p><button class="btn fantasma" data-acc="almuerzo-quitar" data-id="' + esc(id) + '">Quitar almuerzo (fue un error)</button>';
     if (L.estaPresente(e) && s && !s.salida) h += '<button class="btn sec" data-acc="asis-set" data-id="' + esc(id) + '" data-v="salida">Se fue (marcar salida ahora)</button>';
     if (s && s.salida) h += '<p class="just-box">Se fue ' + esc(L.fmtHora(s.salida)) + (s.salida_motivo ? ': «' + esc(s.salida_motivo) + '»' : '') + '</p>' +
       '<button class="btn fantasma" data-acc="asis-set" data-id="' + esc(id) + '" data-v="sin_salida">Quitar salida (fue un error)</button>';
@@ -1697,6 +1714,12 @@
       ejecutar(store.actualizar('plantillas', id, cambio), 'Listo. El balance se recalculó.');
     }
     else if (acc === 'guia-so') { ev.preventDefault(); S.guiaSo = el.getAttribute('data-v'); render(); }
+    else if (acc === 'almuerzo') {
+      ejecutar(store.rpc('marcar_almuerzo', id ? { p_persona: id } : {}), '¡Buen provecho! Quedó anotada la hora.', !!id);
+    }
+    else if (acc === 'almuerzo-quitar') {
+      ejecutar(store.rpc('marcar_almuerzo', { p_persona: id, p_quitar: true }), 'Almuerzo quitado.', true);
+    }
     else if (acc === 'sin-wifi') {
       var on = el.getAttribute('data-v') === '1';
       ejecutar(store.rpc('sin_wifi_hoy', { p_local: id, p_activo: on }), on ? 'Listo: hoy pueden marcar «Llegué» sin el Wi-Fi en «' + nombreLocal(id) + '».' : 'Listo: «Llegué» vuelve a pedir el Wi-Fi.');
@@ -1786,6 +1809,7 @@
       if (String(fd.get('a_tiempo_hasta')) > String(fd.get('hora_limite'))) { aviso('«A tiempo hasta» tiene que ser antes de la hora límite.'); return; }
       ejecutar(store.actualizar('ajustes', 1, { usar_salidas: !!fd.get('usar_salidas'), mostrar_record: !!fd.get('mostrar_record'), a_tiempo_hasta: fd.get('a_tiempo_hasta'), hora_limite: fd.get('hora_limite'), pool_activo: !!fd.get('pool'), minutos_jornada: Math.round(horas * 60), solo_en_tienda: solo,
         usar_gps: !!fd.get('usar_gps'), revisiones_dia: Number(fd.get('revisiones_dia')),
+        minutos_almuerzo: Math.max(10, Math.min(180, Number(fd.get('minutos_almuerzo')) || 60)),
         carga_dias: [0, 1, 2, 3, 4, 5, 6].reduce(function (o, dd) { var v = Number(fd.get('cd_' + dd)); o[dd] = isNaN(v) ? 100 : Math.max(0, Math.min(100, v)); return o; }, {}) }), 'Ajustes guardados.');
     }
     else if (tipo === 'local') {

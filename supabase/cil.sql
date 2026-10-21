@@ -118,6 +118,7 @@ alter table public.tareas_ajustes add column if not exists usar_gps boolean not 
 alter table public.tareas_ajustes add column if not exists a_tiempo_hasta time not null default '08:35';
 -- % de la jornada para tareas fijas por día de la semana (0 = domingo). Lo usa el balance de carga para avisar
 -- cuando un día se sobrecarga: lunes a miércoles más, jueves y viernes menos porque salen más pedidos.
+alter table public.tareas_ajustes add column if not exists minutos_almuerzo int not null default 60 check (minutos_almuerzo between 10 and 180);
 alter table public.tareas_ajustes add column if not exists carga_dias jsonb not null default '{"0":0,"1":100,"2":100,"3":100,"4":60,"5":60,"6":80}';
 -- ¿Cada empleado ve su récord de puntualidad del mes? (apagado = solo lo ve gerencia)
 alter table public.tareas_ajustes add column if not exists mostrar_record boolean not null default false;
@@ -223,6 +224,9 @@ alter table public.asistencia add column if not exists local_id uuid references 
 -- «Me voy antes»: hora en que se fue y motivo (opcional). Lo pendiente se reparte igual que si faltara.
 alter table public.asistencia add column if not exists salida timestamptz;
 alter table public.asistencia add column if not exists salida_motivo text;
+-- Almuerzo: solo la hora en que empezó. Dos personas de un mismo grupo no almuerzan a la vez (dura minutos_almuerzo).
+alter table public.asistencia add column if not exists almuerzo timestamptz;
+alter table public.asistencia add column if not exists almuerzo_por uuid;
 
 -- «Salí a despachar» / «Volví»: ratos fuera del local durante la jornada
 create table if not exists public.salidas_rato (
@@ -1312,6 +1316,7 @@ begin
     'hoy', hoy,
     'completo', p_completo,
     'mi_mes', public.mi_puntualidad(),
+    'almorzando_grupo', public.mi_grupo_almorzando(),
     'companeros', public._companeros(hoy),
     'redes_nuevas', (select coalesce(json_agg(json_build_object('id', r.id, 'ip', r.ip, 'persona_id', r.persona_id, 'creado_en', r.creado_en) order by r.creado_en desc), '[]'::json)
                      from redes_nuevas r where r.fecha >= hoy - 3),
@@ -1529,6 +1534,46 @@ begin
   if p_persona is not null and p_persona is distinct from a.asignado_a then
     insert into tareas_eventos (asignacion_id, tipo, de, a, texto) values (p_id, 'reasignada', a.asignado_a, p_persona, 'ausencia');
   end if;
+end $$;
+
+-- =====================================================================
+--  Almuerzo: se anota solo la hora en que empieza. Quien comparte grupo con alguien que empezó a almorzar
+--  hace menos de minutos_almuerzo no puede marcarlo (así el grupo nunca queda solo). Gerencia también lo marca.
+-- =====================================================================
+-- Compañeros de grupo de p_persona que están almorzando ahora: [{persona_id, nombre, desde, hasta}]
+create or replace function public._almorzando_grupo(p_persona uuid) returns json
+language sql stable security definer set search_path = public as $$
+  select coalesce(json_agg(json_build_object('persona_id', o.id, 'nombre', coalesce(nullif(o.nombre, ''), o.email), 'desde', s.almuerzo,
+                                             'hasta', s.almuerzo + make_interval(mins => aj.minutos_almuerzo)) order by s.almuerzo), '[]'::json)
+  from personas yo, personas o, asistencia s, tareas_ajustes aj
+  where yo.id = p_persona and aj.id = 1 and o.id <> yo.id and o.activo and o.grupos && yo.grupos
+    and s.persona_id = o.id and s.fecha = public.hoy() and s.almuerzo is not null
+    and s.almuerzo > now() - make_interval(mins => aj.minutos_almuerzo)
+$$;
+create or replace function public.mi_grupo_almorzando() returns json
+language sql stable security definer set search_path = public as $$ select public._almorzando_grupo(auth.uid()) $$;
+
+create or replace function public.marcar_almuerzo(p_persona uuid default null, p_quitar boolean default false) returns json
+language plpgsql security definer set search_path = public as $$
+declare quien uuid := coalesce(p_persona, auth.uid()); s public.asistencia; otros json;
+begin
+  if quien <> auth.uid() and not public.es_admin() then raise exception 'Solo gerencia puede marcarlo por otra persona.'; end if;
+  select * into s from asistencia where persona_id = quien and fecha = public.hoy() for update;
+  if s.persona_id is null or s.estado <> 'presente' then raise exception 'Primero marca «Llegué».'; end if;
+  if p_quitar then
+    if not public.es_admin() then raise exception 'Solo gerencia puede quitarlo.'; end if;
+    update asistencia set almuerzo = null, almuerzo_por = null where persona_id = quien and fecha = public.hoy();
+    return json_build_object('ok', true);
+  end if;
+  if s.salida is not null then raise exception 'Ya marcó su salida de hoy.'; end if;
+  if s.almuerzo is not null then return json_build_object('almuerzo', s.almuerzo, 'ya', true); end if;
+  otros := public._almorzando_grupo(quien);
+  if json_array_length(otros) > 0 then
+    raise exception '% está almorzando hasta las %; espera a que termine (alguien del grupo tiene que quedarse).',
+      otros->0->>'nombre', public._hora_txt(((otros->0->>'hasta')::timestamptz at time zone 'America/Caracas')::time);
+  end if;
+  update asistencia set almuerzo = now(), almuerzo_por = auth.uid() where persona_id = quien and fecha = public.hoy();
+  return json_build_object('almuerzo', now(), 'ya', false);
 end $$;
 
 -- Gerencia agrega a una persona desde la app (sin entrar a Supabase). Queda confirmada y puede entrar de una vez
@@ -1813,6 +1858,7 @@ grant execute on function public.hoy(), public.es_admin(), public.tiene_acceso(t
   public.marcar_fuera(boolean), public.rescatar(uuid),
   public.guardar_suscripcion(text, text, text), public.borrar_suscripcion(text), public.aviso_prueba(), public.cambiar_clave(uuid, text),
   public.crear_persona(text, text, text, uuid, text[], text), public.menu_pendientes(), public.aprobar_oculta(uuid, uuid), public.reprogramar_oculta(uuid, date),
+  public.marcar_almuerzo(uuid, boolean), public.mi_grupo_almorzando(),
   -- las llama datos_app, que corre con los permisos de quien entra
   public._companeros(date), public._con_avisos(), public.repartir_faltas() to authenticated;
 -- Solo la función del servidor (avisos) puede pedir los avisos pendientes
