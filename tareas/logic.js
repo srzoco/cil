@@ -458,6 +458,50 @@
     return { faltan: faltanCon.map(function (pe) { return pe.id; }), items: items, sinCobertura: sinCobertura,
       seFueron: faltanCon.filter(function (pe) { return fueron[pe.id]; }).map(function (pe) { return pe.id; }) };
   }
+  // Reparto automático a la hora límite (igual que repartir_faltas en el SQL). Devuelve [{ id, a, oculta }] sin modificar db.
+  // Primero a quienes llegaron tarde (el de último primero) mientras no pasen 30 de carga sobre el promedio;
+  // lo demás a quien tenga menos carga (empate: quien llegó más tarde). Si nadie puede, al de menos carga pero oculta.
+  function repartoAutomatico(db, f, localId) {
+    var aj = db.ajustes || AJUSTES_BASE;
+    var pres = db.personas.filter(function (pe) {
+      if (!esEmpleadoActivo(pe) || localDePersona(db, pe) !== localId) return false;
+      var s = asistenciaDe(db, pe.id, f); return !!(s && s.estado === 'presente' && !s.salida);
+    }).map(function (pe) {
+      var s = asistenciaDe(db, pe.id, f);
+      return { id: pe.id, pe: pe, nombre: pe.nombre || '', carga: cargaRelativa(db.asignaciones, pe, f), cap: capacidad(pe), llegada: s.llegada, tarde: llegoTarde(aj, s.llegada) };
+    });
+    var faltan = db.personas.filter(function (pe) {
+      if (!esEmpleadoActivo(pe) || localDePersona(db, pe) !== localId || !trabaja(db, pe, f)) return false;
+      var s = asistenciaDe(db, pe.id, f); return !(s && s.estado === 'presente');
+    }).map(function (pe) { return pe.id; });
+    var puede = function (a, x) { return puedeHacer(db, a, x.id); };
+    var items = db.asignaciones.filter(function (a) {
+      return a.estado === 'pendiente' && !a.oculta && (a.fecha === f || (a.fecha < f && a.arrastra)) && faltan.indexOf(a.asignado_a) >= 0;
+    }).map(function (a) { return { a: a, pueden: pres.filter(function (x) { return puede(a, x); }).length }; });
+    items.sort(function (x, y) { return x.pueden - y.pueden || y.a.minutos - x.a.minutos || (x.a.id < y.a.id ? -1 : 1); });
+    var porGrupo = {}, res = [];
+    var porLlegadaDesc = function (x, y) { return x.llegada < y.llegada ? 1 : x.llegada > y.llegada ? -1 : (x.id < y.id ? -1 : 1); };
+    items.forEach(function (it) {
+      var a = it.a, g = (a.plantilla_id || a.id) + '|' + a.fecha + '|' + (a.puesto || 0), q = porGrupo[g], oc = false;
+      if (q) { oc = q.oc; q = q.id; }
+      else {
+        var prom = pres.reduce(function (s, x) { return s + x.carga; }, 0) / Math.max(1, pres.length);
+        var ok = pres.filter(function (x) {
+          return puede(a, x) && !db.asignaciones.some(function (b) { return b.plantilla_id && b.plantilla_id === a.plantilla_id && b.fecha === a.fecha && b.momento === a.momento && b.asignado_a === x.id; });
+        });
+        if (ok.some(function (x) { return cabeEn(x.pe, a.minutos); })) ok = ok.filter(function (x) { return cabeEn(x.pe, a.minutos); });
+        var t = ok.filter(function (x) { return x.tarde && x.carga + a.minutos * 100 / x.cap <= prom + 30 + 1e-9; }).sort(porLlegadaDesc)[0];
+        var elegido = t || ok.slice().sort(function (x, y) { return x.carga - y.carga || porLlegadaDesc(x, y) || (x.nombre < y.nombre ? -1 : x.nombre > y.nombre ? 1 : 0); })[0];
+        if (!elegido) { elegido = pres.slice().sort(function (x, y) { return x.carga - y.carga || porLlegadaDesc(x, y) || (x.nombre < y.nombre ? -1 : x.nombre > y.nombre ? 1 : 0); })[0]; oc = !!elegido; }
+        q = elegido ? elegido.id : null;
+        if (q) porGrupo[g] = { id: q, oc: oc };
+      }
+      if (!q) return;
+      res.push({ id: a.id, de: a.asignado_a, a: q, oculta: oc });
+      pres.forEach(function (x) { if (x.id === q) x.carga += a.minutos * 100 / x.cap; });
+    });
+    return res;
+  }
   function persona(db, id) { return db.personas.filter(function (p) { return p.id === id; })[0] || null; }
   function puedenCuantos(db, a, gente) { return gente.filter(function (pe) { return puedeHacer(db, a, pe.id); }).length; }
 
@@ -585,7 +629,7 @@
     localDe: localDe, localPrincipal: localPrincipal, labDe: labDe, laborable: laborable, laborableFn: laborableFn, trabaja: trabaja, especial: especial, localDePersona: localDePersona, frecuenciaTxt: frecuenciaTxt, proximas: proximas, siguienteLaborable: siguienteLaborable,
     seFue: seFue, anteriorLaborable: anteriorLaborable, carga: carga, capacidad: capacidad, cabeEn: cabeEn, estadoAsistencia: estadoAsistencia, estaPresente: estaPresente, asistenciaDe: asistenciaDe,
     esEmpleadoActivo: esEmpleadoActivo, plantillaDe: plantillaDe, puedeHacer: puedeHacer,
-    elegirPersona: elegirPersona, puedeSegun: puedeSegun, generarDia: generarDia, personasDe: personasDe, companerosDe: companerosDe, tareasDe: tareasDe, delPool: delPool,
+    elegirPersona: elegirPersona, puedeSegun: puedeSegun, generarDia: generarDia, repartoAutomatico: repartoAutomatico, personasDe: personasDe, companerosDe: companerosDe, tareasDe: tareasDe, delPool: delPool,
     sugerirReasignacion: sugerirReasignacion, reporteDia: reporteDia, textoReporte: textoReporte,
     historial: historial, cargaTipica: cargaTipica
   };

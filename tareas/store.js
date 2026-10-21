@@ -63,15 +63,31 @@
   DemoStore.prototype.entrar = function () { return Promise.resolve(); };
   DemoStore.prototype.salir = function () { return Promise.resolve(); };
 
+  // Igual que repartir_faltas: a la hora límite, una vez al día por local
+  DemoStore.prototype._repartirFaltas = function () {
+    var db = this.db, hoy = L.hoyISO(), self = this;
+    if (!L.pasoLimite(db.ajustes, new Date())) return;
+    db.repartos_auto = db.repartos_auto || [];
+    (db.locales || []).forEach(function (l) {
+      if (db.repartos_auto.indexOf(hoy + '|' + l.id) >= 0) return;
+      db.repartos_auto.push(hoy + '|' + l.id);
+      L.repartoAutomatico(db, hoy, l.id).forEach(function (r) {
+        var a = self._asig(r.id); if (!a) return;
+        a.asignado_a = r.a; a.motivo = 'ausencia'; a.oculta = r.oculta;
+        self._evento(a.id, 'reasignada', r.de, r.a, 'ausencia');
+      });
+    });
+    this._guardar();
+  };
   // completo = false: solo hoy, lo pendiente y lo hecho hoy (igual que datos_app en supabase.sql)
   DemoStore.prototype.cargar = function (completo) {
     var self = this;
-    return this.rpc('generar_dia', {}).then(function () { return self._admin() ? self.rpc('asignar_revisiones', {}) : null; }).then(function () {
+    return this.rpc('generar_dia', {}).then(function () { self._repartirFaltas(); return self._admin() ? self.rpc('asignar_revisiones', {}) : null; }).then(function () {
       var db = copia(self.db), yo = self._yo(), adm = self._admin(), hoy = L.hoyISO(), desde = completo ? desdeHistorial() : hoy;
       var asigs = db.asignaciones.filter(function (a) {
         if (!(a.fecha >= desde || (a.estado === 'pendiente' && a.arrastra) || (a.hecha_en && L.hoyISO(new Date(a.hecha_en)) === hoy))) return false;
         if (adm) return true;
-        return a.asignado_a === yo.id || a.hecha_por === yo.id || a.rescatada_de === yo.id || (a.local_id === yo.local_id && L.esUrgente(db, a, new Date())) ||
+        return (a.asignado_a === yo.id && !a.oculta) || a.hecha_por === yo.id || a.rescatada_de === yo.id || (a.local_id === yo.local_id && L.esUrgente(db, a, new Date())) ||
           (a.asignado_a === null && a.estado === 'pendiente' && (a.fecha === hoy || (a.fecha < hoy && a.arrastra)) && db.ajustes.pool_activo && a.local_id === yo.local_id);
       });
       return {
@@ -125,7 +141,7 @@
     this.db.asignaciones.forEach(function (a) {
       if (a.asignado_original === personaId && a.motivo === 'ausencia' && a.estado === 'pendiente' && a.asignado_a !== personaId && a.fecha <= hoy &&
           (a.fecha === hoy || self.db.eventos.some(function (e) { return e.asignacion_id === a.id && e.tipo === 'reasignada' && e.texto === 'ausencia' && L.hoyISO(new Date(e.creado_en)) === hoy; }))) {
-        a.asignado_a = personaId; a.motivo = 'devuelta'; dev++;
+        a.asignado_a = personaId; a.motivo = 'devuelta'; a.oculta = false; dev++;
         self._evento(a.id, 'devuelta', null, personaId, 'Llegó: se le devuelve');
       }
     });
@@ -332,6 +348,12 @@
         if (db.ajustes.solo_en_tienda && !(presT && presT.estado === 'presente')) throw errorUsuario('Primero marca «Llegué».');
         t.asignado_a = yo.id; t.asignado_original = yo.id; t.motivo = 'tomada';
         this._evento(t.id, 'tomada', null, yo.id);
+      } else if (nombre === 'aprobar_oculta') {
+        if (!adm) throw errorUsuario('Solo gerencia.');
+        var ao = this._asig(args.p_id); if (!ao) throw errorUsuario('Esa tarea ya no existe.');
+        var antesAo = ao.asignado_a;
+        ao.oculta = false; if (args.p_persona) ao.asignado_a = args.p_persona;
+        if (args.p_persona && args.p_persona !== antesAo) this._evento(ao.id, 'reasignada', antesAo, args.p_persona, 'ausencia');
       } else if (nombre === 'reasignar') {
         if (!adm) throw errorUsuario('Solo gerencia puede reasignar.');
         var mot = args.p_motivo || 'manual', n = 0;

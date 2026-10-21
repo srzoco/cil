@@ -193,6 +193,9 @@ alter table public.asignaciones add column if not exists equipos uuid[] not null
 alter table public.asignaciones drop constraint if exists asignaciones_plantilla_id_fecha_key;
 -- Tareas de varias personas: un «puesto» por persona (0, 1, …). Cada puesto es una fila con su dueño.
 alter table public.asignaciones add column if not exists puesto int not null default 0;
+-- Reparto automático: tarea que nadie de los presentes podía hacer. Se asigna igual, pero el empleado
+-- no la ve hasta que gerencia la apruebe.
+alter table public.asignaciones add column if not exists oculta boolean not null default false;
 drop index if exists public.asignaciones_plantilla_fecha_momento;
 create unique index if not exists asignaciones_plantilla_fecha_momento_puesto on public.asignaciones (plantilla_id, fecha, momento, puesto);
 update public.asignaciones set local_id = public._local_principal() where local_id is null;
@@ -638,7 +641,7 @@ begin
   -- 1) Lo que se repartió HOY por su ausencia y sigue pendiente vuelve a ella.
   --    Lo de días anteriores ya es responsabilidad de quien lo cubrió.
   for r in
-    update asignaciones x set asignado_a = p_persona, motivo = 'devuelta'
+    update asignaciones x set asignado_a = p_persona, motivo = 'devuelta', oculta = false
     where x.asignado_original = p_persona and x.motivo = 'ausencia' and x.estado = 'pendiente'
       and x.asignado_a is distinct from p_persona and x.fecha <= public.hoy()
       and (x.fecha = public.hoy() or exists (select 1 from tareas_eventos e where e.asignacion_id = x.id and e.tipo = 'reasignada' and e.texto = 'ausencia'
@@ -1291,6 +1294,7 @@ declare
   inicio timestamptz := (public.hoy()::timestamp at time zone 'America/Caracas');
 begin
   perform public.generar_dia(hoy);
+  perform public.repartir_faltas();
   perform public.asignar_revisiones();
   return json_build_object(
     'hoy', hoy,
@@ -1366,6 +1370,122 @@ begin
   if not public.es_admin() then raise exception 'Solo gerencia.'; end if;
   if not exists (select 1 from suscripciones where persona_id = auth.uid()) then raise exception 'Primero activa los avisos en este teléfono.'; end if;
   insert into avisos_cola (persona_id, titulo, cuerpo) values (auth.uid(), 'Aviso de prueba', 'Si ves esto, los avisos funcionan.');
+end $$;
+
+-- =====================================================================
+--  Reparto automático de lo de quien falta (a la hora límite, una vez al día por local)
+--  1) Primero a quienes llegaron tarde, empezando por quien llegó de último, mientras no pasen
+--     30 de carga (minutos al 100 %) por encima del promedio de los presentes.
+--  2) Lo demás, equitativo: a quien tenga menos carga (si empatan, a quien llegó más tarde).
+--  3) Si ninguno de los presentes puede hacerla, se asigna igual a quien tenga menos carga, pero
+--     oculta: el empleado no la ve hasta que gerencia la apruebe, y gerencia recibe un aviso.
+--  Igual que repartoAutomatico() en logic.js.
+-- =====================================================================
+create table if not exists public.repartos_auto (
+  fecha    date not null,
+  local_id uuid not null references public.locales (id) on delete cascade,
+  hecho_en timestamptz not null default now(),
+  primary key (fecha, local_id)
+);
+alter table public.repartos_auto enable row level security;
+revoke all on public.repartos_auto from anon, authenticated;
+
+create or replace function public.repartir_faltas() returns int
+language plpgsql security definer set search_path = public as $$
+declare aj public.tareas_ajustes; f date := public.hoy(); lo record; it record; p public.plantillas; n int := 0; nocultas int := 0;
+  quien uuid; oc boolean; prom numeric; grupo text; asignados jsonb; ocultos jsonb;
+begin
+  select * into aj from tareas_ajustes where id = 1;
+  if now() < public._ts_hoy(aj.hora_limite) then return 0; end if;
+  perform pg_advisory_xact_lock(hashtext('repartir_faltas:' || f::text));
+  for lo in select l.id from locales l where not exists (select 1 from repartos_auto r where r.fecha = f and r.local_id = l.id) loop
+    insert into repartos_auto (fecha, local_id) values (f, lo.id);
+    create temp table if not exists _pres (id uuid primary key, nombre text, carga numeric, cap int, tarea_max int, grupos uuid[], rota boolean,
+                                           llegada timestamptz, tarde boolean) on commit drop;
+    delete from _pres where true;
+    create temp table if not exists _ok (id uuid) on commit drop;
+    insert into _pres
+    select pe.id, coalesce(pe.nombre, ''), 
+           coalesce((select sum(a.minutos) from asignaciones a where a.asignado_a = pe.id and (a.fecha = f or (a.arrastra and a.estado = 'pendiente' and a.fecha < f and a.just_estado = 'aprobada'))), 0)
+             * 100.0 / greatest(least(pe.capacidad, 100), 10),
+           greatest(least(pe.capacidad, 100), 10), pe.tarea_max, pe.grupos, pe.rota, s.llegada,
+           date_trunc('minute', s.llegada at time zone 'America/Caracas')::time > aj.a_tiempo_hasta
+    from personas pe join asistencia s on s.persona_id = pe.id and s.fecha = f and s.estado = 'presente' and s.salida is null
+    where pe.activo and pe.rol = 'empleado' and 'tareas' = any (pe.accesos) and pe.local_id = lo.id;
+    asignados := '{}'; ocultos := '{}';
+    for it in
+      select a.*, (select count(*) from _pres x where public._puede(a.plantilla_id, x.id)) as pueden
+      from asignaciones a join personas pf on pf.id = a.asignado_a
+      where a.estado = 'pendiente' and not a.oculta and (a.fecha = f or (a.fecha < f and a.arrastra))
+        and pf.activo and pf.rol = 'empleado' and pf.local_id = lo.id and public._trabaja(pf, f)
+        and not exists (select 1 from asistencia s where s.persona_id = pf.id and s.fecha = f and s.estado = 'presente')
+      order by pueden, a.minutos desc, a.id
+    loop
+      grupo := coalesce(it.plantilla_id::text, it.id::text) || '|' || it.fecha || '|' || it.puesto;
+      quien := (asignados->>grupo)::uuid; oc := false;
+      if quien is null then
+        prom := (select avg(carga) from _pres);
+        -- quienes pueden, sin el compañero que ya tiene otro puesto de esta misma tarea; si a alguno le cabe en su tope, solo esos
+        delete from _ok where true;
+        insert into _ok select x.id from _pres x where public._puede(it.plantilla_id, x.id)
+          and not exists (select 1 from asignaciones b where b.plantilla_id = it.plantilla_id and b.fecha = it.fecha and b.momento = it.momento and b.asignado_a = x.id);
+        if exists (select 1 from _ok o join _pres x on x.id = o.id where x.tarea_max is null or it.minutos <= x.tarea_max) then
+          delete from _ok o using _pres x where x.id = o.id and not (x.tarea_max is null or it.minutos <= x.tarea_max);
+        end if;
+        select x.id into quien from _ok o join _pres x on x.id = o.id
+          where x.tarde and x.carga + it.minutos * 100.0 / x.cap <= prom + 30
+          order by x.llegada desc, x.id limit 1;
+        if quien is null then
+          select x.id into quien from _ok o join _pres x on x.id = o.id order by x.carga, x.llegada desc, x.nombre, x.id limit 1;
+        end if;
+        if quien is null then
+          select x.id into quien from _pres x order by x.carga, x.llegada desc, x.nombre, x.id limit 1;
+          oc := quien is not null;
+        end if;
+        if quien is not null then asignados := asignados || jsonb_build_object(grupo, quien); ocultos := ocultos || jsonb_build_object(grupo, oc); end if;
+      else
+        oc := coalesce((ocultos->>grupo)::boolean, false);  -- las varias veces del día de una tarea van juntas
+      end if;
+      continue when quien is null;
+      update asignaciones set asignado_a = quien, motivo = 'ausencia', oculta = oc where id = it.id;
+      insert into tareas_eventos (asignacion_id, tipo, de, a, texto) values (it.id, 'reasignada', it.asignado_a, quien, 'ausencia');
+      update _pres set carga = carga + it.minutos * 100.0 / cap where id = quien;
+      n := n + 1;
+      if oc then nocultas := nocultas + 1; end if;
+    end loop;
+    if nocultas > 0 then
+      insert into avisos_cola (persona_id, titulo, cuerpo, url)
+      select ad.id, nocultas || case when nocultas = 1 then ' tarea necesita tu aprobación' else ' tareas necesitan tu aprobación' end,
+             'Nadie de los presentes podía hacerla. La asigné a quien tiene menos carga, pero no la ve hasta que la apruebes en Hoy.', './#/'
+      from personas ad where ad.activo and ad.rol = 'admin';
+      nocultas := 0;
+    end if;
+  end loop;
+  return n;
+end $$;
+
+-- ¿Puede esta persona hacer esta tarea? (solo_pueden, grupos y «fuera de la rotación»). Igual que puedeSegun() en logic.js.
+create or replace function public._puede(p_plantilla uuid, p_persona uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select coalesce((
+    select case when cardinality(p.solo_pueden) > 0 then pe.id = any (p.solo_pueden)
+                when cardinality(p.grupos) > 0 then pe.grupos && p.grupos
+                else pe.rota end
+    from plantillas p, personas pe where p.id = p_plantilla and pe.id = p_persona), true)
+$$;
+
+-- Gerencia aprueba una tarea oculta (y puede cambiar a quién va)
+create or replace function public.aprobar_oculta(p_id uuid, p_persona uuid default null) returns void
+language plpgsql security definer set search_path = public as $$
+declare a public.asignaciones;
+begin
+  if not public.es_admin() then raise exception 'Solo gerencia.'; end if;
+  select * into a from asignaciones where id = p_id;
+  if a.id is null then raise exception 'Esa tarea ya no existe.'; end if;
+  update asignaciones set oculta = false, asignado_a = coalesce(p_persona, asignado_a) where id = p_id;
+  if p_persona is not null and p_persona is distinct from a.asignado_a then
+    insert into tareas_eventos (asignacion_id, tipo, de, a, texto) values (p_id, 'reasignada', a.asignado_a, p_persona, 'ausencia');
+  end if;
 end $$;
 
 -- Gerencia agrega a una persona desde la app (sin entrar a Supabase). Queda confirmada y puede entrar de una vez
@@ -1454,6 +1574,7 @@ language plpgsql security definer set search_path = public as $$
 declare aj public.tareas_ajustes; ahora timestamptz := now(); hoy date := public.hoy(); hace timestamptz := now() - interval '10 minutes';
 begin
   select * into aj from tareas_ajustes where id = 1;
+  perform public.repartir_faltas();
   create temp table if not exists _avisos (persona_id uuid, clave text, titulo text, cuerpo text, url text) on commit drop;
   delete from _avisos where true;
 
@@ -1586,7 +1707,7 @@ create policy plantillas_admin on public.plantillas for all to authenticated usi
 
 create policy asig_ver on public.asignaciones for select to authenticated using (
   public.es_admin()
-  or asignado_a = auth.uid()
+  or (asignado_a = auth.uid() and not oculta)
   or hecha_por = auth.uid()
   or rescatada_de = auth.uid()
   or (local_id = (select local_id from public.personas where id = auth.uid()) and public._urgente(asignaciones))
@@ -1613,7 +1734,7 @@ grant execute on function public.hoy(), public.es_admin(), public.tiene_acceso(t
   public.marcar_salida(text), public.datos_app(boolean), public.mi_puntualidad(), public.registrar_lecturas(uuid, jsonb),
   public.marcar_fuera(boolean), public.rescatar(uuid),
   public.guardar_suscripcion(text, text, text), public.borrar_suscripcion(text), public.aviso_prueba(), public.cambiar_clave(uuid, text),
-  public.crear_persona(text, text, text, uuid, text[], text), public.menu_pendientes() to authenticated;
+  public.crear_persona(text, text, text, uuid, text[], text), public.menu_pendientes(), public.aprobar_oculta(uuid, uuid) to authenticated;
 -- Solo la función del servidor (avisos) puede pedir los avisos pendientes
 do $$ begin
   if exists (select 1 from pg_roles where rolname = 'service_role') then

@@ -401,12 +401,24 @@
   // Vista de Hoy: 'juntos' (los locales uno debajo del otro) o 'selector' (un local a la vez)
   function modoHoy() { var m = null; try { m = localStorage.getItem('tareasbf_modo_hoy'); } catch (e) { /* nada */ } return m === 'juntos' ? 'juntos' : 'selector'; }
 
+  // Reparto automático: lo que nadie de los presentes podía hacer queda oculto hasta que gerencia lo apruebe
+  function bloqueOcultas() {
+    var oc = ((S.data && S.data.asignaciones) || []).filter(function (a) { return a.oculta && a.estado === 'pendiente'; });
+    if (!oc.length) return '';
+    return '<section class="card alerta-card"><h2>' + (oc.length === 1 ? '1 tarea necesita tu aprobación' : oc.length + ' tareas necesitan tu aprobación') + '</h2>' +
+      '<p class="ayuda sin-margen">Eran de alguien que faltó y nadie de los presentes podía hacerlas. Las asigné a quien tiene menos carga, pero no las ve hasta que apruebes.</p>' +
+      oc.map(function (a) {
+        return '<form class="tienda-fila" data-form="aprobar-oculta" data-id="' + esc(a.id) + '"><div><b>' + tituloHtml(a) + '</b><span class="muted">' + a.minutos + ' min</span></div>' +
+          '<div class="acciones"><select name="persona">' + opcionesPersona(a.asignado_a, null, false, a.local_id) + '</select><button class="btn chico" type="submit">Aprobar</button></div></form>';
+      }).join('') + '</section>';
+  }
   function vistaHoy() {
     var hoy = S.hoy, ahora = new Date();
     var h = '<h1>Hoy</h1><p class="fecha-hoy">' + esc(L.fmtFechaLarga(hoy)) + ' · a tiempo hasta ' + esc(L.fmtHoraTxt(L.aTiempoHasta(aj()))) + ' · falta desde ' + esc(L.fmtHoraTxt(aj().hora_limite)) + '</p>';
     if (ahora.getHours() >= 17) {
       h += '<a class="card reporte-listo" href="#/reporte?f=' + hoy + '"><b>Reporte del día</b><span class="muted">Ver y enviar por WhatsApp ›</span></a>';
     }
+    h += bloqueOcultas();
     if (!variosLocales()) return h + bloqueLocal(locales()[0] ? locales()[0].id : null, false);
     if (modoHoy() === 'juntos') {
       locales().forEach(function (l) { h += '<div class="local-sec"><h2 class="local-titulo">' + esc(l.nombre) + '</h2>' + bloqueLocal(l.id, true) + '</div>'; });
@@ -446,7 +458,7 @@
         ' pendiente' + (sug.sinCobertura.length === 1 ? '' : 's') + ' porque nadie más de este local puede hacerla' + (sug.sinCobertura.length === 1 ? '' : 's') + '.</p>';
     }
     if (!sug.items.length && !paso && marcados < trabajan.length) {
-      h += '<p class="nota">' + marcados + ' de ' + trabajan.length + ' han marcado llegada. A las ' + esc(L.fmtHoraTxt(aj().hora_limite)) + ' te sugiero cómo repartir lo de quien falte.</p>';
+      h += '<p class="nota">' + marcados + ' de ' + trabajan.length + ' han marcado llegada. A las ' + esc(L.fmtHoraTxt(aj().hora_limite)) + ' la app reparte sola lo de quien falte: primero a quienes llegaron tarde.</p>';
     }
 
     var visitas = localId ? empleados().filter(function (pe) {
@@ -971,7 +983,7 @@
     var h = '<h1>Ajustes</h1><form data-form="ajustes" class="card">';
     h += '<div class="fila-dos"><label class="campo">A tiempo hasta<input type="time" name="a_tiempo_hasta" value="' + esc(L.aTiempoHasta(a)) + '" required></label>' +
       '<label class="campo">Hora límite (falta)<input type="time" name="hora_limite" value="' + esc(L.hhmm(a.hora_limite)) + '" required></label></div>';
-    h += '<p class="ayuda sin-margen">Hasta la primera hora cuenta «a tiempo»; después, «tarde». Quien no marque «Llegué» antes de la hora límite aparece como falta y te sugiero a quién pasarle sus tareas. Aplica a todos los locales.</p>';
+    h += '<p class="ayuda sin-margen">Hasta la primera hora cuenta «a tiempo»; después, «tarde». Quien no marque «Llegué» antes de la hora límite aparece como falta y sus tareas se reparten solas: primero a quienes llegaron tarde (el de último primero, hasta 30 min sobre el promedio) y lo demás a quien tenga menos carga. Si nadie puede hacer alguna, te la muestro en Hoy para que la apruebes. Aplica a todos los locales.</p>';
     h += '<label class="check"><input type="checkbox" name="usar_salidas"' + (a.usar_salidas ? ' checked' : '') + '><span>Botón «Salí a despachar» / «Volví» <small class="muted">— si alguien lo marcó antes de que empiece la ventana de una tarea con horario, esa tarea pasa a otro sin penalizarlo. Si no lo marcó y otra persona tuvo que hacerla, queda como «se le pasó» y le compensa los minutos a quien la hizo. Apagado, nada de eso aplica: las urgentes igual las puede hacer cualquiera, sin penalización.</small></span></label>';
     h += '<label class="check"><input type="checkbox" name="mostrar_record"' + (a.mostrar_record ? ' checked' : '') + '><span>Cada empleado ve su récord de puntualidad del mes <small class="muted">— apagado, solo lo ves tú en Historial.</small></span></label>';
     h += '<label class="campo">Jornada (horas)<input type="number" name="jornada" min="1" max="15" step="0.5" value="' + (a.minutos_jornada / 60) + '" required inputmode="decimal"></label>';
@@ -1725,6 +1737,9 @@
       var pp = store.actualizar('personas', pid, patch);
       if (sueltas.length) pp = pp.then(function () { return store.rpc('reasignar', { p_items: sueltas.map(function (x) { return { id: x.id, a: null }; }), p_motivo: 'manual' }); });
       ejecutar(pp, sueltas.length ? 'Guardado. Sus ' + plural(sueltas.length, 'tarea pendiente quedó', 'tareas pendientes quedaron') + ' sin asignar: repártelas desde Hoy.' : 'Guardado.', true);
+    }
+    else if (tipo === 'aprobar-oculta') {
+      ejecutar(store.rpc('aprobar_oculta', { p_id: f.getAttribute('data-id'), p_persona: fd.get('persona') || null }), 'Aprobada: ya aparece en su lista.');
     }
     else if (tipo === 'nueva-persona') {
       var np = { p_nombre: String(fd.get('nombre') || '').trim(), p_email: String(fd.get('email') || '').trim(), p_clave: String(fd.get('clave') || '').trim(),
