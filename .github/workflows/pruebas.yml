@@ -31,3 +31,21 @@ jobs:
           python3 -m http.server 8765 >/dev/null 2>&1 &
           sleep 1
           node pruebas/humo.js
+
+  # Si las pruebas pasan y es la rama principal, instala cil.sql en Supabase (no borra datos).
+  # Necesita el secreto SUPABASE_DB_URL (Session pooler). Sin el secreto, este paso no hace nada.
+  aplicar:
+    needs: pruebas
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Instalar cil.sql en Supabase
+        env:
+          DB: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$DB" ]; then echo "Sin SUPABASE_DB_URL: no se instala nada."; exit 0; fi
+          set -o pipefail
+          docker run --rm -e DB -v "$PWD/supabase:/sql:ro" postgres:17 sh -c 'psql "$DB" -v ON_ERROR_STOP=1 -q -f /sql/cil.sql' 2>&1 | { grep -v NOTICE || true; }
+          echo "cil.sql instalado"

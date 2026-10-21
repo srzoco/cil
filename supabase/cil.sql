@@ -1553,7 +1553,8 @@ $$;
 create or replace function public.mi_grupo_almorzando() returns json
 language sql stable security definer set search_path = public as $$ select public._almorzando_grupo(auth.uid()) $$;
 
-create or replace function public.marcar_almuerzo(p_persona uuid default null, p_quitar boolean default false) returns json
+drop function if exists public.marcar_almuerzo(uuid, boolean);
+create or replace function public.marcar_almuerzo(p_persona uuid default null, p_quitar boolean default false, p_forzar boolean default false) returns json
 language plpgsql security definer set search_path = public as $$
 declare quien uuid := coalesce(p_persona, auth.uid()); s public.asistencia; otros json;
 begin
@@ -1568,7 +1569,8 @@ begin
   if s.salida is not null then raise exception 'Ya marcó su salida de hoy.'; end if;
   if s.almuerzo is not null then return json_build_object('almuerzo', s.almuerzo, 'ya', true); end if;
   otros := public._almorzando_grupo(quien);
-  if json_array_length(otros) > 0 then
+  -- gerencia puede autorizar que almuercen a la vez (p_forzar)
+  if json_array_length(otros) > 0 and not (p_forzar and public.es_admin()) then
     raise exception '% está almorzando hasta las %; espera a que termine (alguien del grupo tiene que quedarse).',
       otros->0->>'nombre', public._hora_txt(((otros->0->>'hasta')::timestamptz at time zone 'America/Caracas')::time);
   end if;
@@ -1858,7 +1860,7 @@ grant execute on function public.hoy(), public.es_admin(), public.tiene_acceso(t
   public.marcar_fuera(boolean), public.rescatar(uuid),
   public.guardar_suscripcion(text, text, text), public.borrar_suscripcion(text), public.aviso_prueba(), public.cambiar_clave(uuid, text),
   public.crear_persona(text, text, text, uuid, text[], text), public.menu_pendientes(), public.aprobar_oculta(uuid, uuid), public.reprogramar_oculta(uuid, date),
-  public.marcar_almuerzo(uuid, boolean), public.mi_grupo_almorzando(),
+  public.marcar_almuerzo(uuid, boolean, boolean), public.mi_grupo_almorzando(),
   -- las llama datos_app, que corre con los permisos de quien entra
   public._companeros(date), public._con_avisos(), public.repartir_faltas() to authenticated;
 -- Solo la función del servidor (avisos) puede pedir los avisos pendientes

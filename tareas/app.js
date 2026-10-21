@@ -1309,7 +1309,8 @@
     if (e !== 'ausente') h += '<button class="btn sec" data-acc="asis-set" data-id="' + esc(id) + '" data-v="ausente">No viene hoy</button>';
     if (L.estaPresente(e) && s && !s.salida && !s.almuerzo) {
       var ocupA = L.almorzandoGrupo(db(), id, new Date())[0];
-      h += ocupA ? '<p class="just-box">No puede almorzar todavía: ' + esc(ocupA.nombre) + ' (de su grupo) almuerza hasta las ' + esc(L.fmtHora(ocupA.hasta)) + '</p>'
+      h += ocupA ? '<p class="just-box">No puede almorzar todavía: ' + esc(ocupA.nombre) + ' (de su grupo) almuerza hasta las ' + esc(L.fmtHora(ocupA.hasta)) + '</p>' +
+          '<button class="btn fantasma" data-acc="almuerzo-forzar" data-id="' + esc(id) + '">Marcar igual (gerencia lo autoriza)</button>'
         : '<button class="btn sec" data-acc="almuerzo" data-id="' + esc(id) + '">Empezó a almorzar (marcar ahora)</button>';
     }
     if (s && s.almuerzo) h += '<p class="just-box">Empezó a almorzar ' + esc(L.fmtHora(s.almuerzo)) + '</p><button class="btn fantasma" data-acc="almuerzo-quitar" data-id="' + esc(id) + '">Quitar almuerzo (fue un error)</button>';
@@ -1716,6 +1717,9 @@
     else if (acc === 'guia-so') { ev.preventDefault(); S.guiaSo = el.getAttribute('data-v'); render(); }
     else if (acc === 'almuerzo') {
       ejecutar(store.rpc('marcar_almuerzo', id ? { p_persona: id } : {}), '¡Buen provecho! Quedó anotada la hora.', !!id);
+    }
+    else if (acc === 'almuerzo-forzar') {
+      ejecutar(store.rpc('marcar_almuerzo', { p_persona: id, p_forzar: true }), 'Anotado: almuerzan a la vez con tu autorización.', true);
     }
     else if (acc === 'almuerzo-quitar') {
       ejecutar(store.rpc('marcar_almuerzo', { p_persona: id, p_quitar: true }), 'Almuerzo quitado.', true);

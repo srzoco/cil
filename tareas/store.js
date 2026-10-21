@@ -372,7 +372,7 @@
         else if (sal.almuerzo) r = { almuerzo: sal.almuerzo, ya: true };
         else {
           var otrosAl = L.almorzandoGrupo(db, quienAl, new Date());
-          if (otrosAl.length) throw errorUsuario(otrosAl[0].nombre + ' está almorzando hasta las ' + L.fmtHora(otrosAl[0].hasta) + '; espera a que termine (alguien del grupo tiene que quedarse).');
+          if (otrosAl.length && !(args.p_forzar && adm)) throw errorUsuario(otrosAl[0].nombre + ' está almorzando hasta las ' + L.fmtHora(otrosAl[0].hasta) + '; espera a que termine (alguien del grupo tiene que quedarse).');
           sal.almuerzo = new Date().toISOString(); sal.almuerzo_por = yo.id; r = { almuerzo: sal.almuerzo, ya: false };
         }
       } else if (nombre === 'aprobar_oculta') {
