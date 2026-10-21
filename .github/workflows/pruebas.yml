@@ -4,6 +4,7 @@ name: Pruebas
 on:
   push: {}
   pull_request: {}
+  workflow_dispatch: {}   # botón «Run workflow» para reinstalar la base de datos a mano
 
 jobs:
   pruebas:
