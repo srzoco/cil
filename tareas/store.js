@@ -92,7 +92,7 @@
       var asigs = db.asignaciones.filter(function (a) {
         if (!(a.fecha >= desde || (a.estado === 'pendiente' && (a.arrastra || a.oculta)) || (a.hecha_en && L.hoyISO(new Date(a.hecha_en)) === hoy))) return false;
         if (adm) return true;
-        return (a.asignado_a === yo.id && !a.oculta) || a.hecha_por === yo.id || a.rescatada_de === yo.id || (a.local_id === yo.local_id && L.esUrgente(db, a, new Date())) ||
+        return (a.asignado_a === yo.id && !a.oculta) || a.hecha_por === yo.id || a.rescatada_de === yo.id || (a.local_id === yo.local_id && L.esUrgente(db, a, new Date()) && L.puedeRescatar(db, a, yo.id)) ||
           (a.asignado_a === null && a.estado === 'pendiente' && (a.fecha === hoy || (a.fecha < hoy && a.arrastra)) && db.ajustes.pool_activo && a.local_id === yo.local_id);
       });
       return {
@@ -338,7 +338,7 @@
         var pr = L.asistenciaDe(db, yo.id, hoy);
         if (!(pr && pr.estado === 'presente' && !pr.salida)) throw errorUsuario('Primero marca «Llegué».');
         var rp = ra.plantilla_id ? L.plantillaDe(db, ra.plantilla_id) : null;
-        if (rp && ((rp.solo_pueden || []).length || (rp.grupos || []).length) && !L.puedeSegun(rp, yo)) throw errorUsuario('Esa tarea solo la pueden hacer otras personas.');
+        if (!L.puedeRescatar(db, ra, yo.id)) throw errorUsuario('Esa tarea solo la pueden hacer otras personas.');
         var inc = !L.excusado(db, ra);
         var de = ra.asignado_a;
         ra.rescatada_de = de; ra.asignado_a = yo.id; ra.incumplida = inc; ra.motivo = 'rescate';

@@ -317,7 +317,7 @@
     if (botones.length) h += '<div class="botones-dia">' + botones.join('') + '</div>';
     // Tareas de otras personas con horario que se están pasando: cualquiera del local las puede hacer
     if (L.estaPresente(est) && s && !s.salida && !L.estaFuera(d, y.id, hoy)) {
-      var urg = d.asignaciones.filter(function (a) { return a.asignado_a !== y.id && a.local_id === y.local_id && L.esUrgente(d, a, new Date()); });
+      var urg = d.asignaciones.filter(function (a) { return a.asignado_a !== y.id && a.local_id === y.local_id && L.esUrgente(d, a, new Date()) && L.puedeRescatar(d, a, y.id); });
       if (urg.length) h += '<section class="bloque alerta"><div class="bloque-head"><h2>Urgente</h2><small class="muted">Se está pasando la hora</small></div><div class="lista">' +
         urg.map(function (a) {
           return '<div class="item"><div class="item-cuerpo"><span class="item-titulo">' + tituloHtml(a) + '</span><span class="item-meta"><span class="extra">' + a.minutos + ' min</span>' + horaPill(a) + '</span></div>' +

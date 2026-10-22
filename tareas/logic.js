@@ -399,6 +399,12 @@
     if (gr.length) return (pe.grupos || []).some(function (g) { return gr.indexOf(g) >= 0; });
     return pe.rota !== false;  // el personal administrativo no entra en las tareas «para cualquiera»
   }
+  // «La hago yo» en una urgente: si es solo de ciertas personas o grupos, solo ellos (igual que _puede_rescatar)
+  function puedeRescatar(db, a, personaId) {
+    var p = a.plantilla_id ? plantillaDe(db, a.plantilla_id) : null, pe = persona(db, personaId);
+    if (!p || !pe || !((p.solo_pueden || []).length || (p.grupos || []).length)) return true;
+    return puedeSegun(p, pe);
+  }
   function puedeHacer(db, a, personaId) {
     var p = a.plantilla_id ? plantillaDe(db, a.plantilla_id) : null;
     var pe = persona(db, personaId);
@@ -738,7 +744,7 @@
     equiposDe: equiposDe, fueraDeRango: fueraDeRango, rangoTxt: rangoTxt, esUrgente: esUrgente, excusado: excusado, estaFuera: estaFuera, fueraEn: fueraEn, hhmm: hhmm, tituloCompleto: tituloCompleto,
     localDe: localDe, localPrincipal: localPrincipal, labDe: labDe, laborable: laborable, laborableFn: laborableFn, trabaja: trabaja, libreDe: libreDe, especial: especial, localDePersona: localDePersona, frecuenciaTxt: frecuenciaTxt, proximas: proximas, siguienteLaborable: siguienteLaborable,
     seFue: seFue, anteriorLaborable: anteriorLaborable, carga: carga, capacidad: capacidad, cabeEn: cabeEn, estadoAsistencia: estadoAsistencia, estaPresente: estaPresente, asistenciaDe: asistenciaDe,
-    esEmpleadoActivo: esEmpleadoActivo, plantillaDe: plantillaDe, puedeHacer: puedeHacer,
+    esEmpleadoActivo: esEmpleadoActivo, plantillaDe: plantillaDe, puedeHacer: puedeHacer, puedeRescatar: puedeRescatar,
     elegirPersona: elegirPersona, puedeSegun: puedeSegun, generarDia: generarDia, repartoAutomatico: repartoAutomatico, almorzandoGrupo: almorzandoGrupo, balance: balance, sobrecargados: sobrecargados, sugerenciasBalance: sugerenciasBalance, factorDia: factorDia, personasDe: personasDe, companerosDe: companerosDe, tareasDe: tareasDe, delPool: delPool,
     sugerirReasignacion: sugerirReasignacion, reporteDia: reporteDia, textoReporte: textoReporte,
     historial: historial, cargaTipica: cargaTipica

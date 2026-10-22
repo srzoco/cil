@@ -1241,6 +1241,17 @@ begin
   return json_build_object('fuera', p_fuera);
 end $$;
 
+-- ¿Puede «La hago yo» en esa tarea urgente? Si la tarea es solo de ciertas personas o grupos, solo ellos
+-- (las «para cualquiera» las puede rescatar cualquiera, también el personal administrativo). Igual que puedeRescatar en logic.js.
+create or replace function public._puede_rescatar(p_plantilla uuid, p_persona uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select coalesce((
+    select case when cardinality(p.solo_pueden) > 0 then pe.id = any (p.solo_pueden)
+                when cardinality(p.grupos) > 0 then pe.grupos && p.grupos
+                else true end
+    from plantillas p, personas pe where p.id = p_plantilla and pe.id = p_persona), true)
+$$;
+
 -- Empleado: «La hago yo» en una tarea urgente de otra persona del mismo local.
 create or replace function public.rescatar(p_id uuid) returns json
 language plpgsql security definer set search_path = public as $$
@@ -1256,9 +1267,7 @@ begin
     raise exception 'Primero marca «Llegué».';
   end if;
   select * into p from plantillas where id = a.plantilla_id;
-  if p.id is not null and not (
-        (cardinality(p.solo_pueden) = 0 or pe.id = any (p.solo_pueden))
-    and (cardinality(p.solo_pueden) > 0 or cardinality(p.grupos) = 0 or pe.grupos && p.grupos)) then
+  if p.id is not null and not public._puede_rescatar(p.id, pe.id) then
     raise exception 'Esa tarea solo la pueden hacer otras personas.';
   end if;
   inc := not public._excusado(a);
@@ -1712,7 +1721,7 @@ begin
   where a.fecha = hoy and a.estado = 'pendiente' and a.asignado_a is not null and a.desde is not null and a.antes is not null and a.antes > a.desde
     and public._ts_hoy(a.desde) + (a.antes - a.desde) / 2 <= ahora and public._ts_hoy(a.desde) + (a.antes - a.desde) / 2 > hace
     and exists (select 1 from asistencia s where s.persona_id = pe.id and s.fecha = hoy and s.estado = 'presente' and s.salida is null)
-    and (pe.id = a.asignado_a or not public._fuera_en(pe.id, ahora));
+    and (pe.id = a.asignado_a or (not public._fuera_en(pe.id, ahora) and public._puede_rescatar(a.plantilla_id, pe.id)));
 
   -- 3) ¿Ya llegaste? A la hora de entrada (5 min antes de «a tiempo hasta»), a quien trabaja hoy y no ha marcado
   insert into _avisos
@@ -1858,7 +1867,8 @@ create policy asig_ver on public.asignaciones for select to authenticated using 
   or (asignado_a = auth.uid() and not oculta)
   or hecha_por = auth.uid()
   or rescatada_de = auth.uid()
-  or (local_id = (select local_id from public.personas where id = auth.uid()) and public._urgente(asignaciones))
+  -- urgentes de otros: solo si a quien entra le está permitido hacerla (por ejemplo, no las «Solo Tazmania»)
+  or (local_id = (select local_id from public.personas where id = auth.uid()) and public._urgente(asignaciones) and public._puede_rescatar(plantilla_id, auth.uid()))
   or (asignado_a is null and estado = 'pendiente' and (fecha = public.hoy() or (fecha < public.hoy() and arrastra))
       and (select pool_activo from public.tareas_ajustes where id = 1)
       and local_id = (select local_id from public.personas where id = auth.uid()))
@@ -1875,7 +1885,7 @@ revoke all on all tables in schema public from anon;
 -- Sin esto, un empleado podría llamar funciones internas (por ejemplo _llegada) y saltarse las reglas.
 revoke execute on all functions in schema public from anon, authenticated, public;
 alter default privileges in schema public revoke execute on functions from anon, authenticated, public;
-grant execute on function public.hoy(), public.es_admin(), public.tiene_acceso(text), public._urgente(public.asignaciones), public.generar_dia(date),
+grant execute on function public.hoy(), public.es_admin(), public.tiene_acceso(text), public._urgente(public.asignaciones), public._puede_rescatar(uuid, uuid), public.generar_dia(date),
   public.marcar_llegada(double precision, double precision, double precision, timestamptz), public.mi_red(), public.registrar_red(uuid),
   public.sin_wifi_hoy(uuid, boolean), public.aceptar_red(uuid, uuid),
   public.marcar_hecha(uuid, boolean), public.tomar_del_pool(uuid), public.reasignar(jsonb, text),
