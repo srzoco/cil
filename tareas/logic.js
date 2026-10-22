@@ -13,7 +13,7 @@
   var DIAS_CORTOS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   var AJUSTES_BASE = { hora_limite: '08:50', a_tiempo_hasta: '08:35', pool_activo: false, minutos_jornada: 480, solo_en_tienda: false,
-    minutos_almuerzo: 60, carga_dias: { '0': 0, '1': 100, '2': 100, '3': 100, '4': 60, '5': 60, '6': 80 } };
+    usar_almuerzo: false, minutos_almuerzo: 60, carga_dias: { '0': 0, '1': 100, '2': 100, '3': 100, '4': 60, '5': 60, '6': 80 } };
   var LAB_BASE = [1, 2, 3, 4, 5, 6];
 
   // ---------- Fechas (siempre 'AAAA-MM-DD', hora local) ----------

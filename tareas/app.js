@@ -298,7 +298,7 @@
         (est === 'tarde' ? ' · después de las ' + esc(L.fmtHoraTxt(L.aTiempoHasta(aj()))) : '') + (s.salida ? ' · te fuiste ' + esc(L.fmtHora(s.salida)) : '') + '</span></p>';
     }
     // Almuerzo: solo se anota cuándo empieza; si alguien del grupo está almorzando, hay que esperar
-    if (L.estaPresente(est) && s && !s.salida) {
+    if (aj().usar_almuerzo && L.estaPresente(est) && s && !s.salida) {
       if (s.almuerzo) h += '<p class="almuerzo-linea">Almuerzo: empezaste a las ' + esc(L.fmtHora(s.almuerzo)) + '</p>';
       else {
         var ocup = (S.data.almorzando_grupo || [])[0];
@@ -643,6 +643,8 @@
     var tipica = L.cargaTipica(d, S.hoy, loc);
     var porPersona = emps.length ? Math.round(tipica / emps.length) : 0;
     var delLocal = d.plantillas.filter(function (p) { return !loc || (p.local_id || (L.localPrincipal(d) || {}).id) === loc; });
+    var totalLocal = delLocal.length, fil = filtrosTareas(q, emps);
+    delLocal = delLocal.filter(fil.pasa);
     var h = '<h1>Tareas</h1>';
     h += tabsLocales('/tareas' + (modo === 'unica' ? '?ver=unica' : ''), loc);
     h += '<div class="kpis"><div class="kpi"><b>' + esc(L.minutosTxt(tipica)) + '</b><span>de trabajo un día normal</span></div>' +
@@ -656,6 +658,8 @@
     var qLoc = loc ? '&local=' + loc : '';
     h += '<div class="seg-tabs"><a href="#/tareas' + (loc ? '?local=' + loc : '') + '" class="' + (modo === 'rec' ? 'on' : '') + '">Se repiten</a><a href="#/tareas?ver=unica' + qLoc + '" class="' + (modo === 'unica' ? 'on' : '') + '">De una vez</a></div>';
     h += '<a class="btn grande" href="#/tarea/nueva?tipo=' + (modo === 'unica' ? 'unica' : 'rec') + qLoc + '">' + ICON.mas + (modo === 'unica' ? 'Nueva tarea de una vez' : 'Nueva tarea que se repite') + '</a>';
+    h += fil.html;
+    if (fil.activo) h += '<p class="muted filtro-cuenta">' + plural(delLocal.length, 'tarea', 'tareas') + ' de ' + totalLocal + ' · <a href="#" data-acc="filtros-quitar">Quitar filtros</a></p>';
 
     if (modo === 'rec') {
       ['diaria', 'semanal', 'mensual'].forEach(function (fr) {
@@ -664,7 +668,7 @@
         if (!l.length) return;
         h += '<section class="bloque"><div class="bloque-head"><h2>' + FREC_TXT[fr] + '</h2><small class="muted">' + l.length + '</small></div><div class="lista">' + l.map(filaPlantilla).join('') + '</div></section>';
       });
-      if (!delLocal.some(function (p) { return p.frecuencia !== 'unica'; })) h += '<p class="vacio muted">Todavía no hay tareas. Empieza por las que se hacen todos los días.</p>';
+      if (!delLocal.some(function (p) { return p.frecuencia !== 'unica'; })) h += '<p class="vacio muted">' + (fil.activo ? 'Ninguna tarea cumple esos filtros.' : 'Todavía no hay tareas. Empieza por las que se hacen todos los días.') + '</p>';
     } else {
       var desde = L.addDias(S.hoy, -14);
       var u = delLocal.filter(function (p) { return p.frecuencia === 'unica' && p.fecha_unica >= desde; })
@@ -673,6 +677,38 @@
         : '<p class="vacio muted">No hay tareas de una vez en las últimas dos semanas.</p>';
     }
     return h;
+  }
+
+  // Filtros de la lista de tareas: grupo, persona (lo que le puede tocar) y día de la semana. Van en la dirección (?g=&p=&d=).
+  function filtrosTareas(q, emps) {
+    var d = db(), g = q.get('g') || '', pid = q.get('p') || '', dd = q.get('d') || '';
+    var pe = pid ? persona(pid) : null, diaN = dd === '' ? null : Number(dd);
+    var pasa = function (p) {
+      if (g && (p.grupos || []).indexOf(g) < 0) return false;
+      if (pe && !(p.asignar_a === pe.id || L.puedeSegun(p, pe))) return false;
+      if (diaN != null) {
+        if (p.frecuencia === 'unica') return L.dow(p.fecha_unica) === diaN;
+        var lab = L.laborableFn(d, p.local_id || (L.localPrincipal(d) || {}).id), f = S.hoy;
+        while (L.dow(f) !== diaN) f = L.addDias(f, 1);
+        // en las próximas 9 semanas (alcanza para las mensuales y las de cada 2 semanas)
+        for (var i = 0; i < 9; i++, f = L.addDias(f, 7)) if (L.toca(p, f, lab)) return true;
+        return false;
+      }
+      return true;
+    };
+    var opt = function (v, t, sel) { return '<option value="' + esc(v) + '"' + (v === sel ? ' selected' : '') + '>' + esc(t) + '</option>'; };
+    var html = '<div class="filtros-tareas">' +
+      (grupos().length ? '<select data-cambio="filtro-tareas" data-f="g" aria-label="Grupo">' + opt('', 'Grupo', g) + grupos().map(function (x) { return opt(x.id, x.nombre, g); }).join('') + '</select>' : '') +
+      '<select data-cambio="filtro-tareas" data-f="p" aria-label="Persona">' + opt('', 'Persona', pid) + emps.map(function (x) { return opt(x.id, x.nombre || x.email, pid); }).join('') + '</select>' +
+      '<select data-cambio="filtro-tareas" data-f="d" aria-label="Día">' + opt('', 'Día', dd) + [1, 2, 3, 4, 5, 6, 0].map(function (x) { return opt(String(x), ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'][x], dd); }).join('') + '</select>' +
+      '</div>';
+    return { pasa: pasa, html: html, activo: !!(g || pe || diaN != null) };
+  }
+  function cambiarFiltroTareas(f, v) {
+    var hs = location.hash.replace(/^#/, ''), i = hs.indexOf('?'), ruta = i < 0 ? hs : hs.slice(0, i);
+    var q = new URLSearchParams(i < 0 ? '' : hs.slice(i + 1));
+    if (f) { if (v) q.set(f, v); else q.delete(f); } else { q.delete('g'); q.delete('p'); q.delete('d'); }
+    var s = q.toString(); ir(ruta + (s ? '?' + s : ''));
   }
 
   function vecesTxt(p) {
@@ -1037,6 +1073,7 @@
     h += '<div class="campo"><span>Tiempo para tareas fijas cada día <small>(% de la jornada; el resto queda para pedidos y despachos)</small></span><div class="dias-pct">' +
       [1, 2, 3, 4, 5, 6, 0].map(function (dd) { return '<label><span>' + L.DIAS_CORTOS[dd] + '</span><input type="number" name="cd_' + dd + '" min="0" max="100" step="5" value="' + esc(cd[String(dd)] == null ? 100 : cd[String(dd)]) + '" inputmode="numeric"></label>'; }).join('') +
       '</div><small class="ayuda">Sirve para el balance de carga: avisa cuando un día pasa de ese tiempo. Por ejemplo, jueves y viernes menos porque salen más pedidos.</small></div>';
+    h += '<label class="check"><input type="checkbox" name="usar_almuerzo"' + (a.usar_almuerzo ? ' checked' : '') + '><span>Botón «Empiezo a almorzar» <small class="muted">— apagado, nadie lo ve. Encendido, dos personas del mismo grupo no almuerzan a la vez.</small></span></label>';
     h += '<label class="campo">Duración del almuerzo (minutos) <small>— mientras alguien de un grupo almuerza, los demás de ese grupo no pueden empezar</small><input type="number" name="minutos_almuerzo" min="10" max="180" step="5" value="' + esc(a.minutos_almuerzo || 60) + '" inputmode="numeric"></label>';
     h += '<label class="campo">Jornada (horas)<input type="number" name="jornada" min="1" max="15" step="0.5" value="' + (a.minutos_jornada / 60) + '" required inputmode="decimal"></label>';
     h += '<label class="check"><input type="checkbox" name="pool"' + (a.pool_activo ? ' checked' : '') + '><span>Pool de tareas libres <small class="muted">— los empleados ven las tareas sin dueño de su local y pueden tomarlas. Si lo apagas, lo que quede sin asignar solo lo ves tú.</small></span></label>';
@@ -1307,7 +1344,7 @@
     var h = '<h2>' + esc(pe.nombre) + '</h2><p class="muted">Hoy: ' + ESTADO_TXT[e] + (s && s.llegada ? ' · llegó ' + esc(L.fmtHora(s.llegada)) + (VERIF[s.verificado] || '') : '') + '</p><div class="seg vertical botones">';
     if (!L.estaPresente(e)) h += '<button class="btn" data-acc="asis-set" data-id="' + esc(id) + '" data-v="presente">Llegó (marcar ahora)</button>';
     if (e !== 'ausente') h += '<button class="btn sec" data-acc="asis-set" data-id="' + esc(id) + '" data-v="ausente">No viene hoy</button>';
-    if (L.estaPresente(e) && s && !s.salida && !s.almuerzo) {
+    if (aj().usar_almuerzo && L.estaPresente(e) && s && !s.salida && !s.almuerzo) {
       var ocupA = L.almorzandoGrupo(db(), id, new Date())[0];
       h += ocupA ? '<p class="just-box">No puede almorzar todavía: ' + esc(ocupA.nombre) + ' (de su grupo) almuerza hasta las ' + esc(L.fmtHora(ocupA.hasta)) + '</p>' +
           '<button class="btn fantasma" data-acc="almuerzo-forzar" data-id="' + esc(id) + '">Marcar igual (gerencia lo autoriza)</button>'
@@ -1614,6 +1651,7 @@
     if (acc === 'cerrar') { S.modal = null; pintarCapas(); }
     else if (acc === 'cerrar-ir') { S.modal = null; pintarCapas(); }
     else if (acc === 'recargar') recargar(false);
+    else if (acc === 'filtros-quitar') cambiarFiltroTareas(null);
     else if (acc === 'salir') (borrarCache(), store.salir()).then(function () { S.data = null; location.hash = '/'; render(); });
     else if (acc === 'reiniciar-demo') confirmar('¿Volver a los datos de ejemplo? Se pierde lo que hayas probado.', 'Reiniciar demo', function () { store.reiniciar(); S.modal = null; recargar(false); });
     else if (acc === 'confirmar-si') { var fn = S.confirmFn; S.confirmFn = null; if (fn) fn(); }
@@ -1756,6 +1794,7 @@
     var el = ev.target, c = el.getAttribute && el.getAttribute('data-cambio');
     if (c === 'demo-usuario') { store.cambiarUsuario(el.value); S.modal = null; location.hash = '/'; recargar(false); }
     else if (c === 'fecha-reporte' && el.value) ir('/reporte?f=' + el.value);
+    else if (c === 'filtro-tareas') cambiarFiltroTareas(el.getAttribute('data-f'), el.value);
     else if (c === 'calif') { var rc = el.form.querySelector('.repetir-check'); if (rc) rc.hidden = el.value !== '1'; }
     else if (c === 'demo-fuera') { store.fuera(el.checked); S.red = null; aviso(el.checked ? 'Simulando: fuera de cualquier local.' : 'Simulando: conectado al Wi-Fi.', 'ok'); render(); }
     else if (c === 'frecuencia') {
@@ -1811,7 +1850,7 @@
         if (sinConfig.length) { aviso('Antes de activarlo, registra el Wi-Fi de: ' + sinConfig.map(function (l) { return l.nombre; }).join(', ') + '.'); return; }
       }
       if (String(fd.get('a_tiempo_hasta')) > String(fd.get('hora_limite'))) { aviso('«A tiempo hasta» tiene que ser antes de la hora límite.'); return; }
-      ejecutar(store.actualizar('ajustes', 1, { usar_salidas: !!fd.get('usar_salidas'), mostrar_record: !!fd.get('mostrar_record'), a_tiempo_hasta: fd.get('a_tiempo_hasta'), hora_limite: fd.get('hora_limite'), pool_activo: !!fd.get('pool'), minutos_jornada: Math.round(horas * 60), solo_en_tienda: solo,
+      ejecutar(store.actualizar('ajustes', 1, { usar_salidas: !!fd.get('usar_salidas'), usar_almuerzo: !!fd.get('usar_almuerzo'), mostrar_record: !!fd.get('mostrar_record'), a_tiempo_hasta: fd.get('a_tiempo_hasta'), hora_limite: fd.get('hora_limite'), pool_activo: !!fd.get('pool'), minutos_jornada: Math.round(horas * 60), solo_en_tienda: solo,
         usar_gps: !!fd.get('usar_gps'), revisiones_dia: Number(fd.get('revisiones_dia')),
         minutos_almuerzo: Math.max(10, Math.min(180, Number(fd.get('minutos_almuerzo')) || 60)),
         carga_dias: [0, 1, 2, 3, 4, 5, 6].reduce(function (o, dd) { var v = Number(fd.get('cd_' + dd)); o[dd] = isNaN(v) ? 100 : Math.max(0, Math.min(100, v)); return o; }, {}) }), 'Ajustes guardados.');

@@ -124,6 +124,8 @@ alter table public.tareas_ajustes add column if not exists carga_dias jsonb not 
 alter table public.tareas_ajustes add column if not exists mostrar_record boolean not null default false;
 -- Botón «Salí a despachar» / «Volví» (y las reglas que dependen de él: tarea incumplida y compensación al que la rescata)
 alter table public.tareas_ajustes add column if not exists usar_salidas boolean not null default false;
+-- Botón de almuerzo: apagado hasta que gerencia decida empezar a usarlo
+alter table public.tareas_ajustes add column if not exists usar_almuerzo boolean not null default false;
 -- Revisiones de calidad al azar por día, repartidas entre gerencia
 alter table public.tareas_ajustes add column if not exists revisiones_dia int not null default 4 check (revisiones_dia between 0 and 20);
 
@@ -1559,6 +1561,7 @@ language plpgsql security definer set search_path = public as $$
 declare quien uuid := coalesce(p_persona, auth.uid()); s public.asistencia; otros json;
 begin
   if quien <> auth.uid() and not public.es_admin() then raise exception 'Solo gerencia puede marcarlo por otra persona.'; end if;
+  if not (select usar_almuerzo from tareas_ajustes where id = 1) and not public.es_admin() then raise exception 'Esa opción está apagada.'; end if;
   select * into s from asistencia where persona_id = quien and fecha = public.hoy() for update;
   if s.persona_id is null or s.estado <> 'presente' then raise exception 'Primero marca «Llegué».'; end if;
   if p_quitar then

@@ -4,7 +4,7 @@
 const { chromium } = require(process.env.PLAYWRIGHT || 'playwright');
 const BASE = process.env.BASE || 'http://localhost:8765';
 const RUTAS = ['/', '/tareas', '/tarea/nueva?tipo=unica', '/reporte', '/historial', '/temperaturas', '/equipo',
-  '/equipo/personas', '/equipo/grupos', '/equipo/locales', '/equipo/frio', '/equipo/calendario', '/equipo/avisos', '/equipo/ajustes', '/perfil', '/balance', '/ayuda'];
+  '/equipo/personas', '/equipo/grupos', '/equipo/locales', '/equipo/frio', '/equipo/calendario', '/equipo/avisos', '/equipo/ajustes', '/perfil', '/balance', '/ayuda', '/tareas?d=4', '/tareas?ver=unica&d=1'];
 (async () => {
   const b = await chromium.launch({ executablePath: process.env.CHROMIUM || undefined });
   const p = await b.newPage({ viewport: { width: 360, height: 760 } });
@@ -22,6 +22,16 @@ const RUTAS = ['/', '/tareas', '/tarea/nueva?tipo=unica', '/reporte', '/historia
     if (!(await p.$('main.contenido'))) fallas.push('No pintó ' + r);
     await ancho(r);
   }
+  // Filtros de Tareas: elegir una persona y un grupo
+  await p.goto(BASE + '/tareas/#/tareas'); await p.waitForTimeout(300);
+  for (const f of ['p', 'g']) {
+    const sel = 'select[data-cambio="filtro-tareas"][data-f="' + f + '"]';
+    if (!(await p.$(sel))) { fallas.push('Falta el filtro ' + f); continue; }
+    const v = await p.$eval(sel, s => s.options[1] && s.options[1].value);
+    if (v) { await p.selectOption(sel, v); await p.waitForTimeout(300); }
+  }
+  if (!/[?&]p=/.test(await p.evaluate(() => location.hash))) fallas.push('El filtro de persona no cambió la dirección');
+  await ancho('Tareas con filtros');
   // Abrir la ficha de una persona
   await p.goto(BASE + '/tareas/#/equipo/personas'); await p.waitForTimeout(300);
   await p.click('.persona-fila >> nth=2'); await p.waitForTimeout(300);

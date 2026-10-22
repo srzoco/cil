@@ -595,3 +595,7 @@ table.temps td.vencida { color: var(--wine); }
 .guia ol { padding-left: 18px; }
 .almuerzo-linea { margin: 4px 0 10px; color: var(--muted); font-size: .92rem; }
 .almuerzo-linea.espera { color: var(--ink); background: var(--gray-bg); border-radius: 10px; padding: 8px 12px; }
+/* Filtros de la lista de tareas */
+.filtros-tareas { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 6px; margin: 12px 0 4px; }
+.filtros-tareas select { min-height: 40px; padding: 6px 4px; font-size: .82rem; }
+.filtro-cuenta { margin: 4px 0 0; font-size: .85rem; }

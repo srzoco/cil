@@ -365,6 +365,7 @@
       } else if (nombre === 'marcar_almuerzo') {
         var quienAl = args.p_persona || yo.id;
         if (quienAl !== yo.id && !adm) throw errorUsuario('Solo gerencia puede marcarlo por otra persona.');
+        if (!db.ajustes.usar_almuerzo && !adm) throw errorUsuario('Esa opción está apagada.');
         var sal = L.asistenciaDe(db, quienAl, hoy);
         if (!sal || sal.estado !== 'presente') throw errorUsuario('Primero marca «Llegué».');
         if (args.p_quitar) { if (!adm) throw errorUsuario('Solo gerencia puede quitarlo.'); sal.almuerzo = null; r = { ok: true }; }
