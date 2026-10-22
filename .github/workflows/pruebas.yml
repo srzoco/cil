@@ -27,9 +27,10 @@ jobs:
           cat pruebas/stub-supabase.sql supabase/cil.sql supabase/cil.sql | psql -h localhost -U postgres -d cil -v ON_ERROR_STOP=1 -q
       - name: Prueba de humo
         run: |
-          npm install --no-save playwright@1.56.1 >/dev/null
-          # A veces GitHub se queda pegado bajando el navegador: corta a los 3 min y lo intenta otra vez.
-          timeout 180 npx playwright install --with-deps chromium >/dev/null || timeout 240 npx playwright install --with-deps chromium >/dev/null
+          # Usa el Chrome que ya trae la máquina de GitHub (bajar el navegador se quedaba pegado).
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --no-save playwright@1.56.1 >/dev/null
+          export CHROMIUM="$(command -v google-chrome || command -v chromium || command -v chromium-browser)"
+          if [ -z "$CHROMIUM" ]; then npx playwright install --with-deps chromium >/dev/null; fi
           python3 -m http.server 8765 >/dev/null 2>&1 &
           sleep 1
           node pruebas/humo.js
