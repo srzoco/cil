@@ -28,7 +28,8 @@ jobs:
       - name: Prueba de humo
         run: |
           npm install --no-save playwright@1.56.1 >/dev/null
-          npx playwright install --with-deps chromium >/dev/null
+          # A veces GitHub se queda pegado bajando el navegador: corta a los 3 min y lo intenta otra vez.
+          timeout 180 npx playwright install --with-deps chromium >/dev/null || timeout 240 npx playwright install --with-deps chromium >/dev/null
           python3 -m http.server 8765 >/dev/null 2>&1 &
           sleep 1
           node pruebas/humo.js
