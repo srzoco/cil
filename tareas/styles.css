@@ -605,3 +605,4 @@ table.temps td.vencida { color: var(--wine); }
 /* Mi día: «Empiezo a almorzar» y «Salí a despachar» uno al lado del otro */
 .botones-dia { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 12px; }
 .botones-dia .btn { flex: 1 1 140px; }
+.filtro-grupos { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 0; }
