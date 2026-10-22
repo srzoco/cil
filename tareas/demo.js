@@ -34,6 +34,7 @@
     var luis = persona('María', 'empleado', 'maria@demo'), carmen = persona('Yureidy', 'empleado', 'yureidy@demo');
     jose.capacidad = 50; yuli.capacidad = 50; luis.capacidad = 100; carmen.capacidad = 70;
     jose.tarea_max = 20; yuli.tarea_max = 20;  // despachan: pasan ratos cortos en el local
+    jose.despacha = true; yuli.despacha = true;
     var andrea = persona('Wendy', 'empleado', 'wendy@demo');
     var personas = [sara, papa, jose, yuli, luis, carmen, andrea];
     var gDespacho = { id: id('g'), nombre: 'Despacho', creado_en: '2026-01-01T00:00:00Z' };

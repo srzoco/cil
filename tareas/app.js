@@ -299,20 +299,22 @@
         (est === 'tarde' ? ' · después de las ' + esc(L.fmtHoraTxt(L.aTiempoHasta(aj()))) : '') + (s.salida ? ' · te fuiste ' + esc(L.fmtHora(s.salida)) : '') + '</span></p>';
     }
     // Almuerzo: solo se anota cuándo empieza; si alguien del grupo está almorzando, hay que esperar
+    var botones = [];
     if (aj().usar_almuerzo && L.estaPresente(est) && s && !s.salida) {
       if (s.almuerzo) h += '<p class="almuerzo-linea">Almuerzo: empezaste a las ' + esc(L.fmtHora(s.almuerzo)) + '</p>';
       else {
         var ocup = (S.data.almorzando_grupo || [])[0];
-        h += ocup ? '<p class="almuerzo-linea espera">Almuerzo: <b>' + esc(ocup.nombre) + '</b> está almorzando hasta las ' + esc(L.fmtHora(ocup.hasta)) + '; espera tu turno.</p>'
-          : '<p class="sin-margen"><button class="btn sec chico" data-acc="almuerzo">Empiezo a almorzar</button></p>';
+        if (ocup) h += '<p class="almuerzo-linea espera">Almuerzo: <b>' + esc(ocup.nombre) + '</b> está almorzando hasta las ' + esc(L.fmtHora(ocup.hasta)) + '; espera tu turno.</p>';
+        else botones.push('<button class="btn sec chico" data-acc="almuerzo">Empiezo a almorzar</button>');
       }
     }
-    // «Salí a despachar» / «Volví»
-    if (aj().usar_salidas && L.estaPresente(est) && s && !s.salida) {
+    // «Salí a despachar» / «Volví»: solo para quien despacha
+    if (aj().usar_salidas && y.despacha && L.estaPresente(est) && s && !s.salida) {
       var abierta = (S.data.salidas_rato || []).filter(function (x) { return x.persona_id === y.id && x.fecha === hoy && !x.volvio; })[0];
-      h += abierta ? '<div class="hero fuera-hero"><div><p class="hero-t">Estás fuera del local</p><p class="hero-sub">Desde las ' + esc(L.fmtHora(abierta.salio)) + '. Lo que tenga horario mientras tanto lo puede hacer otra persona.</p></div><button class="btn grande" data-acc="fuera" data-v="0">Volví</button></div>'
-        : '<p class="sin-margen"><button class="btn sec chico" data-acc="fuera" data-v="1">Salí a despachar</button></p>';
+      if (abierta) h += '<div class="hero fuera-hero"><div><p class="hero-t">Estás fuera del local</p><p class="hero-sub">Desde las ' + esc(L.fmtHora(abierta.salio)) + '. Lo que tenga horario mientras tanto lo puede hacer otra persona.</p></div><button class="btn grande" data-acc="fuera" data-v="0">Volví</button></div>';
+      else botones.push('<button class="btn sec chico" data-acc="fuera" data-v="1">Salí a despachar</button>');
     }
+    if (botones.length) h += '<div class="botones-dia">' + botones.join('') + '</div>';
     // Tareas de otras personas con horario que se están pasando: cualquiera del local las puede hacer
     if (L.estaPresente(est) && s && !s.salida && !L.estaFuera(d, y.id, hoy)) {
       var urg = d.asignaciones.filter(function (a) { return a.asignado_a !== y.id && a.local_id === y.local_id && L.esUrgente(d, a, new Date()); });
@@ -1203,7 +1205,7 @@
       ['Si no hay internet', '<p>Marca igual: se guarda en el teléfono y se envía solo cuando vuelva la conexión.</p>'],
       ['Si te tienes que ir antes', '<p>Toca <b>«Me voy antes de terminar»</b> al final de tu lista. Lo que no hiciste se reparte solo entre tus compañeros.</p>']
     ];
-    if (a.usar_salidas) pasos.splice(4, 0, ['Si sales a despachar', '<p>Toca <b>«Salí a despachar»</b> y al volver <b>«Volví»</b>. Mientras estás fuera, lo que tenga hora lo puede hacer otra persona sin que cuente en tu contra.</p>']);
+    if (a.usar_salidas && (yo().despacha || yo().rol === 'admin')) pasos.splice(4, 0, ['Si sales a despachar', '<p>Toca <b>«Salí a despachar»</b> y al volver <b>«Volví»</b>. Mientras estás fuera, lo que tenga hora lo puede hacer otra persona sin que cuente en tu contra.</p>']);
     pasos.push(['¿Olvidaste tu clave?', '<p>Avísale a gerencia: te da una nueva en persona.</p>']);
     return '<a class="volver" href="#/">‹ Volver</a><h1>Cómo se usa</h1>' +
       '<div class="seg-tabs"><a href="#" data-acc="guia-so" data-v="android" class="' + (so === 'android' ? 'on' : '') + '">Android</a><a href="#" data-acc="guia-so" data-v="ios" class="' + (so === 'ios' ? 'on' : '') + '">iPhone</a></div>' +
@@ -1639,7 +1641,8 @@
         return '<label class="check"><input type="checkbox" name="grupo" value="' + esc(g.id) + '"' + ((pe.grupos || []).indexOf(g.id) >= 0 ? ' checked' : '') + '>' + esc(g.nombre) + '</label>';
       }).join('') + '</div>' : '') +
       (pe.rol === 'empleado' ? '<label class="check"><input type="checkbox" name="rota"' + (pe.rota !== false ? ' checked' : '') + '>Entra en las tareas «para cualquiera»</label>' +
-        '<p class="ayuda sin-margen">Desmárcalo para personal administrativo: solo recibe las tareas de sus grupos o las que le asignes. Igual marca «Llegué» y sale en el reporte.</p>' : '') +
+        '<p class="ayuda sin-margen">Desmárcalo para personal administrativo: solo recibe las tareas de sus grupos o las que le asignes. Igual marca «Llegué» y sale en el reporte.</p>' +
+        '<label class="check"><input type="checkbox" name="despacha"' + (pe.despacha ? ' checked' : '') + '>Sale a despachar <small class="muted">(ve el botón «Salí a despachar», si está encendido en Ajustes)</small></label>' : '') +
       (store.modo === 'supabase' && pe.rol !== 'admin' ? '<div class="campo"><span>Módulos a los que entra <small>(gerencia entra a todos)</small></span>' +
         [['tareas', 'Tareas'], ['contenido', 'Contenido'], ['mensajes', 'Armador de mensajes']].map(function (m) {
           return '<label class="check"><input type="checkbox" name="acceso" value="' + m[0] + '"' + ((pe.accesos || []).indexOf(m[0]) >= 0 ? ' checked' : '') + '>' + m[1] + '</label>';
@@ -1900,7 +1903,7 @@
       if (fd.get('local_id')) patch.local_id = fd.get('local_id');
       if (fd.get('capacidad')) { patch.capacidad = Number(fd.get('capacidad')); patch.tarea_max = fd.get('tarea_max') ? Number(fd.get('tarea_max')) : null; }
       if (persona(pid) && persona(pid).rol === 'empleado' && grupos().length) patch.grupos = fd.getAll('grupo');
-      if (persona(pid) && persona(pid).rol === 'empleado') patch.rota = !!fd.get('rota');
+      if (persona(pid) && persona(pid).rol === 'empleado') { patch.rota = !!fd.get('rota'); patch.despacha = !!fd.get('despacha'); }
       if (store.modo === 'supabase' && persona(pid) && persona(pid).rol !== 'admin') patch.accesos = fd.getAll('acceso');
       if (persona(pid) && persona(pid).rol === 'empleado') {
         var dt = fd.getAll('dtrab').map(Number).sort(), base = L.labDe(db(), patch.local_id || localDe(persona(pid))).slice().sort();
@@ -2195,7 +2198,7 @@
     }
   }
   if (!(CFG.supabaseUrl && CFG.supabaseKey) && !window.TBDemo) {
-    var sc = document.createElement('script'); sc.src = 'demo.js?v=8'; sc.onload = arrancar;
+    var sc = document.createElement('script'); sc.src = 'demo.js?v=9'; sc.onload = arrancar;
     sc.onerror = function () { $app.innerHTML = '<div class="centro"><h2>No se pudo cargar</h2><p class="muted">Revisa el internet y vuelve a abrir.</p></div>'; };
     document.head.appendChild(sc);
   } else arrancar();

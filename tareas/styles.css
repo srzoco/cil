@@ -602,3 +602,6 @@ table.temps td.vencida { color: var(--wine); }
 .dos-fechas { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .dos-fechas .campo { min-width: 0; }
 .dos-fechas input { min-width: 0; width: 100%; }
+/* Mi día: «Empiezo a almorzar» y «Salí a despachar» uno al lado del otro */
+.botones-dia { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 12px; }
+.botones-dia .btn { flex: 1 1 140px; }

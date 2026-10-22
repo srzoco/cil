@@ -78,6 +78,8 @@ alter table public.personas add column if not exists rota boolean not null defau
 alter table public.personas add column if not exists libres jsonb not null default '[]';
 -- Personal temporal: último día que trabaja. Al día siguiente se desactiva solo.
 alter table public.personas add column if not exists hasta date;
+-- Despachador: solo quien despacha ve «Salí a despachar»
+alter table public.personas add column if not exists despacha boolean not null default false;
 
 -- Cada usuario creado en Authentication aparece solo aquí como empleado.
 create or replace function public._nueva_persona() returns trigger
@@ -1226,6 +1228,7 @@ language plpgsql security definer set search_path = public as $$
 declare abierta public.salidas_rato;
 begin
   if not (select usar_salidas from tareas_ajustes where id = 1) then raise exception 'Esa opción está apagada.'; end if;
+  if p_fuera and not coalesce((select despacha from personas where id = auth.uid()), false) then raise exception 'Esa opción es solo para quien despacha.'; end if;
   if not exists (select 1 from asistencia where persona_id = auth.uid() and fecha = public.hoy() and estado = 'presente') then
     raise exception 'Primero marca «Llegué».';
   end if;

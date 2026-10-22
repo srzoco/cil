@@ -321,6 +321,7 @@
         this._hecha(args.p_id, args.p_hecha, false);
       } else if (nombre === 'marcar_fuera') {
         if (!db.ajustes.usar_salidas) throw errorUsuario('Esa opción está apagada.');
+        if (args.p_fuera && !yo.despacha) throw errorUsuario('Esa opción es solo para quien despacha.');
         var pf = L.asistenciaDe(db, yo.id, hoy);
         if (!(pf && pf.estado === 'presente')) throw errorUsuario('Primero marca «Llegué».');
         db.salidas_rato = db.salidas_rato || [];
