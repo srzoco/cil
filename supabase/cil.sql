@@ -593,6 +593,9 @@ begin
       select coalesce(x.plantilla_id::text, x.id::text) as clave, sum(x.minutos)::int as total, max(x.minutos) as una
       from asignaciones x left join plantillas p on p.id = x.plantilla_id
       where x.asignado_a = p_hizo and x.fecha = public.hoy() and x.motivo <> 'fija' and x.local_id is not distinct from pe.local_id
+        and not x.oculta
+        -- tarea de varias personas en la que p_debe ya tiene su propio puesto: no se le da el del compañero
+        and not exists (select 1 from asignaciones y where y.plantilla_id = x.plantilla_id and y.fecha = x.fecha and y.asignado_a = p_debe)
         and (p.id is null or (
               (cardinality(p.solo_pueden) = 0 or p_debe = any (p.solo_pueden))
           and (cardinality(p.solo_pueden) > 0 or cardinality(p.grupos) = 0 or pe.grupos && p.grupos)

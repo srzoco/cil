@@ -171,7 +171,9 @@
     var db = this.db, self = this, hoy = L.hoyISO(), pe = db.personas.filter(function (p) { return p.id === debe; })[0], unidades = {};
     if (!pe || !(meta > 0)) return { unidades: 0, minutos: 0 };
     db.asignaciones.forEach(function (x) {
-      if (x.asignado_a !== hizo || x.fecha !== hoy || x.motivo === 'fija' || (x.local_id || null) !== (pe.local_id || null)) return;
+      if (x.asignado_a !== hizo || x.fecha !== hoy || x.motivo === 'fija' || x.oculta || (x.local_id || null) !== (pe.local_id || null)) return;
+      // tarea de varias personas en la que debe ya tiene su propio puesto: no se le da el del compañero
+      if (x.plantilla_id && db.asignaciones.some(function (y) { return y.plantilla_id === x.plantilla_id && y.fecha === x.fecha && y.asignado_a === debe; })) return;
       var p = x.plantilla_id ? L.plantillaDe(db, x.plantilla_id) : null;
       if (p && !L.puedeSegun(p, pe)) return;
       var k = x.plantilla_id || x.id;
