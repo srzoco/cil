@@ -120,7 +120,7 @@
   }
   function esUrgente(db, a, ahora) {
     ahora = ahora || new Date();
-    if (a.estado !== 'pendiente' || a.fecha !== hoyISO(ahora) || !a.desde || !a.antes || !a.asignado_a) return false;
+    if (a.estado !== 'pendiente' || a.oculta || a.fecha !== hoyISO(ahora) || !a.desde || !a.antes || !a.asignado_a) return false;
     var ini = tsHoy(a.fecha, hhmm(a.desde)), fin = tsHoy(a.fecha, hhmm(a.antes)), t = ahora.getTime();
     if (fin <= ini) return false;
     if (t >= ini + (fin - ini) / 2) return true;

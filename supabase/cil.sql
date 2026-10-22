@@ -1081,6 +1081,7 @@ begin
     raise exception 'Alguien ya la tomó.';
   end if;
   if a.local_id is distinct from (select local_id from personas where id = auth.uid()) then raise exception 'Esa tarea es de otro local.'; end if;
+  if not public._puede_rescatar(a.plantilla_id, auth.uid()) then raise exception 'Esa tarea solo la pueden hacer otras personas.'; end if;
   if (select solo_en_tienda from tareas_ajustes where id = 1)
      and not exists (select 1 from asistencia where persona_id = auth.uid() and fecha = public.hoy() and estado = 'presente') then
     raise exception 'Primero marca «Llegué».';
@@ -1207,7 +1208,7 @@ language sql stable as $$ select (public.hoy() + t)::timestamp at time zone 'Ame
 create or replace function public._urgente(a public.asignaciones) returns boolean
 language sql stable security definer set search_path = public as $$
   select a.estado = 'pendiente' and a.fecha = public.hoy() and a.desde is not null and a.antes is not null and a.antes > a.desde
-    and a.asignado_a is not null
+    and a.asignado_a is not null and not a.oculta  -- las que esperan aprobación de gerencia no son urgentes para nadie
     and (
       now() >= public._ts_hoy(a.desde) + (a.antes - a.desde) / 2
       or ((select usar_salidas from tareas_ajustes where id = 1) and now() >= public._ts_hoy(a.desde) and public._fuera_en(a.asignado_a, public._ts_hoy(a.desde)))
@@ -1643,7 +1644,7 @@ begin
       select count(*) into n from asignaciones a where a.fecha = public.hoy() and a.estado = 'pendiente'
         and a.antes is not null and public._ts_hoy(a.antes) < now();
     else
-      select count(*) into n from asignaciones a where a.fecha = public.hoy() and a.estado = 'pendiente' and a.asignado_a = yo.id;
+      select count(*) into n from asignaciones a where a.fecha = public.hoy() and a.estado = 'pendiente' and a.asignado_a = yo.id and not a.oculta;
     end if;
     r := r || jsonb_build_object('tareas', n);
   end if;
@@ -1708,7 +1709,7 @@ begin
   select a.asignado_a, 'desde:' || a.id, 'Te toca: ' || a.titulo || coalesce(' · ' || a.momento_nombre, ''),
          case when a.antes is not null then 'Antes de las ' || public._hora_txt(a.antes) else 'Ya la puedes marcar.' end, './#/'
   from asignaciones a
-  where a.fecha = hoy and a.estado = 'pendiente' and a.asignado_a is not null and a.desde is not null
+  where a.fecha = hoy and a.estado = 'pendiente' and a.asignado_a is not null and not a.oculta and a.desde is not null
     and public._ts_hoy(a.desde) <= ahora and public._ts_hoy(a.desde) > hace;
 
   -- 2) Urgente: a mitad de la ventana, a quien la tiene y a todos los presentes de su local
@@ -1718,7 +1719,7 @@ begin
          case when pe.id = a.asignado_a then 'Si no la haces ya, la puede hacer otra persona.' else 'Se está pasando la hora. Si puedes, tócala y «La hago yo».' end, './#/'
   from asignaciones a
   join personas pe on pe.local_id = a.local_id and pe.activo and pe.rol = 'empleado' and 'tareas' = any (pe.accesos)
-  where a.fecha = hoy and a.estado = 'pendiente' and a.asignado_a is not null and a.desde is not null and a.antes is not null and a.antes > a.desde
+  where a.fecha = hoy and a.estado = 'pendiente' and a.asignado_a is not null and not a.oculta and a.desde is not null and a.antes is not null and a.antes > a.desde
     and public._ts_hoy(a.desde) + (a.antes - a.desde) / 2 <= ahora and public._ts_hoy(a.desde) + (a.antes - a.desde) / 2 > hace
     and exists (select 1 from asistencia s where s.persona_id = pe.id and s.fecha = hoy and s.estado = 'presente' and s.salida is null)
     and (pe.id = a.asignado_a or (not public._fuera_en(pe.id, ahora) and public._puede_rescatar(a.plantilla_id, pe.id)));
@@ -1871,7 +1872,8 @@ create policy asig_ver on public.asignaciones for select to authenticated using 
   or (local_id = (select local_id from public.personas where id = auth.uid()) and public._urgente(asignaciones) and public._puede_rescatar(plantilla_id, auth.uid()))
   or (asignado_a is null and estado = 'pendiente' and (fecha = public.hoy() or (fecha < public.hoy() and arrastra))
       and (select pool_activo from public.tareas_ajustes where id = 1)
-      and local_id = (select local_id from public.personas where id = auth.uid()))
+      and local_id = (select local_id from public.personas where id = auth.uid())
+      and public._puede_rescatar(plantilla_id, auth.uid()))
 );
 create policy asig_borrar_admin on public.asignaciones for delete to authenticated using (public.es_admin());
 

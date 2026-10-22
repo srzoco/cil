@@ -93,7 +93,7 @@
         if (!(a.fecha >= desde || (a.estado === 'pendiente' && (a.arrastra || a.oculta)) || (a.hecha_en && L.hoyISO(new Date(a.hecha_en)) === hoy))) return false;
         if (adm) return true;
         return (a.asignado_a === yo.id && !a.oculta) || a.hecha_por === yo.id || a.rescatada_de === yo.id || (a.local_id === yo.local_id && L.esUrgente(db, a, new Date()) && L.puedeRescatar(db, a, yo.id)) ||
-          (a.asignado_a === null && a.estado === 'pendiente' && (a.fecha === hoy || (a.fecha < hoy && a.arrastra)) && db.ajustes.pool_activo && a.local_id === yo.local_id);
+          (a.asignado_a === null && a.estado === 'pendiente' && (a.fecha === hoy || (a.fecha < hoy && a.arrastra)) && db.ajustes.pool_activo && a.local_id === yo.local_id && L.puedeRescatar(db, a, yo.id));
       });
       return {
         completo: !!completo,
@@ -351,6 +351,7 @@
         var t = this._asig(args.p_id);
         if (!t || t.asignado_a !== null || t.estado !== 'pendiente' || t.fecha > hoy || (t.fecha < hoy && !t.arrastra)) throw errorUsuario('Alguien ya la tomó.');
         if (t.local_id !== yo.local_id) throw errorUsuario('Esa tarea es de otro local.');
+        if (!L.puedeRescatar(db, t, yo.id)) throw errorUsuario('Esa tarea solo la pueden hacer otras personas.');
         var presT = L.asistenciaDe(db, yo.id, hoy);
         if (db.ajustes.solo_en_tienda && !(presT && presT.estado === 'presente')) throw errorUsuario('Primero marca «Llegué».');
         t.asignado_a = yo.id; t.asignado_original = yo.id; t.motivo = 'tomada';
