@@ -355,6 +355,7 @@
         if (!t || t.asignado_a !== null || t.estado !== 'pendiente' || t.fecha > hoy || (t.fecha < hoy && !t.arrastra)) throw errorUsuario('Alguien ya la tomó.');
         if (t.local_id !== yo.local_id) throw errorUsuario('Esa tarea es de otro local.');
         if (!L.puedeRescatar(db, t, yo.id)) throw errorUsuario('Esa tarea solo la pueden hacer otras personas.');
+        if (t.plantilla_id && db.asignaciones.some(function (b) { return b.plantilla_id === t.plantilla_id && b.fecha === t.fecha && (b.momento || 0) === (t.momento || 0) && b.asignado_a === yo.id; })) throw errorUsuario('Ya tienes tu parte de esta tarea.');
         var presT = L.asistenciaDe(db, yo.id, hoy);
         if (db.ajustes.solo_en_tienda && !(presT && presT.estado === 'presente')) throw errorUsuario('Primero marca «Llegué».');
         t.asignado_a = yo.id; t.asignado_original = yo.id; t.motivo = 'tomada';

@@ -1085,6 +1085,10 @@ begin
   end if;
   if a.local_id is distinct from (select local_id from personas where id = auth.uid()) then raise exception 'Esa tarea es de otro local.'; end if;
   if not public._puede_rescatar(a.plantilla_id, auth.uid()) then raise exception 'Esa tarea solo la pueden hacer otras personas.'; end if;
+  if a.plantilla_id is not null and exists (select 1 from asignaciones b where b.plantilla_id = a.plantilla_id and b.fecha = a.fecha
+                                            and b.momento = a.momento and b.asignado_a = auth.uid()) then
+    raise exception 'Ya tienes tu parte de esta tarea.';
+  end if;
   if (select solo_en_tienda from tareas_ajustes where id = 1)
      and not exists (select 1 from asistencia where persona_id = auth.uid() and fecha = public.hoy() and estado = 'presente') then
     raise exception 'Primero marca «Llegué».';

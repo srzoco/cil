@@ -354,7 +354,8 @@
     h += '<p class="me-voy"><a class="btn link" href="#/ayuda">¿Cómo se usa la app?</a></p>';
     h += '</section>';
     if (aj().pool_activo) {
-      var pool = L.delPool(d, hoy, y.local_id);
+      // sin la otra parte de una tarea de varias personas en la que ya tiene la suya
+      var pool = L.delPool(d, hoy, y.local_id).filter(function (a) { return !(a.plantilla_id && d.asignaciones.some(function (b) { return b.plantilla_id === a.plantilla_id && b.fecha === a.fecha && (b.momento || 0) === (a.momento || 0) && b.asignado_a === y.id; })); });
       if (pool.length) {
         h += '<section class="bloque"><div class="bloque-head"><h2>Tareas libres</h2><small class="muted">Quien la tome, la hace</small></div><div class="lista">' +
           pool.map(function (a) {
