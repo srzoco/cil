@@ -1176,7 +1176,7 @@
     h += '<label class="fila-inline">Radio <select name="radio_m">' + [100, 150, 250, 400].map(function (m) {
       return '<option value="' + m + '"' + (l.radio_m === m ? ' selected' : '') + '>' + m + ' m</option>';
     }).join('') + '</select><small class="muted">alrededor del local</small></label>';
-    h += '<p class="ayuda">Wi-Fi y ubicación se registran estando en ese local. Si deja de reconocer el Wi-Fi, vuelve a registrarlo desde ahí.</p>';
+    h += '<p class="ayuda">Wi-Fi y ubicación se registran estando en ese local. Si deja de reconocer el Wi-Fi, vuelve a registrarlo desde ahí. ¿El local tiene dos redes? Conéctate a la otra, toca ↻ arriba y «Registrar esta red» otra vez (se guardan hasta 5).</p>';
     var sinWifi = l.sin_wifi_fecha === S.hoy;
     h += '<div class="tienda-fila"><div><b>¿Se cayó el Wi-Fi?</b><span class="muted">' + (sinWifi ? '<span class="ok-txt">Hoy pueden marcar «Llegué» sin el Wi-Fi</span>' : 'Permite marcar «Llegué» sin el Wi-Fi solo por hoy') + '</span></div>' +
       '<button class="btn ' + (sinWifi ? 'sec' : 'warn') + ' chico" type="button" data-acc="sin-wifi" data-id="' + esc(l.id) + '" data-v="' + (sinWifi ? '0' : '1') + '">' + (sinWifi ? 'Ya volvió' : 'Hoy no hay Wi-Fi') + '</button></div>';
@@ -1682,7 +1682,7 @@
     if (el.tagName === 'A' && acc !== 'cerrar-ir') ev.preventDefault();
     if (acc === 'cerrar') { S.modal = null; pintarCapas(); }
     else if (acc === 'cerrar-ir') { S.modal = null; pintarCapas(); }
-    else if (acc === 'recargar') recargar(false);
+    else if (acc === 'recargar') { S.red = null; recargar(false); }  // vuelve a revisar la red (por si cambió de Wi-Fi)
     else if (acc === 'filtros-quitar') cambiarFiltroTareas(null);
     else if (acc === 'libre-quitar') {
       var lq = (persona(id).libres || []).slice(); lq.splice(Number(el.getAttribute('data-i')), 1);
