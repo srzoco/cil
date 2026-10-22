@@ -1265,6 +1265,10 @@ begin
   if a.id is null then raise exception 'Esa tarea ya no existe.'; end if;
   if a.asignado_a = auth.uid() then raise exception 'Esa tarea ya es tuya.'; end if;
   if not public._urgente(a) then raise exception 'Alguien ya la tomó.'; end if;
+  if a.plantilla_id is not null and exists (select 1 from asignaciones b where b.plantilla_id = a.plantilla_id and b.fecha = a.fecha
+                                            and b.momento = a.momento and b.asignado_a = auth.uid()) then
+    raise exception 'Ya tienes tu parte de esta tarea: al marcar la tuya queda hecha para los dos.';
+  end if;
   select * into pe from personas where id = auth.uid();
   if a.local_id is distinct from pe.local_id then raise exception 'Esa tarea es de otro local.'; end if;
   if not exists (select 1 from asistencia where persona_id = auth.uid() and fecha = public.hoy() and estado = 'presente' and salida is null) then
@@ -1725,7 +1729,9 @@ begin
   where a.fecha = hoy and a.estado = 'pendiente' and a.asignado_a is not null and not a.oculta and a.desde is not null and a.antes is not null and a.antes > a.desde
     and public._ts_hoy(a.desde) + (a.antes - a.desde) / 2 <= ahora and public._ts_hoy(a.desde) + (a.antes - a.desde) / 2 > hace
     and exists (select 1 from asistencia s where s.persona_id = pe.id and s.fecha = hoy and s.estado = 'presente' and s.salida is null)
-    and (pe.id = a.asignado_a or (not public._fuera_en(pe.id, ahora) and public._puede_rescatar(a.plantilla_id, pe.id)));
+    and (pe.id = a.asignado_a or (not public._fuera_en(pe.id, ahora) and public._puede_rescatar(a.plantilla_id, pe.id)
+         -- en las de varias personas, a quien tiene su propia parte ya le llega el aviso de la suya
+         and not exists (select 1 from asignaciones b where b.plantilla_id = a.plantilla_id and b.fecha = a.fecha and b.momento = a.momento and b.asignado_a = pe.id)));
 
   -- 3) ¿Ya llegaste? A la hora de entrada (5 min antes de «a tiempo hasta»), a quien trabaja hoy y no ha marcado
   insert into _avisos

@@ -336,6 +336,7 @@
         if (!ra) throw errorUsuario('Esa tarea ya no existe.');
         if (ra.asignado_a === yo.id) throw errorUsuario('Esa tarea ya es tuya.');
         if (!L.esUrgente(db, ra, new Date())) throw errorUsuario('Alguien ya la tomó.');
+        if (ra.plantilla_id && db.asignaciones.some(function (b) { return b.plantilla_id === ra.plantilla_id && b.fecha === ra.fecha && (b.momento || 0) === (ra.momento || 0) && b.asignado_a === yo.id; })) throw errorUsuario('Ya tienes tu parte de esta tarea: al marcar la tuya queda hecha para los dos.');
         if (ra.local_id !== yo.local_id) throw errorUsuario('Esa tarea es de otro local.');
         var pr = L.asistenciaDe(db, yo.id, hoy);
         if (!(pr && pr.estado === 'presente' && !pr.salida)) throw errorUsuario('Primero marca «Llegué».');
