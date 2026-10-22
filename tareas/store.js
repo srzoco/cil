@@ -86,6 +86,7 @@
   // completo = false: solo hoy, lo pendiente y lo hecho hoy (igual que datos_app en supabase.sql)
   DemoStore.prototype.cargar = function (completo) {
     var self = this;
+    self._vencerTemporales();
     return this.rpc('generar_dia', {}).then(function () { self._repartirFaltas(); return self._admin() ? self.rpc('asignar_revisiones', {}) : null; }).then(function () {
       var db = copia(self.db), yo = self._yo(), adm = self._admin(), hoy = L.hoyISO(), desde = completo ? desdeHistorial() : hoy;
       var asigs = db.asignaciones.filter(function (a) {
@@ -534,6 +535,16 @@
   DemoStore.prototype.insertarVarios = function (tabla, filas) {
     var self = this;
     return filas.reduce(function (p, f) { return p.then(function () { return self.insertar(tabla, f); }); }, Promise.resolve());
+  };
+  // Personal temporal: pasado su último día, lo pendiente queda sin asignar y se desactiva (igual que en avisos_pendientes)
+  DemoStore.prototype._vencerTemporales = function () {
+    var hoy = L.hoyISO(), db = this.db, cambio = false;
+    db.personas.forEach(function (pe) {
+      if (!pe.activo || !pe.hasta || pe.hasta >= hoy) return;
+      db.asignaciones.forEach(function (a) { if (a.asignado_a === pe.id && a.estado === 'pendiente' && (a.fecha >= hoy || a.arrastra)) a.asignado_a = null; });
+      pe.activo = false; cambio = true;
+    });
+    if (cambio) this._guardar();
   };
   DemoStore.prototype.actualizar = function (tabla, id, patch) {
     try { this._soloAdmin(); } catch (e) { return Promise.reject(e); }

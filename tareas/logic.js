@@ -88,9 +88,14 @@
     return labDe(db, localId).indexOf(dow(f)) >= 0;
   }
   function laborableFn(db, localId) { return function (f) { return laborable(db, localId, f); }; }
+  // Vacaciones o permiso que cubre ese día (igual que _de_libre en supabase.sql)
+  function libreDe(pe, f) {
+    return ((pe && pe.libres) || []).filter(function (l) { return l && l.desde && f >= l.desde && f <= (l.hasta || l.desde); })[0] || null;
+  }
   function trabaja(db, pe, f) {
     var loc = localDePersona(db, pe);
     if (!laborable(db, loc, f)) return false;
+    if (libreDe(pe, f) || (pe && pe.hasta && f > pe.hasta)) return false;
     var dias = pe && pe.dias_trabajo;
     if (!dias || !dias.length || dias.indexOf(dow(f)) >= 0) return true;
     return (db.dias_especiales || []).some(function (e) { return e.fecha === f && e.tipo === 'laborable' && (!e.local_id || e.local_id === loc); });
@@ -356,8 +361,9 @@
   function estadoAsistencia(db, personaId, f, ahora) {
     var s = asistenciaDe(db, personaId, f), aj = db.ajustes || AJUSTES_BASE;
     if (s && s.estado === 'presente') return llegoTarde(aj, s.llegada) ? 'tarde' : 'presente';
-    if (s && s.estado === 'ausente') return 'ausente';
     var pe = persona(db, personaId);
+    if (pe && libreDe(pe, f)) return 'libre';
+    if (s && s.estado === 'ausente') return 'ausente';
     if (pe && !trabaja(db, pe, f)) return 'libre';
     if (pe && pe.creado_en && f < hoyISO(new Date(pe.creado_en))) return 'libre';
     var hoy = hoyISO(ahora);
@@ -573,7 +579,7 @@
       return { id: pe.id, pe: pe, nombre: pe.nombre || '', carga: cargaRelativa(db.asignaciones, pe, f), cap: capacidad(pe), llegada: s.llegada, tarde: llegoTarde(aj, s.llegada) };
     });
     var faltan = db.personas.filter(function (pe) {
-      if (!esEmpleadoActivo(pe) || localDePersona(db, pe) !== localId || !trabaja(db, pe, f)) return false;
+      if (!esEmpleadoActivo(pe) || localDePersona(db, pe) !== localId || !(trabaja(db, pe, f) || libreDe(pe, f))) return false;
       // faltó (si ya pasó la hora límite) o se fue antes: se trata igual
       var s = asistenciaDe(db, pe.id, f); return (conFaltas && !(s && s.estado === 'presente')) || !!(s && s.estado === 'presente' && s.salida);
     }).map(function (pe) { return pe.id; });
@@ -652,7 +658,8 @@
       var loc = db ? localDePersona(db, r.persona) : null;
       if (nombreLocal && loc !== ultimo) { l.push('', '— *' + nombreLocal(loc).toUpperCase() + '* —'); ultimo = loc; }
       l.push('');
-      l.push('*' + (r.persona.nombre || 'Sin nombre') + '* — ' + EST[r.estado] + (r.llegada ? ' ' + fmtHora(r.llegada) : '') +
+      var lib = r.estado === 'libre' ? libreDe(r.persona, f) : null;
+      l.push('*' + (r.persona.nombre || 'Sin nombre') + '* — ' + (lib ? '🌴 ' + (lib.motivo || 'Vacaciones') : EST[r.estado]) + (r.llegada ? ' ' + fmtHora(r.llegada) : '') +
         (r.salida ? ' · se fue ' + fmtHora(r.salida) + (r.salidaMotivo ? ' (' + r.salidaMotivo + ')' : '') : '') +
         (nombreLocal && r.local && r.local !== loc ? ' (vino a ' + nombreLocal(r.local) + ')' : ''));
       var total = r.hechas.length + r.pendientes.length;
@@ -729,7 +736,7 @@
     aTiempoHasta: aTiempoHasta, pasoATiempo: pasoATiempo, puntualidadMes: puntualidadMes, sinPuntualidad: sinPuntualidad,
     toca: toca, distanciaM: distanciaM, estadoHora: estadoHora, antesDeHora: antesDeHora,
     equiposDe: equiposDe, fueraDeRango: fueraDeRango, rangoTxt: rangoTxt, esUrgente: esUrgente, excusado: excusado, estaFuera: estaFuera, fueraEn: fueraEn, hhmm: hhmm, tituloCompleto: tituloCompleto,
-    localDe: localDe, localPrincipal: localPrincipal, labDe: labDe, laborable: laborable, laborableFn: laborableFn, trabaja: trabaja, especial: especial, localDePersona: localDePersona, frecuenciaTxt: frecuenciaTxt, proximas: proximas, siguienteLaborable: siguienteLaborable,
+    localDe: localDe, localPrincipal: localPrincipal, labDe: labDe, laborable: laborable, laborableFn: laborableFn, trabaja: trabaja, libreDe: libreDe, especial: especial, localDePersona: localDePersona, frecuenciaTxt: frecuenciaTxt, proximas: proximas, siguienteLaborable: siguienteLaborable,
     seFue: seFue, anteriorLaborable: anteriorLaborable, carga: carga, capacidad: capacidad, cabeEn: cabeEn, estadoAsistencia: estadoAsistencia, estaPresente: estaPresente, asistenciaDe: asistenciaDe,
     esEmpleadoActivo: esEmpleadoActivo, plantillaDe: plantillaDe, puedeHacer: puedeHacer,
     elegirPersona: elegirPersona, puedeSegun: puedeSegun, generarDia: generarDia, repartoAutomatico: repartoAutomatico, almorzandoGrupo: almorzandoGrupo, balance: balance, sobrecargados: sobrecargados, sugerenciasBalance: sugerenciasBalance, factorDia: factorDia, personasDe: personasDe, companerosDe: companerosDe, tareasDe: tareasDe, delPool: delPool,

@@ -282,7 +282,8 @@
     var h = '<h1 class="saludo">' + saludo() + ', ' + esc(y.nombre) + '</h1><p class="fecha-hoy">' + esc(L.fmtFechaLarga(hoy)) + '</p>';
 
     if (est === 'libre' && !todas.length) {
-      h += '<p class="nota">Hoy no te toca trabajar.</p>';
+      var libHoy = L.libreDe(y, hoy);
+      h += '<p class="nota">' + (libHoy ? 'Hoy estás de ' + esc((libHoy.motivo || 'vacaciones').toLowerCase()) + (libHoy.hasta && libHoy.hasta > hoy ? ' hasta el ' + esc(L.fmtFecha(libHoy.hasta)) : '') + '.' : 'Hoy no te toca trabajar.') + '</p>';
     } else if (!L.estaPresente(est) && llegadaEnCola()) {
       h += '<p class="llego presente">' + ICON.check + '<span>Llegaste ' + esc(L.fmtHora(llegadaEnCola().t)) + ' · sin internet, se envía al volver la conexión</span></p>';
     } else if (!L.estaPresente(est)) {
@@ -485,7 +486,7 @@
         var e = L.estadoAsistencia(d, pe.id, hoy, ahora), s = L.asistenciaDe(d, pe.id, hoy);
         var otro = s && s.estado === 'presente' && s.local_id && s.local_id !== localDe(pe);
         return '<button class="asis" data-acc="asistencia" data-id="' + esc(pe.id) + '"><span class="asis-nombre">' + esc(pe.nombre) + '</span>' +
-          '<span class="pill ' + ESTADO_TONO[e] + '">' + ESTADO_TXT[e] + (s && s.llegada ? ' · ' + esc(L.fmtHora(s.llegada)) : '') + '</span>' +
+          '<span class="pill ' + ESTADO_TONO[e] + '">' + (e === 'libre' && L.libreDe(pe, hoy) ? esc(L.libreDe(pe, hoy).motivo || 'Vacaciones') : ESTADO_TXT[e]) + (s && s.llegada ? ' · ' + esc(L.fmtHora(s.llegada)) : '') + '</span>' +
           (s && s.salida && s.estado === 'presente' ? '<span class="pill corregir">Se fue ' + esc(L.fmtHora(s.salida)) + '</span>' : '') +
           (L.estaFuera(d, pe.id, hoy) ? '<span class="pill hora">Fuera (despachando)</span>' : '') +
           (otro ? '<span class="pill edita">Vino a ' + esc(nombreLocal(s.local_id)) + '</span>' : '') + '</button>';
@@ -1583,6 +1584,31 @@
       '<div class="acciones"><button class="btn grande" type="submit">Agregar</button></div></form>';
   }
 
+  // Vacaciones y permisos de una persona: esos días no recibe tareas ni cuenta como falta
+  var MOTIVOS_LIBRE = ['Vacaciones', 'Permiso', 'Reposo médico'];
+  function bloqueLibres(pe) {
+    var lista = (pe.libres || []).map(function (l, i) { return { l: l, i: i }; }).filter(function (x) { return (x.l.hasta || x.l.desde) >= S.hoy; })
+      .sort(function (a, b) { return a.l.desde < b.l.desde ? -1 : 1; });
+    return '<form data-form="libre" data-id="' + esc(pe.id) + '"><h3>Vacaciones y permisos</h3>' +
+      (lista.length ? '<div class="lista">' + lista.map(function (x) {
+        return '<div class="item"><span class="item-cuerpo"><span class="item-titulo">' + esc(x.l.motivo || 'Vacaciones') + '</span><span class="item-meta"><span class="extra">' +
+          esc(x.l.desde === (x.l.hasta || x.l.desde) ? L.fmtFecha(x.l.desde) : L.fmtFecha(x.l.desde) + ' al ' + L.fmtFecha(x.l.hasta)) + '</span></span></span>' +
+          '<button type="button" class="btn fantasma chico" data-acc="libre-quitar" data-id="' + esc(pe.id) + '" data-i="' + x.i + '">Quitar</button></div>';
+      }).join('') + '</div>' : '<p class="muted">No tiene vacaciones ni permisos por delante.</p>') +
+      '<div class="dos-fechas"><label class="campo">Desde<input type="date" name="desde" required min="' + esc(S.hoy) + '"></label>' +
+      '<label class="campo">Hasta<input type="date" name="hasta" required min="' + esc(S.hoy) + '"></label></div>' +
+      '<label class="campo">Motivo<select name="motivo">' + MOTIVOS_LIBRE.map(function (m) { return '<option>' + m + '</option>'; }).join('') + '</select></label>' +
+      '<p class="ayuda sin-margen">Esos días no recibe tareas ni cuenta como falta. Si empieza hoy, lo que tenga pendiente se reparte entre los presentes.</p>' +
+      '<div class="acciones"><button class="btn sec" type="submit">Agregar</button></div></form>';
+  }
+  function guardarLibres(pid, libres, msg) {
+    var pe = persona(pid), p = store.actualizar('personas', pid, { libres: libres });
+    var hoyLibre = L.libreDe({ libres: libres }, S.hoy), est = L.estadoAsistencia(db(), pid, S.hoy, new Date());
+    // Si empieza hoy y ya pasó la hora límite, lo suyo se reparte ahora (antes de la hora límite se reparte solo)
+    if (hoyLibre && pe && !L.estaPresente(est) && L.pasoLimite(aj(), new Date())) p = p.then(function () { return store.rpc('marcar_asistencia', { p_persona: pid, p_estado: 'ausente' }); });
+    ejecutar(p, msg);
+  }
+
   function modalPersona(id) {
     var pe = persona(id); if (!pe) return '';
     var soyYo = pe.id === yo().id;
@@ -1606,7 +1632,9 @@
         return '<div class="campo"><span>Días que trabaja <small>(si no es igual a su local)</small></span><div class="dias">' + [1, 2, 3, 4, 5, 6, 0].map(function (dd) {
           return '<label class="dia"><input type="checkbox" name="dtrab" value="' + dd + '"' + (sel.indexOf(dd) >= 0 ? ' checked' : '') + '><span>' + L.DIAS_CORTOS[dd] + '</span></label>';
         }).join('') + '</div><small class="ayuda">Los días que no trabaja no recibe tareas ni cuenta como falta.</small></div>';
-      })() : '') +
+      })() +
+        '<label class="campo">Último día que trabaja <small>(solo personal temporal, por ejemplo de diciembre)</small><input type="date" name="hasta_temp" value="' + esc(pe.hasta || '') + '"></label>' +
+        '<p class="ayuda sin-margen">Al día siguiente se desactiva solo y lo que tenga pendiente queda sin asignar. Déjalo vacío si es fijo.</p>' : '') +
       (pe.rol === 'empleado' && grupos().length ? '<div class="campo"><span>Grupos</span>' + grupos().map(function (g) {
         return '<label class="check"><input type="checkbox" name="grupo" value="' + esc(g.id) + '"' + ((pe.grupos || []).indexOf(g.id) >= 0 ? ' checked' : '') + '>' + esc(g.nombre) + '</label>';
       }).join('') + '</div>' : '') +
@@ -1619,6 +1647,7 @@
       '<label class="check"><input type="checkbox" name="activo"' + (pe.activo ? ' checked' : '') + (soyYo ? ' disabled' : '') + '>Activo <small class="muted">(puede entrar)</small></label>' +
       (soyYo ? '<p class="ayuda">No puedes quitarte el rol ni desactivarte a ti misma.</p>' : '') +
       '<div class="acciones"><button class="btn grande" type="submit">Guardar</button></div></form>' +
+      (pe.rol === 'empleado' ? bloqueLibres(pe) : '') +
       (store.modo === 'supabase' && (pe.rol !== 'admin' || soyYo) ? '<form data-form="clave" data-id="' + esc(pe.id) + '"><h3>Cambiar clave</h3>' +
         '<label class="campo">Clave nueva <small>(mínimo 8 caracteres; dísela en persona)</small><input name="clave" type="text" minlength="8" required autocomplete="off" autocapitalize="off" spellcheck="false"></label>' +
         '<div class="acciones"><button class="btn sec" type="submit">Cambiar clave</button></div></form>' : '');
@@ -1652,6 +1681,10 @@
     else if (acc === 'cerrar-ir') { S.modal = null; pintarCapas(); }
     else if (acc === 'recargar') recargar(false);
     else if (acc === 'filtros-quitar') cambiarFiltroTareas(null);
+    else if (acc === 'libre-quitar') {
+      var lq = (persona(id).libres || []).slice(); lq.splice(Number(el.getAttribute('data-i')), 1);
+      confirmar('¿Quitar esas vacaciones o permiso? Vuelve a recibir tareas esos días.', 'Quitar', function () { ejecutar(store.actualizar('personas', id, { libres: lq }), 'Quitado.', true); });
+    }
     else if (acc === 'salir') (borrarCache(), store.salir()).then(function () { S.data = null; location.hash = '/'; render(); });
     else if (acc === 'reiniciar-demo') confirmar('¿Volver a los datos de ejemplo? Se pierde lo que hayas probado.', 'Reiniciar demo', function () { store.reiniciar(); S.modal = null; recargar(false); });
     else if (acc === 'confirmar-si') { var fn = S.confirmFn; S.confirmFn = null; if (fn) fn(); }
@@ -1874,6 +1907,10 @@
         if (!dt.length) { aviso('Marca al menos un día de trabajo.'); return; }
         patch.dias_trabajo = dt.join(',') === base.join(',') ? null : dt;
       }
+      if (persona(pid) && persona(pid).rol === 'empleado') {
+        patch.hasta = fd.get('hasta_temp') || null;
+        if (patch.hasta && patch.hasta < S.hoy && patch.hasta !== persona(pid).hasta) { aviso('El último día no puede ser antes de hoy. Para sacarlo ya, desmarca «Activo».'); return; }
+      }
       if (!patch.nombre) { aviso('Escribe el nombre.'); return; }
       // Si deja de estar activa o cambia de local, sus tareas pendientes quedan «sin asignar» para que gerencia las reparta.
       var antes = persona(pid), sueltas = [];
@@ -1883,6 +1920,14 @@
       var pp = store.actualizar('personas', pid, patch);
       if (sueltas.length) pp = pp.then(function () { return store.rpc('reasignar', { p_items: sueltas.map(function (x) { return { id: x.id, a: null }; }), p_motivo: 'manual' }); });
       ejecutar(pp, sueltas.length ? 'Guardado. Sus ' + plural(sueltas.length, 'tarea pendiente quedó', 'tareas pendientes quedaron') + ' sin asignar: repártelas desde Hoy.' : 'Guardado.', true);
+    }
+    else if (tipo === 'libre') {
+      var lpid = f.getAttribute('data-id'), ld = fd.get('desde'), lh = fd.get('hasta');
+      if (!ld || !lh) { aviso('Elige las dos fechas.'); return; }
+      if (lh < ld) { aviso('«Hasta» tiene que ser el mismo día o después de «Desde».'); return; }
+      var choca = (persona(lpid).libres || []).some(function (l) { return ld <= (l.hasta || l.desde) && lh >= l.desde; });
+      if (choca) { aviso('Ya tiene vacaciones o permiso en esas fechas.'); return; }
+      guardarLibres(lpid, (persona(lpid).libres || []).concat([{ desde: ld, hasta: lh, motivo: fd.get('motivo') || 'Vacaciones' }]), 'Anotado. Esos días no recibe tareas.');
     }
     else if (tipo === 'aprobar-oculta') {
       ejecutar(store.rpc('aprobar_oculta', { p_id: f.getAttribute('data-id'), p_persona: fd.get('persona') || null }), 'Aprobada: ya aparece en su lista.');

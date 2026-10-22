@@ -73,6 +73,11 @@ alter table public.personas add column if not exists accesos text[] not null def
 alter table public.personas add column if not exists dias_trabajo int[];
 -- false = personal administrativo: no recibe las tareas «para cualquiera», solo las de sus grupos o las asignadas a esa persona.
 alter table public.personas add column if not exists rota boolean not null default true;
+-- Vacaciones y permisos: [{"desde":"2026-12-01","hasta":"2026-12-05","motivo":"Vacaciones"}]. Esos días no recibe tareas
+-- ni cuenta como falta, y lo que tenga pendiente se reparte igual que si faltara.
+alter table public.personas add column if not exists libres jsonb not null default '[]';
+-- Personal temporal: último día que trabaja. Al día siguiente se desactiva solo.
+alter table public.personas add column if not exists hasta date;
 
 -- Cada usuario creado en Authentication aparece solo aquí como empleado.
 create or replace function public._nueva_persona() returns trigger
@@ -394,10 +399,18 @@ language sql stable security definer set search_path = public as $$
   )
 $$;
 
--- ¿Esa persona trabaja ese día? Si su local trabaja y es uno de sus días (o un día extra para todos).
+-- ¿Está de vacaciones o de permiso ese día? (igual que libreDe en logic.js)
+create or replace function public._de_libre(pe public.personas, f date) returns boolean
+language sql immutable as $$
+  select exists (select 1 from jsonb_array_elements(coalesce(pe.libres, '[]')) l
+                 where f between (l->>'desde')::date and coalesce((l->>'hasta')::date, (l->>'desde')::date))
+$$;
+
+-- ¿Esa persona trabaja ese día? Si su local trabaja y es uno de sus días (o un día extra para todos),
+-- no está de vacaciones o permiso, y si es temporal, todavía no pasó su último día.
 create or replace function public._trabaja(pe public.personas, f date) returns boolean
 language sql stable security definer set search_path = public as $$
-  select public._laborable(f, pe.local_id) and (
+  select public._laborable(f, pe.local_id) and not public._de_libre(pe, f) and (pe.hasta is null or f <= pe.hasta) and (
     pe.dias_trabajo is null or cardinality(pe.dias_trabajo) = 0
     or extract(dow from f)::int = any (pe.dias_trabajo)
     or exists (select 1 from dias_especiales d where d.fecha = f and d.tipo = 'laborable' and (d.local_id = pe.local_id or d.local_id is null))
@@ -1433,7 +1446,7 @@ begin
     select a.*, (select count(*) from _pres x where public._puede(a.plantilla_id, x.id)) as pueden
     from asignaciones a join personas pf on pf.id = a.asignado_a
     where a.estado = 'pendiente' and not a.oculta and (a.fecha = f or (a.fecha < f and a.arrastra))
-      and pf.activo and pf.rol = 'empleado' and pf.local_id = p_local and public._trabaja(pf, f)
+      and pf.activo and pf.rol = 'empleado' and pf.local_id = p_local and (public._trabaja(pf, f) or public._de_libre(pf, f))
       -- faltó (si ya pasó la hora límite) o se fue antes («Me voy antes»): se trata igual
       and ((p_con_faltas and not exists (select 1 from asistencia s where s.persona_id = pf.id and s.fecha = f and s.estado = 'presente'))
            or exists (select 1 from asistencia s where s.persona_id = pf.id and s.fecha = f and s.estado = 'presente' and s.salida is not null))
@@ -1667,6 +1680,13 @@ language plpgsql security definer set search_path = public as $$
 declare aj public.tareas_ajustes; ahora timestamptz := now(); hoy date := public.hoy(); hace timestamptz := now() - interval '10 minutes';
 begin
   select * into aj from tareas_ajustes where id = 1;
+  -- Personal temporal: pasado su último día, lo pendiente queda sin asignar y se desactiva (cierra sus sesiones)
+  if exists (select 1 from personas where activo and hasta is not null and hasta < hoy) then
+    update asignaciones a set asignado_a = null
+    from personas pe where pe.id = a.asignado_a and pe.activo and pe.hasta < hoy
+      and a.estado = 'pendiente' and (a.fecha >= hoy or a.arrastra);
+    update personas set activo = false where activo and hasta is not null and hasta < hoy;
+  end if;
   perform public.repartir_faltas();
   create temp table if not exists _avisos (persona_id uuid, clave text, titulo text, cuerpo text, url text) on commit drop;
   delete from _avisos where true;

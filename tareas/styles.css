@@ -599,3 +599,6 @@ table.temps td.vencida { color: var(--wine); }
 .filtros-tareas { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 6px; margin: 12px 0 4px; }
 .filtros-tareas select { min-height: 40px; padding: 6px 4px; font-size: .82rem; }
 .filtro-cuenta { margin: 4px 0 0; font-size: .85rem; }
+.dos-fechas { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.dos-fechas .campo { min-width: 0; }
+.dos-fechas input { min-width: 0; width: 100%; }
