@@ -130,6 +130,9 @@
     if (!this.db.ajustes.solo_en_tienda) return { verif: 'libre', local: propio };
     var ls = this.db.locales.slice().sort(function (a, b) { return (b.id === propio) - (a.id === propio) || (b.principal ? 1 : 0) - (a.principal ? 1 : 0); });
     for (var i = 0; i < ls.length; i++) if ((ls[i].redes || []).indexOf(ip) >= 0) return { verif: 'wifi', local: ls[i].id };
+    // Su local todavía no tiene Wi-Fi registrado (ni ubicación, si se usa): marca como si la opción estuviera apagada
+    var suyo = this.db.locales.filter(function (l) { return l.id === propio; })[0];
+    if (suyo && !(suyo.redes || []).length && !(this.db.ajustes.usar_gps && suyo.lat != null)) return { verif: 'libre', local: propio };
     if (this.db.ajustes.usar_gps && lat != null && lng != null) {
       var cerca = ls.filter(function (l) { return l.lat != null; }).map(function (l) { return { l: l, d: L.distanciaM(lat, lng, l.lat, l.lng) }; })
         .sort(function (a, b) { return (b.l.id === propio) - (a.l.id === propio) || a.d - b.d; });

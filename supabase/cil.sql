@@ -755,6 +755,11 @@ begin
   for lo in select id, redes from locales order by (id = propio) desc, principal desc loop
     if ip is not null and ip = any (lo.redes) then return json_build_object('verif', 'wifi', 'local', lo.id); end if;
   end loop;
+  -- Su local todavía no tiene Wi-Fi registrado (ni ubicación, si se usa): marca como si la opción estuviera apagada
+  if exists (select 1 from locales l where l.id = propio and cardinality(coalesce(l.redes, '{}')) = 0
+             and not ((select usar_gps from tareas_ajustes where id = 1) and l.lat is not null)) then
+    return json_build_object('verif', 'libre', 'local', propio);
+  end if;
   -- Gerencia marcó que hoy no hay Wi-Fi en su local
   if exists (select 1 from locales where id = propio and sin_wifi_fecha = public.hoy()) then
     return json_build_object('verif', 'sin_wifi', 'local', propio);

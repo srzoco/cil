@@ -1089,7 +1089,7 @@
     h += '<label class="campo">Duración del almuerzo (minutos) <small>— mientras alguien de un grupo almuerza, los demás de ese grupo no pueden empezar</small><input type="number" name="minutos_almuerzo" min="10" max="180" step="5" value="' + esc(a.minutos_almuerzo || 60) + '" inputmode="numeric"></label>';
     h += '<label class="campo">Jornada (horas)<input type="number" name="jornada" min="1" max="15" step="0.5" value="' + (a.minutos_jornada / 60) + '" required inputmode="decimal"></label>';
     h += '<label class="check"><input type="checkbox" name="pool"' + (a.pool_activo ? ' checked' : '') + '><span>Pool de tareas libres <small class="muted">— los empleados ven las tareas sin dueño de su local y pueden tomarlas. Si lo apagas, lo que quede sin asignar solo lo ves tú.</small></span></label>';
-    h += '<label class="check"><input type="checkbox" name="solo_tienda"' + (a.solo_en_tienda ? ' checked' : '') + '><span>«Llegué» solo en el local <small class="muted">— solo funciona conectado al Wi-Fi de un local. Fuera, les sale «No se pudo marcar tu llegada», sin explicar por qué. Marcar «Hecho» también exige haber marcado «Llegué». Registra el Wi-Fi de cada local antes de activarlo.</small></span></label>';
+    h += '<label class="check"><input type="checkbox" name="solo_tienda"' + (a.solo_en_tienda ? ' checked' : '') + '><span>«Llegué» solo en el local <small class="muted">— solo funciona conectado al Wi-Fi de un local. Fuera, les sale «No se pudo marcar tu llegada», sin explicar por qué. Marcar «Hecho» también exige haber marcado «Llegué». En un local sin Wi-Fi registrado se puede marcar desde cualquier red hasta que lo registres.</small></span></label>';
     h += '<label class="check sub-check"><input type="checkbox" name="usar_gps"' + (a.usar_gps ? ' checked' : '') + '><span>Si no está en el Wi-Fi, probar con la ubicación del teléfono <small class="muted">— el teléfono les pedirá permiso de ubicación (eso no se puede ocultar). La ubicación no se guarda: solo se compara con la del local.</small></span></label>';
     h += '<label class="campo">Revisiones de calidad por día<select name="revisiones_dia">' + [0, 2, 4, 6, 8, 10].map(function (n) {
       return '<option value="' + n + '"' + ((a.revisiones_dia == null ? 4 : a.revisiones_dia) === n ? ' selected' : '') + '>' + (n ? n + ' al día (' + n / 2 + ' de la mañana y ' + n / 2 + ' de la tarde)' : 'Ninguna') + '</option>';
@@ -1889,17 +1889,18 @@
     else if (tipo === 'tarea') guardarTarea(f, fd);
     else if (tipo === 'ajustes') {
       var horas = Number(fd.get('jornada'));
-      var solo = !!fd.get('solo_tienda');
+      var solo = !!fd.get('solo_tienda'), msgAj = null;
       if (solo) {
         var gps = !!fd.get('usar_gps');
         var sinConfig = locales().filter(function (l) { return empleadosDe(l.id).length && !(l.redes || []).length && !(gps && l.lat != null); });
-        if (sinConfig.length) { aviso('Antes de activarlo, registra el Wi-Fi de: ' + sinConfig.map(function (l) { return l.nombre; }).join(', ') + '.'); return; }
+        // Los locales sin Wi-Fi registrado siguen marcando desde cualquier red hasta que se registre
+        msgAj = sinConfig.length ? 'Guardado. Mientras no registres el Wi-Fi de ' + sinConfig.map(function (l) { return l.nombre; }).join(', ') + ', allí se puede marcar «Llegué» desde cualquier red.' : null;
       }
       if (String(fd.get('a_tiempo_hasta')) > String(fd.get('hora_limite'))) { aviso('«A tiempo hasta» tiene que ser antes de la hora límite.'); return; }
       ejecutar(store.actualizar('ajustes', 1, { usar_salidas: !!fd.get('usar_salidas'), usar_almuerzo: !!fd.get('usar_almuerzo'), mostrar_record: !!fd.get('mostrar_record'), a_tiempo_hasta: fd.get('a_tiempo_hasta'), hora_limite: fd.get('hora_limite'), pool_activo: !!fd.get('pool'), minutos_jornada: Math.round(horas * 60), solo_en_tienda: solo,
         usar_gps: !!fd.get('usar_gps'), revisiones_dia: Number(fd.get('revisiones_dia')),
         minutos_almuerzo: Math.max(10, Math.min(180, Number(fd.get('minutos_almuerzo')) || 60)),
-        carga_dias: [0, 1, 2, 3, 4, 5, 6].reduce(function (o, dd) { var v = Number(fd.get('cd_' + dd)); o[dd] = isNaN(v) ? 100 : Math.max(0, Math.min(100, v)); return o; }, {}) }), 'Ajustes guardados.');
+        carga_dias: [0, 1, 2, 3, 4, 5, 6].reduce(function (o, dd) { var v = Number(fd.get('cd_' + dd)); o[dd] = isNaN(v) ? 100 : Math.max(0, Math.min(100, v)); return o; }, {}) }), msgAj || 'Ajustes guardados.');
     }
     else if (tipo === 'local') {
       var labL = fd.getAll('lab').map(Number);
