@@ -1,7 +1,7 @@
 /* Tareas — estilos propios. Los colores y letras vienen de ../comun/tema.css */
 
 * { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
+html { -webkit-text-size-adjust: 100%; overflow-wrap: anywhere; }  /* un nombre larguísimo sin espacios no empuja la pantalla */
 body {
   margin: 0; background: var(--bg); color: var(--ink);
   font: 16px/1.45 var(--sans); -webkit-font-smoothing: antialiased;

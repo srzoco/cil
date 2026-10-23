@@ -9,7 +9,7 @@ on:
 jobs:
   pruebas:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:17
@@ -37,6 +37,7 @@ jobs:
           python3 -m http.server 8765 >/dev/null 2>&1 &
           sleep 1
           node pruebas/humo.js
+          node pruebas/recorrido.js
 
   # Si las pruebas pasan y es la rama principal, instala cil.sql en Supabase (no borra datos).
   # Necesita el secreto SUPABASE_DB_URL (Session pooler). Sin el secreto, este paso no hace nada.
