@@ -347,7 +347,7 @@
         t.atrasadas.map(function (a) { return filaTareaEmpleado(a, true); }).join('') + '</div></section>';
     }
     h += '<section class="bloque"><div class="bloque-head"><h2>Tus tareas de hoy</h2></div>';
-    h += '<p class="regla"><b>Si está en tu lista, es tu responsabilidad.</b> Gerencia puede cambiarla en cualquier momento.' +
+    h += '<p class="regla"><b>Si está en tu lista, es tu responsabilidad.</b> Las tareas se pueden reasignar.' +
       '<span class="regla-2">Durante el día van saliendo más tareas, cada una a su hora.</span></p>';
     h += t.hoy.length ? '<div class="lista">' + t.hoy.map(function (a) { return filaTareaEmpleado(a, false); }).join('') + '</div>'
       : '<p class="vacio muted">No tienes tareas asignadas hoy.</p>';
