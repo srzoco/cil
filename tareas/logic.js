@@ -487,6 +487,8 @@
         nuevas.push(a);
       });
       }
+      // Sin duplicados: la vez anterior que quedó sin hacer vence al salir la nueva (queda en el historial como no hecha)
+      db.asignaciones.forEach(function (a) { if (a.plantilla_id === p.id && a.fecha < f && a.estado === 'pendiente' && (a.arrastra || a.oculta)) { a.arrastra = false; a.oculta = false; } });
     });
     return nuevas;
   }

@@ -533,9 +533,10 @@ language plpgsql security definer set search_path = public as $$
 declare
   f date := coalesce(p_fecha, public.hoy());
   p public.plantillas;
-  quien uuid; mot text; n int := 0; nueva uuid; i int; nm int; m jsonb; pu int; elegidos uuid[];
+  quien uuid; mot text; n int := 0; n0 int; nueva uuid; i int; nm int; m jsonb; pu int; elegidos uuid[];
 begin
-  if auth.uid() is null then raise exception 'Inicia sesión.'; end if;
+  -- el reloj de avisos la llama sin usuario (marca cil.interno) para que las tareas existan aunque nadie abra la app
+  if auth.uid() is null and coalesce(current_setting('cil.interno', true), '') <> '1' then raise exception 'Inicia sesión.'; end if;
   if f <> public.hoy() and not public.es_admin() then raise exception 'Solo gerencia puede generar otros días.'; end if;
   perform pg_advisory_xact_lock(hashtext('generar_dia:' || f::text));
 
@@ -547,7 +548,7 @@ begin
              (cardinality(pl.solo_pueden) = 0 and cardinality(pl.grupos) = 0), cardinality(pl.solo_pueden),
              pl.minutos * greatest(1, jsonb_array_length(pl.momentos)) desc, pl.titulo
   loop
-    elegidos := '{}';
+    elegidos := '{}'; n0 := n;
     for pu in 0 .. greatest(1, least(5, p.personas)) - 1 loop
     if p.frecuencia = 'unica' and p.al_pool then quien := null; mot := 'pool';
     elsif p.frecuencia = 'unica' and p.asignar_a is not null and pu = 0 then quien := p.asignar_a; mot := 'fija';
@@ -572,6 +573,11 @@ begin
       end if;
     end loop;
     end loop;
+    -- Sin duplicados: la vez anterior que quedó sin hacer vence al salir la nueva (queda en el historial como no hecha)
+    if n > n0 then
+      update asignaciones set arrastra = false, oculta = false
+      where plantilla_id = p.id and fecha < f and estado = 'pendiente' and (arrastra or oculta);
+    end if;
   end loop;
   return n;
 end $$;
@@ -786,6 +792,8 @@ create or replace function public.marcar_llegada(p_lat double precision default 
 language plpgsql security definer set search_path = public as $$
 declare v json; v_ip text := public._ip_cliente(); nom text; nuevo uuid;
 begin
+  -- solo quien tiene el acceso «Tareas» y está activo (al desactivar a alguien, su sesión puede durar hasta 1 hora)
+  if not public.tiene_acceso('tareas') then raise exception 'No tienes acceso a Tareas.'; end if;
   if not exists (select 1 from personas where id = auth.uid() and activo) then raise exception 'Tu usuario no está activo.'; end if;
   if exists (select 1 from asistencia where persona_id = auth.uid() and fecha = public.hoy() and estado = 'presente') then
     return public._llegada(auth.uid());
@@ -871,6 +879,8 @@ create or replace function public._hecha(p_id uuid, p_hecha boolean, p_con_regis
 language plpgsql security definer set search_path = public as $$
 declare a public.asignaciones; adm boolean := public.es_admin(); p public.plantillas; t time; quien uuid;
 begin
+  -- solo quien tiene el acceso «Tareas» y está activo (al desactivar a alguien, su sesión puede durar hasta 1 hora)
+  if not public.tiene_acceso('tareas') then raise exception 'No tienes acceso a Tareas.'; end if;
   select * into a from asignaciones where id = p_id for update;
   if a.id is null then raise exception 'Esa tarea ya no existe.'; end if;
   if not adm and a.asignado_a is distinct from auth.uid() then raise exception 'Esa tarea no está asignada a ti.'; end if;
@@ -953,6 +963,8 @@ create or replace function public.registrar_lecturas(p_id uuid, p_lecturas jsonb
 language plpgsql security definer set search_path = public as $$
 declare a public.asignaciones; p public.plantillas; e record; l jsonb; temp numeric; est text; nota text; fuera boolean; nfuera int := 0;
 begin
+  -- solo quien tiene el acceso «Tareas» y está activo (al desactivar a alguien, su sesión puede durar hasta 1 hora)
+  if not public.tiene_acceso('tareas') then raise exception 'No tienes acceso a Tareas.'; end if;
   select * into a from asignaciones where id = p_id;
   if a.id is null then raise exception 'Esa tarea ya no existe.'; end if;
   if not a.registro then raise exception 'Esa tarea no pide temperaturas.'; end if;
@@ -992,6 +1004,8 @@ create or replace function public.justificar(p_id uuid, p_texto text) returns vo
 language plpgsql security definer set search_path = public as $$
 declare a public.asignaciones; adm boolean := public.es_admin();
 begin
+  -- solo quien tiene el acceso «Tareas» y está activo (al desactivar a alguien, su sesión puede durar hasta 1 hora)
+  if not public.tiene_acceso('tareas') then raise exception 'No tienes acceso a Tareas.'; end if;
   if length(trim(coalesce(p_texto, ''))) < 3 then raise exception 'Escribe el motivo.'; end if;
   select * into a from asignaciones where id = p_id for update;
   if a.id is null then raise exception 'Esa tarea ya no existe.'; end if;
@@ -1083,6 +1097,8 @@ create or replace function public.tomar_del_pool(p_id uuid) returns void
 language plpgsql security definer set search_path = public as $$
 declare a public.asignaciones;
 begin
+  -- solo quien tiene el acceso «Tareas» y está activo (al desactivar a alguien, su sesión puede durar hasta 1 hora)
+  if not public.tiene_acceso('tareas') then raise exception 'No tienes acceso a Tareas.'; end if;
   if not (select pool_activo from tareas_ajustes where id = 1) then raise exception 'El pool está desactivado.'; end if;
   select * into a from asignaciones where id = p_id for update;
   if a.id is null or a.asignado_a is not null or a.estado <> 'pendiente' or a.fecha > public.hoy() or (a.fecha < public.hoy() and not a.arrastra) then
@@ -1115,8 +1131,9 @@ begin
     continue when a.id is null or a.estado <> 'pendiente';
     nuevo := nullif(it->>'a', '')::uuid;
     continue when nuevo is not distinct from a.asignado_a;
-    if nuevo is not null and not exists (select 1 from personas where id = nuevo and activo) then
-      raise exception 'Esa persona no está activa.';
+    -- sin huérfanas: solo a alguien activo que entra a Tareas
+    if nuevo is not null and not exists (select 1 from personas where id = nuevo and activo and (rol = 'admin' or 'tareas' = any (accesos))) then
+      raise exception 'Esa persona no está activa o no entra a Tareas.';
     end if;
     update asignaciones set
       asignado_a = nuevo,
@@ -1134,6 +1151,8 @@ create or replace function public.marcar_salida(p_motivo text default null) retu
 language plpgsql security definer set search_path = public as $$
 declare s public.asistencia;
 begin
+  -- solo quien tiene el acceso «Tareas» y está activo (al desactivar a alguien, su sesión puede durar hasta 1 hora)
+  if not public.tiene_acceso('tareas') then raise exception 'No tienes acceso a Tareas.'; end if;
   select * into s from asistencia where persona_id = auth.uid() and fecha = public.hoy() for update;
   if s.persona_id is null or s.estado <> 'presente' then raise exception 'Primero marca «Llegué».'; end if;
   if s.salida is not null then return json_build_object('salida', s.salida, 'ya', true); end if;
@@ -1240,6 +1259,8 @@ create or replace function public.marcar_fuera(p_fuera boolean) returns json
 language plpgsql security definer set search_path = public as $$
 declare abierta public.salidas_rato;
 begin
+  -- solo quien tiene el acceso «Tareas» y está activo (al desactivar a alguien, su sesión puede durar hasta 1 hora)
+  if not public.tiene_acceso('tareas') then raise exception 'No tienes acceso a Tareas.'; end if;
   if not (select usar_salidas from tareas_ajustes where id = 1) then raise exception 'Esa opción está apagada.'; end if;
   if p_fuera and not coalesce((select despacha from personas where id = auth.uid()), false) then raise exception 'Esa opción es solo para quien despacha.'; end if;
   if not exists (select 1 from asistencia where persona_id = auth.uid() and fecha = public.hoy() and estado = 'presente') then
@@ -1270,6 +1291,8 @@ create or replace function public.rescatar(p_id uuid) returns json
 language plpgsql security definer set search_path = public as $$
 declare a public.asignaciones; pe public.personas; p public.plantillas; inc boolean;
 begin
+  -- solo quien tiene el acceso «Tareas» y está activo (al desactivar a alguien, su sesión puede durar hasta 1 hora)
+  if not public.tiene_acceso('tareas') then raise exception 'No tienes acceso a Tareas.'; end if;
   select * into a from asignaciones where id = p_id for update;
   if a.id is null then raise exception 'Esa tarea ya no existe.'; end if;
   if a.asignado_a = auth.uid() then raise exception 'Esa tarea ya es tuya.'; end if;
@@ -1573,6 +1596,9 @@ begin
   if not public.es_admin() then raise exception 'Solo gerencia.'; end if;
   select * into a from asignaciones where id = p_id;
   if a.id is null then raise exception 'Esa tarea ya no existe.'; end if;
+  if p_persona is not null and not exists (select 1 from personas where id = p_persona and activo and (rol = 'admin' or 'tareas' = any (accesos))) then
+    raise exception 'Esa persona no está activa o no entra a Tareas.';
+  end if;
   -- si es de un día anterior, queda como atrasada para que aparezca en su lista
   update asignaciones set oculta = false, asignado_a = coalesce(p_persona, asignado_a), arrastra = arrastra or fecha < public.hoy() where id = p_id;
   if p_persona is not null and p_persona is distinct from a.asignado_a then
@@ -1602,6 +1628,8 @@ create or replace function public.marcar_almuerzo(p_persona uuid default null, p
 language plpgsql security definer set search_path = public as $$
 declare quien uuid := coalesce(p_persona, auth.uid()); s public.asistencia; otros json;
 begin
+  -- solo quien tiene el acceso «Tareas» y está activo (al desactivar a alguien, su sesión puede durar hasta 1 hora)
+  if not public.tiene_acceso('tareas') then raise exception 'No tienes acceso a Tareas.'; end if;
   if quien <> auth.uid() and not public.es_admin() then raise exception 'Solo gerencia puede marcarlo por otra persona.'; end if;
   if not (select usar_almuerzo from tareas_ajustes where id = 1) and not public.es_admin() then raise exception 'Esa opción está apagada.'; end if;
   select * into s from asistencia where persona_id = quien and fecha = public.hoy() for update;
@@ -1683,10 +1711,23 @@ begin
     if to_regclass('auth.sessions') is not null then execute 'delete from auth.sessions where user_id = $1' using new.id; end if;
     if to_regclass('auth.refresh_tokens') is not null then execute 'delete from auth.refresh_tokens where user_id = $1::text' using new.id; end if;
   end if;
+  -- Que no queden tareas huérfanas: si deja de estar activo, pierde el acceso a Tareas o cambia de local,
+  -- lo que tenga pendiente (de hoy en adelante o atrasado) queda «sin asignar» para que gerencia lo reparta.
+  if (old.activo and not new.activo)
+     or ('tareas' = any (old.accesos) and not 'tareas' = any (new.accesos) and new.rol = 'empleado')
+     or (old.local_id is distinct from new.local_id) then
+    with sueltas as (
+      update asignaciones a set asignado_a = null
+      where a.asignado_a = new.id and a.estado = 'pendiente' and (a.fecha >= public.hoy() or a.arrastra)
+        and (old.local_id is not distinct from new.local_id or a.local_id is distinct from new.local_id
+             or not new.activo or not 'tareas' = any (new.accesos))
+      returning a.id)
+    insert into tareas_eventos (asignacion_id, tipo, de, a, texto) select id, 'reasignada', new.id, null, 'sin asignar' from sueltas;
+  end if;
   return new;
 end $$;
 drop trigger if exists personas_al_desactivar on public.personas;
-create trigger personas_al_desactivar after update of activo on public.personas for each row execute function public._al_desactivar();
+create trigger personas_al_desactivar after update of activo, accesos, local_id on public.personas for each row execute function public._al_desactivar();
 
 -- Gerencia cambia la clave de un empleado (sin correo: se la dice en persona).
 create extension if not exists pgcrypto with schema extensions;
@@ -1716,6 +1757,10 @@ begin
       and a.estado = 'pendiente' and (a.fecha >= hoy or a.arrastra);
     update personas set activo = false where activo and hasta is not null and hasta < hoy;
   end if;
+  -- Las tareas del día existen aunque nadie haya abierto la app (para avisar «Te toca» y repartir faltas)
+  perform set_config('cil.interno', '1', true);
+  perform public.generar_dia(hoy);
+  perform set_config('cil.interno', '', true);
   perform public.repartir_faltas();
   create temp table if not exists _avisos (persona_id uuid, clave text, titulo text, cuerpo text, url text) on commit drop;
   delete from _avisos where true;

@@ -1929,7 +1929,8 @@
       if (!patch.nombre) { aviso('Escribe el nombre.'); return; }
       // Si deja de estar activa o cambia de local, sus tareas pendientes quedan «sin asignar» para que gerencia las reparta.
       var antes = persona(pid), sueltas = [];
-      if (antes && antes.rol === 'empleado' && ((patch.activo === false && antes.activo) || (patch.local_id && patch.local_id !== localDe(antes)))) {
+      var pierdeTareas = !!(antes && patch.accesos) && (antes.accesos || []).indexOf('tareas') >= 0 && patch.accesos.indexOf('tareas') < 0;
+      if (antes && antes.rol === 'empleado' && ((patch.activo === false && antes.activo) || pierdeTareas || (patch.local_id && patch.local_id !== localDe(antes)))) {
         sueltas = db().asignaciones.filter(function (x) { return x.asignado_a === pid && x.estado === 'pendiente' && (x.fecha >= S.hoy || x.arrastra); });
       }
       var pp = store.actualizar('personas', pid, patch);
