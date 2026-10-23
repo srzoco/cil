@@ -647,17 +647,21 @@
     var d = db(), modo = q.get('ver') === 'unica' ? 'unica' : 'rec';
     var loc = q.get('local') && L.localDe(d, q.get('local')) ? q.get('local') : localElegido();
     var emps = loc ? empleadosDe(loc) : empleados();
-    var tipica = L.cargaTipica(d, S.hoy, loc);
-    var porPersona = emps.length ? Math.round(tipica / emps.length) : 0;
     var delLocal = d.plantillas.filter(function (p) { return !loc || (p.local_id || (L.localPrincipal(d) || {}).id) === loc; });
     var totalLocal = delLocal.length, fil = filtrosTareas(q, emps);
     delLocal = delLocal.filter(fil.pasa);
+    // Los totales siguen los filtros: solo esas tareas, ese día de la semana y esas personas (o las de esos grupos)
+    var tipica = L.cargaTipica(d, S.hoy, loc, fil.activo ? fil.pasa : null, fil.dia);
+    var gente = fil.gente(emps);
+    var porPersona = gente.length ? Math.round(tipica / gente.length) : 0;
+    var DIA_TXT = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
     var h = '<h1>Tareas</h1>';
     h += tabsLocales('/tareas' + (modo === 'unica' ? '?ver=unica' : ''), loc);
-    h += '<div class="kpis"><div class="kpi"><b>' + esc(L.minutosTxt(tipica)) + '</b><span>de trabajo un día normal</span></div>' +
-      '<div class="kpi"><b>' + esc(L.minutosTxt(porPersona)) + '</b><span>por persona (' + plural(emps.length, 'activo', 'activos') + ') de ' + esc(L.minutosTxt(aj().minutos_jornada)) + '</span></div></div>';
-    if (emps.length && porPersona > aj().minutos_jornada * 0.85) h += '<p class="nota alerta-nota">Con esta carga casi no queda margen: si falta alguien, no da el tiempo. Revisa minutos o frecuencias.</p>';
-    else if (emps.length && porPersona < aj().minutos_jornada * 0.5) h += '<p class="nota">Las tareas registradas ocupan menos de la mitad de la jornada. Si hay trabajo que no está aquí, agrégalo: lo que no está en la app no se puede exigir.</p>';
+    h += '<div class="kpis"><div class="kpi"><b>' + esc(L.minutosTxt(tipica)) + '</b><span>de trabajo ' + (fil.dia != null ? 'un ' + DIA_TXT[fil.dia] : 'un día') + ' normal' + (fil.activo ? ' (con los filtros)' : '') + '</span></div>' +
+      '<div class="kpi"><b>' + esc(L.minutosTxt(porPersona)) + '</b><span>por persona (' + plural(gente.length, fil.activo ? 'persona' : 'activo', fil.activo ? 'personas' : 'activos') + ') de ' + esc(L.minutosTxt(aj().minutos_jornada)) + '</span></div></div>';
+    // con filtros, los avisos de carga general no aplican
+    if (!fil.activo && emps.length && porPersona > aj().minutos_jornada * 0.85) h += '<p class="nota alerta-nota">Con esta carga casi no queda margen: si falta alguien, no da el tiempo. Revisa minutos o frecuencias.</p>';
+    else if (!fil.activo && emps.length && porPersona < aj().minutos_jornada * 0.5) h += '<p class="nota">Las tareas registradas ocupan menos de la mitad de la jornada. Si hay trabajo que no está aquí, agrégalo: lo que no está en la app no se puede exigir.</p>';
 
     var balLoc = loc || ((L.localPrincipal(d) || {}).id), sobre = balLoc ? L.sobrecargados(L.balance(d, balLoc, S.hoy, 28)) : [];
     h += '<a class="card enlace-card' + (sobre.length ? ' alerta-card' : '') + '" href="#/balance' + (loc ? '?local=' + loc : '') + '"><b>Balance de carga</b><span class="muted">' +
@@ -715,7 +719,13 @@
       '<div class="filtros-tareas">' +
       '<select data-cambio="filtro-tareas" data-f="d" aria-label="Día">' + opt('', 'Día', dd) + [1, 2, 3, 4, 5, 6, 0].map(function (x) { return opt(String(x), ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'][x], dd); }).join('') + '</select>' +
       '</div>';
-    return { pasa: pasa, html: html, activo: !!(gs.length || pes.length || diaN != null) };
+    // A quiénes se reparte: las personas elegidas; si no, las de los grupos elegidos; si no, todos
+    var gente = function (emps) {
+      if (pes.length) return pes;
+      if (gs.length) return emps.filter(function (x) { return (x.grupos || []).some(function (g) { return gs.indexOf(g) >= 0; }); });
+      return emps;
+    };
+    return { pasa: pasa, html: html, activo: !!(gs.length || pes.length || diaN != null), dia: diaN, gente: gente };
   }
   function cambiarFiltroTareas(f, v) {
     var hs = location.hash.replace(/^#/, ''), i = hs.indexOf('?'), ruta = i < 0 ? hs : hs.slice(0, i);

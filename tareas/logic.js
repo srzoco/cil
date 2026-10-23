@@ -724,14 +724,17 @@
   }
 
   // Carga típica: minutos que toca hacer cada día laborable en promedio (próximas 4 semanas)
-  function cargaTipica(db, desde, localId) {
+  // Minutos de un día normal en las próximas 4 semanas. filtro(p): solo esas tareas; dia (0-6): solo ese día de la semana.
+  // Una tarea de varias personas cuenta sus minutos por cada persona.
+  function cargaTipica(db, desde, localId, filtro, dia) {
     var esLab = laborableFn(db, localId), total = 0, dias = 0;
     for (var i = 0; i < 28; i++) {
       var f = addDias(desde, i);
-      if (!esLab(f)) continue;
+      if (!esLab(f) || (dia != null && dow(f) !== dia)) continue;
       dias++;
       db.plantillas.forEach(function (p) {
-        if (p.activa && p.frecuencia !== 'unica' && (!localId || p.local_id === localId) && toca(p, f, esLab)) total += p.minutos * Math.max(1, (p.momentos || []).length);
+        if (p.activa && p.frecuencia !== 'unica' && (!localId || p.local_id === localId) && (!filtro || filtro(p)) && toca(p, f, esLab))
+          total += p.minutos * Math.max(1, (p.momentos || []).length) * personasDe(p);
       });
     }
     return dias ? Math.round(total / dias) : 0;
