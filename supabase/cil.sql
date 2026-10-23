@@ -344,6 +344,9 @@ begin
 end $$;
 drop trigger if exists plantillas_local on public.plantillas;
 create trigger plantillas_local before insert on public.plantillas for each row execute function public._con_local();
+-- Toda persona tiene local (si se borra su local o se crea sin él, queda en el principal): sin local no trabaja ningún día
+drop trigger if exists personas_local on public.personas;
+create trigger personas_local before insert or update of local_id on public.personas for each row execute function public._con_local();
 
 -- =====================================================================
 --  Reglas de calendario
