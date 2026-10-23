@@ -688,11 +688,12 @@
   // Filtros de la lista de tareas: grupo, persona (lo que le puede tocar) y día de la semana. Van en la dirección (?g=&p=&d=).
   function filtrosTareas(q, emps) {
     // g: uno o varios grupos separados por coma (muestra las tareas de cualquiera de ellos)
-    var d = db(), gs = (q.get('g') || '').split(',').filter(Boolean), pid = q.get('p') || '', dd = q.get('d') || '';
-    var pe = pid ? persona(pid) : null, diaN = dd === '' ? null : Number(dd);
+    var d = db(), gs = (q.get('g') || '').split(',').filter(Boolean), dd = q.get('d') || '';
+    // p: una o varias personas (muestra lo que le puede tocar a cualquiera de ellas)
+    var pes = (q.get('p') || '').split(',').map(persona).filter(Boolean), diaN = dd === '' ? null : Number(dd);
     var pasa = function (p) {
       if (gs.length && !(p.grupos || []).some(function (x) { return gs.indexOf(x) >= 0; })) return false;
-      if (pe && !(p.asignar_a === pe.id || L.puedeSegun(p, pe))) return false;
+      if (pes.length && !pes.some(function (pe) { return p.asignar_a === pe.id || L.puedeSegun(p, pe); })) return false;
       if (diaN != null) {
         if (p.frecuencia === 'unica') return L.dow(p.fecha_unica) === diaN;
         var lab = L.laborableFn(d, p.local_id || (L.localPrincipal(d) || {}).id), f = S.hoy;
@@ -704,14 +705,16 @@
       return true;
     };
     var opt = function (v, t, sel) { return '<option value="' + esc(v) + '"' + (v === sel ? ' selected' : '') + '>' + esc(t) + '</option>'; };
-    var html = (grupos().length ? '<div class="filtro-grupos" role="group" aria-label="Grupos">' + grupos().map(function (x) {
+    var html = (grupos().length ? '<div class="filtro-grupos" role="group" aria-label="Grupos"><span class="filtro-tit">Grupos</span>' + grupos().map(function (x) {
         return '<label class="chip-r"><input type="checkbox" data-cambio="filtro-grupo" value="' + esc(x.id) + '"' + (gs.indexOf(x.id) >= 0 ? ' checked' : '') + '><span>' + esc(x.nombre) + '</span></label>';
       }).join('') + '</div>' : '') +
+      '<div class="filtro-grupos" role="group" aria-label="Personas"><span class="filtro-tit">Personas</span>' + emps.map(function (x) {
+        return '<label class="chip-r"><input type="checkbox" data-cambio="filtro-persona" value="' + esc(x.id) + '"' + (pes.some(function (y) { return y.id === x.id; }) ? ' checked' : '') + '><span>' + esc(x.nombre || x.email) + '</span></label>';
+      }).join('') + '</div>' +
       '<div class="filtros-tareas">' +
-      '<select data-cambio="filtro-tareas" data-f="p" aria-label="Persona">' + opt('', 'Persona', pid) + emps.map(function (x) { return opt(x.id, x.nombre || x.email, pid); }).join('') + '</select>' +
       '<select data-cambio="filtro-tareas" data-f="d" aria-label="Día">' + opt('', 'Día', dd) + [1, 2, 3, 4, 5, 6, 0].map(function (x) { return opt(String(x), ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'][x], dd); }).join('') + '</select>' +
       '</div>';
-    return { pasa: pasa, html: html, activo: !!(gs.length || pe || diaN != null) };
+    return { pasa: pasa, html: html, activo: !!(gs.length || pes.length || diaN != null) };
   }
   function cambiarFiltroTareas(f, v) {
     var hs = location.hash.replace(/^#/, ''), i = hs.indexOf('?'), ruta = i < 0 ? hs : hs.slice(0, i);
@@ -1837,7 +1840,7 @@
     if (c === 'demo-usuario') { store.cambiarUsuario(el.value); S.modal = null; location.hash = '/'; recargar(false); }
     else if (c === 'fecha-reporte' && el.value) ir('/reporte?f=' + el.value);
     else if (c === 'filtro-tareas') cambiarFiltroTareas(el.getAttribute('data-f'), el.value);
-    else if (c === 'filtro-grupo') cambiarFiltroTareas('g', [].map.call(document.querySelectorAll('[data-cambio="filtro-grupo"]:checked'), function (x) { return x.value; }).join(','));
+    else if (c === 'filtro-grupo' || c === 'filtro-persona') cambiarFiltroTareas(c === 'filtro-grupo' ? 'g' : 'p', [].map.call(document.querySelectorAll('[data-cambio="' + c + '"]:checked'), function (x) { return x.value; }).join(','));
     else if (c === 'calif') { var rc = el.form.querySelector('.repetir-check'); if (rc) rc.hidden = el.value !== '1'; }
     else if (c === 'demo-fuera') { store.fuera(el.checked); S.red = null; aviso(el.checked ? 'Simulando: fuera de cualquier local.' : 'Simulando: conectado al Wi-Fi.', 'ok'); render(); }
     else if (c === 'frecuencia') {

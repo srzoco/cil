@@ -24,10 +24,8 @@ const RUTAS = ['/', '/tareas', '/tarea/nueva?tipo=unica', '/reporte', '/historia
   }
   // Filtros de Tareas: elegir una persona y un grupo
   await p.goto(BASE + '/tareas/#/tareas'); await p.waitForTimeout(300);
-  const selP = 'select[data-cambio="filtro-tareas"][data-f="p"]';
-  if (!(await p.$(selP))) fallas.push('Falta el filtro de persona');
-  else { const v = await p.$eval(selP, s => s.options[1] && s.options[1].value); if (v) { await p.selectOption(selP, v); await p.waitForTimeout(300); } }
-  if (!/[?&]p=/.test(await p.evaluate(() => location.hash))) fallas.push('El filtro de persona no cambió la dirección');
+  for (const n of [0, 1]) { const c = p.locator('[data-cambio="filtro-persona"]').nth(n); if (await c.count()) { await c.evaluate(el => el.click()); await p.waitForTimeout(400); } }
+  if (!/[?&]p=[^&]*%2C/.test(await p.evaluate(() => location.hash))) fallas.push('El filtro de varias personas no quedó en la dirección');
   // dos grupos a la vez
   for (const n of [0, 1]) { const c = p.locator('[data-cambio="filtro-grupo"]').nth(n); if (await c.count()) { await c.evaluate(el => el.click()); await p.waitForTimeout(400); } }
   const hg = await p.evaluate(() => location.hash);
