@@ -607,3 +607,4 @@ table.temps td.vencida { color: var(--wine); }
 .botones-dia .btn { flex: 1 1 140px; }
 .filtro-grupos { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 0; }
 .filtro-tit { flex-basis: 100%; font-size: .78rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.regla-2 { display: block; margin-top: 8px; }
