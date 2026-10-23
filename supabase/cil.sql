@@ -2049,4 +2049,71 @@ begin
   end if;
 end $$;
 
+-- =====================================================================
+--  Armador de mensajes: productos y precios en la base de datos
+--  Antes se editaban en data.json de GitHub con una clave guardada en cada teléfono. Ahora cualquiera
+--  de gerencia, con su sesión de CIL, los edita sin clave. Leerlos es público (el Armador no pide clave
+--  y los precios ya están en la web). Mientras no se guarde nada aquí, el Armador sigue leyendo data.json.
+-- =====================================================================
+create table if not exists public.armador_datos (
+  id                int primary key default 1 check (id = 1),
+  datos             jsonb,
+  actualizado_en    timestamptz not null default now(),
+  actualizado_por   uuid,
+  -- descuento fijado a mano por gerencia para un día (gana sobre el automático ese día)
+  descuento_manual  numeric(5,2) check (descuento_manual between 0 and 95),
+  descuento_fecha   date,
+  descuento_en      timestamptz
+);
+alter table public.armador_datos enable row level security;
+revoke all on public.armador_datos from anon, authenticated;
+grant select on public.armador_datos to anon, authenticated;
+drop policy if exists armador_ver on public.armador_datos;
+create policy armador_ver on public.armador_datos for select to anon, authenticated using (true);
+
+-- Guarda el catálogo. p_antes = la versión que se tenía al abrir (si alguien guardó en medio, avisa).
+create or replace function public.guardar_armador(p_datos jsonb, p_antes timestamptz default null) returns timestamptz
+language plpgsql security definer set search_path = public as $$
+declare r public.armador_datos; ahora timestamptz := clock_timestamp();
+begin
+  if not public.es_admin() then raise exception 'Solo gerencia puede cambiar productos y precios.'; end if;
+  if p_datos is null or jsonb_typeof(p_datos -> 'productos') <> 'array' then raise exception 'Datos no válidos.'; end if;
+  select * into r from armador_datos where id = 1 for update;
+  if r.id is not null and r.datos is not null and p_antes is distinct from r.actualizado_en then
+    raise exception 'Alguien de gerencia guardó un cambio al mismo tiempo. Recarga la página e intenta de nuevo.';
+  end if;
+  insert into armador_datos (id, datos, actualizado_en, actualizado_por) values (1, p_datos, ahora, auth.uid())
+  on conflict (id) do update set datos = excluded.datos, actualizado_en = excluded.actualizado_en, actualizado_por = excluded.actualizado_por;
+  return ahora;
+end $$;
+
+-- Gerencia fija el descuento de hoy para todo el equipo (null = volver al automático)
+create or replace function public.fijar_descuento(p_valor numeric) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.es_admin() then raise exception 'Solo gerencia puede fijar el descuento.'; end if;
+  if p_valor is not null and (p_valor < 0 or p_valor > 95) then raise exception 'El descuento debe estar entre 0 y 95.'; end if;
+  insert into armador_datos (id, descuento_manual, descuento_fecha, descuento_en) values (1, p_valor, case when p_valor is null then null else public.hoy() end, now())
+  on conflict (id) do update set descuento_manual = excluded.descuento_manual, descuento_fecha = excluded.descuento_fecha, descuento_en = excluded.descuento_en;
+end $$;
+
+-- Gerencia pide recalcular el descuento ahora (usa la clave de GitHub guardada en el Vault: github_mensajes)
+create or replace function public.forzar_tasas() returns void
+language plpgsql security definer set search_path = public as $$
+declare tok text;
+begin
+  if not public.es_admin() then raise exception 'Solo gerencia.'; end if;
+  if to_regclass('vault.decrypted_secrets') is not null then
+    execute 'select decrypted_secret from vault.decrypted_secrets where name = $1' into tok using 'github_mensajes';
+  end if;
+  if tok is null then raise exception 'Falta la clave de GitHub del Armador en Supabase (github_mensajes).'; end if;
+  -- el recálculo reemplaza lo fijado a mano hoy
+  update armador_datos set descuento_manual = null, descuento_fecha = null where id = 1;
+  execute 'select net.http_post(url := $1, headers := $2, body := $3)'
+    using 'https://api.github.com/repos/srzoco/mensajesBF/actions/workflows/tasas.yml/dispatches',
+          jsonb_build_object('Authorization', 'Bearer ' || tok, 'Accept', 'application/vnd.github+json', 'User-Agent', 'cil-supabase', 'Content-Type', 'application/json'),
+          '{"ref":"main","inputs":{"forzar":"true"}}'::jsonb;
+end $$;
+grant execute on function public.guardar_armador(jsonb, timestamptz), public.fijar_descuento(numeric), public.forzar_tasas() to authenticated;
+
 -- Listo. Siguiente paso de la guía: poner tu correo (y los de gerencia) como admin.
