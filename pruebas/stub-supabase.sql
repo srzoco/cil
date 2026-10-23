@@ -8,3 +8,10 @@ create table auth.identities(id uuid primary key, user_id uuid, provider_id text
 create table auth.sessions(id uuid primary key default gen_random_uuid(), user_id uuid);
 create table auth.refresh_tokens(id serial, user_id varchar(255));
 create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('test.uid', true),'')::uuid $$;
+grant usage on schema auth to anon, authenticated;
+grant execute on function auth.uid() to anon, authenticated;
+-- Como Supabase: anon y authenticated tienen todos los permisos sobre las tablas de public y solo las reglas (RLS) los frenan
+grant usage on schema public to anon, authenticated, service_role;
+alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
+alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
+alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
