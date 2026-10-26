@@ -476,7 +476,8 @@
     }
     if (sug.sinCobertura && sug.sinCobertura.length) {
       var deQuien = sug.sinCobertura.reduce(function (acc, it) { if (acc.indexOf(it.de) < 0) acc.push(it.de); return acc; }, []);
-      h += '<p class="nota">' + esc(deQuien.map(nombreDe).join(' y ')) + ' no vino: ' + plural(sug.sinCobertura.length, 'tarea queda', 'tareas quedan') +
+      var nomsQ = deQuien.map(nombreDe), listaQ = nomsQ.length > 1 ? nomsQ.slice(0, -1).join(', ') + ' y ' + nomsQ[nomsQ.length - 1] : nomsQ[0];
+      h += '<p class="nota">' + esc(listaQ) + (nomsQ.length > 1 ? ' no vinieron: ' : ' no vino: ') + plural(sug.sinCobertura.length, 'tarea queda', 'tareas quedan') +
         ' pendiente' + (sug.sinCobertura.length === 1 ? '' : 's') + ' porque nadie más de este local puede hacerla' + (sug.sinCobertura.length === 1 ? '' : 's') + '.</p>';
     }
     if (!sug.items.length && !paso && marcados < trabajan.length) {
