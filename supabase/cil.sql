@@ -1399,6 +1399,7 @@ begin
     'redes_nuevas', (select coalesce(json_agg(json_build_object('id', r.id, 'ip', r.ip, 'persona_id', r.persona_id, 'creado_en', r.creado_en) order by r.creado_en desc), '[]'::json)
                      from redes_nuevas r where r.fecha >= hoy - 3),
     'con_avisos', public._con_avisos(),
+    'avisos_tel', public._avisos_tel(),
     'consumo', public.consumo_datos(),
     'personas', (select coalesce(json_agg(x order by x.nombre), '[]'::json) from personas x),
     'ajustes', (select row_to_json(x) from tareas_ajustes x where x.id = 1),
@@ -1459,13 +1460,31 @@ language sql security definer set search_path = public as $$
   delete from suscripciones where endpoint = p_endpoint and (persona_id = auth.uid() or public.es_admin())
 $$;
 
--- Gerencia: mandarse un aviso de prueba (sale en el próximo minuto)
-create or replace function public.aviso_prueba() returns void
+-- Mandarse un aviso de prueba (sale en el próximo minuto). Gerencia también se lo puede mandar a otra persona.
+drop function if exists public.aviso_prueba();
+create or replace function public.aviso_prueba(p_persona uuid default null) returns void
 language plpgsql security definer set search_path = public as $$
+declare quien uuid := coalesce(p_persona, auth.uid()); nom text;
 begin
   if not exists (select 1 from personas where id = auth.uid() and activo) then raise exception 'Tu usuario no está activo.'; end if;
-  if not exists (select 1 from suscripciones where persona_id = auth.uid()) then raise exception 'Primero activa los avisos en este teléfono.'; end if;
-  insert into avisos_cola (persona_id, titulo, cuerpo) values (auth.uid(), 'Aviso de prueba', 'Si ves esto, los avisos funcionan.');
+  if quien <> auth.uid() and not public.es_admin() then raise exception 'No tienes permiso para hacer eso.'; end if;
+  select nombre into nom from personas where id = quien and activo;
+  if not found then raise exception 'Esa persona no está activa.'; end if;
+  if not exists (select 1 from suscripciones where persona_id = quien) then
+    if quien = auth.uid() then raise exception 'Primero activa los avisos en este teléfono.'; end if;
+    raise exception '% no tiene los avisos activados en ningún teléfono.', coalesce(nom, 'Esa persona');
+  end if;
+  insert into avisos_cola (persona_id, titulo, cuerpo) values (quien, 'Aviso de prueba',
+    case when quien = auth.uid() then 'Si ves esto, los avisos funcionan.' else 'Te lo mandó gerencia. Si ves esto, los avisos funcionan.' end);
+end $$;
+
+-- Gerencia: en cuántos teléfonos tiene cada quien los avisos y cuándo los activó por última vez
+create or replace function public._avisos_tel() returns json
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.es_admin() then return '{}'::json; end if;
+  return (select coalesce(json_object_agg(z.persona_id, json_build_object('n', z.n, 'desde', z.desde)), '{}'::json)
+          from (select s.persona_id, count(*) n, max(s.creado_en) desde from suscripciones s group by s.persona_id) z);
 end $$;
 
 -- =====================================================================
@@ -2000,11 +2019,11 @@ grant execute on function public.hoy(), public.es_admin(), public.tiene_acceso(t
   public.asignar_revisiones(), public.calificar(uuid, int, text, boolean),
   public.marcar_salida(text), public.datos_app(boolean), public.mi_puntualidad(), public.registrar_lecturas(uuid, jsonb),
   public.marcar_fuera(boolean), public.rescatar(uuid),
-  public.guardar_suscripcion(text, text, text), public.borrar_suscripcion(text), public.aviso_prueba(), public.cambiar_clave(uuid, text),
+  public.guardar_suscripcion(text, text, text), public.borrar_suscripcion(text), public.aviso_prueba(uuid), public.cambiar_clave(uuid, text),
   public.crear_persona(text, text, text, uuid, text[], text), public.menu_pendientes(), public.aprobar_oculta(uuid, uuid), public.reprogramar_oculta(uuid, date),
   public.marcar_almuerzo(uuid, boolean, boolean), public.mi_grupo_almorzando(),
   -- las llama datos_app, que corre con los permisos de quien entra
-  public._companeros(date), public._con_avisos(), public.repartir_faltas() to authenticated;
+  public._companeros(date), public._con_avisos(), public._avisos_tel(), public.repartir_faltas() to authenticated;
 -- Solo la función del servidor (avisos) puede pedir los avisos pendientes
 do $$ begin
   if exists (select 1 from pg_roles where rolname = 'service_role') then

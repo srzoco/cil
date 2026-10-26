@@ -1766,6 +1766,17 @@
     ejecutar(p, msg);
   }
 
+  // Gerencia: si a alguien no le llegan los avisos, le manda uno de prueba y ve si su teléfono lo rechazó
+  function bloqueAvisosDe(pe) {
+    var t = (S.data.avisos_tel || {})[pe.id];
+    var h = '<div class="bloque-avisos"><h3>Avisos</h3>';
+    if (!t) return h + '<p class="ayuda">No tiene los avisos activados en ningún teléfono. Que entre a la app en su teléfono y toque «Activar avisos».</p></div>';
+    h += '<p>Activados en ' + (t.n === 1 ? '1 teléfono' : t.n + ' teléfonos') + (t.desde ? ' <small class="muted">(último: ' + esc(L.fmtFecha(L.hoyISO(new Date(t.desde)))) + ', ' + esc(L.fmtHora(t.desde)) + ')</small>' : '') + '</p>' +
+      '<div class="acciones"><button class="btn sec" type="button" data-acc="aviso-prueba-a" data-id="' + esc(pe.id) + '">Mandarle un aviso de prueba</button></div>' +
+      '<p class="ayuda">Le llega en menos de un minuto. Si no le llega, vuelve a abrir esta ficha en 3 minutos: si ahora dice que no tiene avisos, su teléfono lo rechazó y debe tocar «Activar avisos» otra vez. Si sigue diciendo «Activados», el aviso salió bien y lo está bloqueando su teléfono: revisa con él los permisos de notificaciones.</p></div>';
+    return h;
+  }
+
   function modalPersona(id) {
     var pe = persona(id); if (!pe) return '';
     var soyYo = pe.id === yo().id;
@@ -1807,6 +1818,7 @@
       (soyYo ? '<p class="ayuda">No puedes quitarte el rol ni desactivarte a ti misma.</p>' : '') +
       '<div class="acciones"><button class="btn grande" type="submit">Guardar</button></div></form>' +
       (pe.rol === 'empleado' ? bloqueLibres(pe) : '') +
+      (store.modo === 'supabase' && pe.activo ? bloqueAvisosDe(pe) : '') +
       (store.modo === 'supabase' && (pe.rol !== 'admin' || soyYo) ? '<form data-form="clave" data-id="' + esc(pe.id) + '"><h3>Cambiar clave</h3>' +
         '<label class="campo">Clave nueva <small>(mínimo 8 caracteres; dísela en persona)</small><input name="clave" type="text" minlength="8" required autocomplete="off" autocapitalize="off" spellcheck="false"></label>' +
         '<div class="acciones"><button class="btn sec" type="submit">Cambiar clave</button></div></form>' : '');
@@ -1857,6 +1869,7 @@
     else if (acc === 'me-voy') abrirModal({ tipo: 'salida' });
     else if (acc === 'activar-avisos') activarAvisos();
     else if (acc === 'aviso-prueba') ejecutar(store.rpc('aviso_prueba', {}), 'Listo: te debería llegar en menos de un minuto.');
+    else if (acc === 'aviso-prueba-a') ejecutar(store.rpc('aviso_prueba', { p_persona: id }), 'Listo: le debería llegar en menos de un minuto.', true);
     else if (acc === 'generar-claves') generarClaves();
     else if (acc === 'fuera') ejecutar(store.rpc('marcar_fuera', { p_fuera: el.getAttribute('data-v') === '1' }), el.getAttribute('data-v') === '1' ? 'Marcado: estás fuera. Toca «Volví» al regresar.' : 'Listo, ya estás de vuelta.');
     else if (acc === 'rescatar') ejecutar(store.rpc('rescatar', { p_id: id }), 'Es tuya. Hazla ya: está en tu lista.');
