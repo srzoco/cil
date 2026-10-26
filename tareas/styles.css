@@ -608,3 +608,22 @@ table.temps td.vencida { color: var(--wine); }
 .filtro-grupos { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 0; }
 .filtro-tit { flex-basis: 100%; font-size: .78rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 .regla-2 { display: block; margin-top: 8px; }
+/* Consumibles */
+.pedir-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+.pedir { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; text-align: left; padding: 12px 14px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; cursor: pointer; min-height: 64px; }
+.pedir b { font-size: 1rem; }
+.pedir span { font-size: .85rem; color: var(--muted); }
+button.pedir span { color: var(--accent); font-weight: 600; }
+.pedir.pedido { border-style: dashed; cursor: default; }
+.pedir .btn.link { padding: 0; min-height: 0; }
+.cons-card { display: flex; flex-direction: column; gap: 6px; }
+.cons-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.cons-nombre { font-size: 1.05rem; }
+.cons-stock { text-align: right; display: flex; flex-direction: column; }
+.cons-stock b { font: 400 1.8rem/1 var(--serif, Gloock, Georgia, serif); }
+.cons-stock span { font-size: .8rem; color: var(--muted); }
+.cons-meta { margin: 0; font-size: .88rem; color: var(--muted); }
+.cons-botones { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.receta { background: var(--surface-2, rgba(0,30,84,.06)); border-radius: 12px; padding: 10px 14px; margin: 8px 0 12px; }
+.receta p { margin: 4px 0; }
+.receta-tit { font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }

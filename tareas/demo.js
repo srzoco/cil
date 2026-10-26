@@ -49,6 +49,13 @@
         dia_mes: null, fecha_inicio: inicio, fecha_unica: null, solo_pueden: [], asignar_a: null, al_pool: false, activa: true,
         momentos: [], grupos: [], local_id: principal.id, creado_por: sara.id, creado_en: new Date().toISOString() }, extra || {});
     }
+    var consumibles = [
+      { id: id('c'), local_id: principal.id, nombre: 'Lavaplatos', unidad: 'galón', stock: 3, minimo: 1, activo: true, orden: 1 },
+      { id: id('c'), local_id: principal.id, nombre: 'Desinfectante', unidad: 'litro', stock: 8, minimo: 2, activo: true, orden: 2 },
+      { id: id('c'), local_id: principal.id, nombre: 'Café', unidad: 'paquete de 500 g', stock: 4, minimo: 1, activo: true, orden: 3,
+        vasitos_por_taza: 0.2, vasitos_por_unidad: 20, agua_ml_por_taza: 150 },
+      { id: id('c'), local_id: principal.id, nombre: 'Tirro', unidad: 'rollo', stock: 6, minimo: 2, activo: true, orden: 4 }
+    ];
     var plantillas = [
       pl('Barrer y coletear el local', 30, 'diaria', { detalle: 'Incluye detrás de las neveras y la entrada.' }),
       pl('Limpiar neveras exhibidoras', 45, 'diaria', { detalle: 'Vidrio por dentro y por fuera, bandejas y empaques.', grupos: [gLimpieza.id] }),
@@ -67,6 +74,7 @@
       pl('Registrar temperaturas', 5, 'diaria', { registro: true, detalle: 'Mira el termómetro de cada equipo y anota si está en defrost.',
         momentos: [{ nombre: 'apertura', desde: '08:30', antes: '09:00' }, { nombre: 'mediodía', desde: '13:00', antes: '13:30' }, { nombre: 'tarde', desde: '16:00', antes: '16:30' }] }),
       pl('Prender contenedores', 5, 'diaria', { seguimiento_titulo: 'Apagar contenedores', seguimiento_despues: 45, seguimiento_minutos: 5 }),
+      pl('Hacer café', 10, 'diaria', { consumible_id: consumibles[2].id, momentos: [{ nombre: '', antes: '10:00' }] }),
       pl('Fregar', 20, 'diaria', { detalle: 'Platos, vasos y la cafetera.', momentos: [{ nombre: 'después del desayuno', antes: '12:00' }, { nombre: 'después del almuerzo', antes: '16:00' }] }),
       // Segundo local: administración
       pl('Cuadre de caja del día anterior', 30, 'diaria', { local_id: segundo.id, momentos: [{ nombre: '', antes: '10:00' }] }),
@@ -74,7 +82,7 @@
       pl('Conciliar cuentas por cobrar', 60, 'semanal', { local_id: segundo.id, dias_semana: [5] })
     ];
     var db = {
-      version: 13,
+      version: 14,
       locales: [principal, segundo],
       grupos: [gDespacho, gLimpieza],
       dias_especiales: FERIADOS.map(function (x) { return { id: id('d'), fecha: x[0], local_id: null, tipo: 'libre', nombre: x[1] }; }),
@@ -88,7 +96,8 @@
       lecturas: [],
       personas: personas,
       ajustes: { id: 1, hora_limite: '08:50', a_tiempo_hasta: '08:35', mostrar_record: false, pool_activo: false, minutos_jornada: 480, solo_en_tienda: false, usar_gps: false, revisiones_dia: 4 },
-      plantillas: plantillas, asignaciones: [], asistencia: [], eventos: []
+      plantillas: plantillas, asignaciones: [], asistencia: [], eventos: [],
+      consumibles: consumibles, consumibles_mov: [], consumibles_pedidos: []
     };
 
     // Historia: 3 semanas con algunas tardanzas y faltas, para ver el reporte y el historial con datos.

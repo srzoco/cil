@@ -80,6 +80,8 @@ alter table public.personas add column if not exists libres jsonb not null defau
 alter table public.personas add column if not exists hasta date;
 -- Despachador: solo quien despacha ve «Salí a despachar»
 alter table public.personas add column if not exists despacha boolean not null default false;
+-- Encargado de consumibles: además de gerencia, puede entregar lo que piden en su local
+alter table public.personas add column if not exists entrega_consumibles boolean not null default false;
 
 -- Cada usuario creado en Authentication aparece solo aquí como empleado.
 create or replace function public._nueva_persona() returns trigger
@@ -206,6 +208,9 @@ alter table public.asignaciones add column if not exists equipos uuid[] not null
 alter table public.asignaciones drop constraint if exists asignaciones_plantilla_id_fecha_key;
 -- Tareas de varias personas: un «puesto» por persona (0, 1, …). Cada puesto es una fila con su dueño.
 alter table public.asignaciones add column if not exists puesto int not null default 0;
+-- Consumible que descuenta al marcarse (p. ej. «Hacer café»). La tabla de consumibles está más abajo.
+alter table public.plantillas add column if not exists consumible_id uuid;
+alter table public.asignaciones add column if not exists consumible_id uuid;
 -- Reparto automático: tarea que nadie de los presentes podía hacer. Se asigna igual, pero el empleado
 -- no la ve hasta que gerencia la apruebe.
 alter table public.asignaciones add column if not exists oculta boolean not null default false;
@@ -565,9 +570,9 @@ begin
     for i in 0 .. nm - 1 loop
       m := p.momentos -> i;  -- null si es una sola vez sin hora
       insert into asignaciones (plantilla_id, fecha, titulo, detalle, minutos, arrastra, asignado_a, asignado_original, motivo,
-                                local_id, momento, momento_nombre, antes, desde, registro, equipos, puesto)
+                                local_id, momento, momento_nombre, antes, desde, registro, equipos, puesto, consumible_id)
       values (p.id, f, p.titulo, p.detalle, p.minutos, p.frecuencia <> 'diaria', quien, quien, mot,
-              p.local_id, i, nullif(trim(m->>'nombre'), ''), nullif(m->>'antes', '')::time, nullif(m->>'desde', '')::time, p.registro, p.equipos, pu)
+              p.local_id, i, nullif(trim(m->>'nombre'), ''), nullif(m->>'antes', '')::time, nullif(m->>'desde', '')::time, p.registro, p.equipos, pu, p.consumible_id)
       on conflict (plantilla_id, fecha, momento, puesto) do nothing
       returning id into nueva;
       if nueva is not null then
@@ -948,6 +953,8 @@ begin
       returning x.id, x.asignado_a)
     insert into tareas_eventos (asignacion_id, tipo, a) select b.id, 'deshecha', b.asignado_a from b;
     delete from lecturas where asignacion_id = p_id;
+    -- si descontó un consumible (p. ej. el café), vuelve al inventario
+    perform public._devolver_consumo(p_id);
     -- si se desmarca «Prender», se quita el «Apagar» que todavía no se hizo
     if a.momento < 50 then
       delete from asignaciones where plantilla_id = a.plantilla_id and fecha = a.fecha and momento = a.momento + 50 and estado = 'pendiente';
@@ -1391,6 +1398,7 @@ begin
     'redes_nuevas', (select coalesce(json_agg(json_build_object('id', r.id, 'ip', r.ip, 'persona_id', r.persona_id, 'creado_en', r.creado_en) order by r.creado_en desc), '[]'::json)
                      from redes_nuevas r where r.fecha >= hoy - 3),
     'con_avisos', public._con_avisos(),
+    'consumo', public.consumo_datos(),
     'personas', (select coalesce(json_agg(x order by x.nombre), '[]'::json) from personas x),
     'ajustes', (select row_to_json(x) from tareas_ajustes x where x.id = 1),
     'plantillas', (select coalesce(json_agg(x order by x.titulo), '[]'::json) from plantillas x),
@@ -1848,6 +1856,35 @@ begin
     where ad.activo and ad.rol = 'admin';
   end if;
 
+  -- 4d) Consumibles que se están acabando (una vez al día, desde las 9 a. m.): a gerencia y al encargado del local.
+  --     Bajo = llegó al mínimo, o lo que queda alcanza para menos de 7 días (con al menos 2 semanas de datos).
+  insert into _avisos
+  select x.id, 'stock:' || c.id || ':' || hoy || ':' || x.id, 'Se está acabando: ' || c.nombre,
+         'Quedan ' || trim(to_char(c.stock, 'FM999990.##')) || ' (' || c.unidad || ')' || coalesce(' · alcanza para unos ' || k.dias || ' días', '') || '.', './#/equipo/consumibles'
+  from consumibles c
+  cross join lateral (
+    select case when z.s28 > 0 and z.primero < ahora - interval '14 days' then floor(greatest(c.stock, 0) / (z.s28 / 28.0))::int end as dias
+    from (select coalesce(sum(m.cantidad) filter (where m.creado_en > ahora - interval '28 days'), 0) as s28, min(m.creado_en) as primero
+          from consumibles_mov m where m.consumible_id = c.id and m.tipo in ('entrega', 'uso')) z) k
+  join personas x on x.activo and (x.rol = 'admin' or (x.entrega_consumibles and x.local_id = c.local_id))
+  where c.activo and ((c.minimo is not null and c.stock <= c.minimo) or (k.dias is not null and k.dias < 7))
+    and public._ts_hoy(time '09:00') <= ahora;
+
+  -- 4e) Consumo alto, los lunes a las 9 a. m.: la semana pasada gastó más de 30 % sobre el promedio de las 4 anteriores
+  if extract(isodow from hoy) = 1 and public._ts_hoy(time '09:00') <= ahora and public._ts_hoy(time '09:00') > hace then
+    insert into _avisos
+    select ad.id, 'consumo:' || c.id || ':' || hoy || ':' || ad.id, 'Consumo alto: ' || c.nombre,
+           'La semana pasada se gastó ' || round(100 * (z.sem / (z.prev / 4.0) - 1)) || ' % más que el promedio.', './#/equipo/consumibles'
+    from consumibles c
+    cross join lateral (
+      select coalesce(sum(m.cantidad) filter (where m.creado_en >= ahora - interval '7 days'), 0) as sem,
+             coalesce(sum(m.cantidad) filter (where m.creado_en < ahora - interval '7 days' and m.creado_en >= ahora - interval '35 days'), 0) as prev,
+             min(m.creado_en) as primero
+      from consumibles_mov m where m.consumible_id = c.id and m.tipo in ('entrega', 'uso')) z
+    join personas ad on ad.activo and ad.rol = 'admin'
+    where c.activo and z.prev > 0 and z.primero < ahora - interval '21 days' and z.sem > 1.3 * z.prev / 4.0;
+  end if;
+
   -- 5) Gerencia: temperatura fuera de rango
   insert into _avisos
   select ad.id, 'temp:' || l.id || ':' || ad.id, 'Temperatura fuera de rango: ' || e.nombre,
@@ -2115,5 +2152,227 @@ begin
           '{"ref":"main","inputs":{"forzar":"true"}}'::jsonb;
 end $$;
 grant execute on function public.guardar_armador(jsonb, timestamptz), public.fijar_descuento(numeric), public.forzar_tasas() to authenticated;
+
+-- =====================================================================
+--  Consumibles (café, lavaplatos, desinfectante, tirro…): inventario por local
+--  - Gerencia anota compras y conteos; gerencia o un encargado entregan lo que piden los empleados.
+--  - El empleado pide con un botón (no ve el inventario). El café se descuenta al marcar la tarea
+--    con las tazas que se hicieron (receta en vasitos, la ajusta gerencia).
+--  - Avisos: pedido nuevo (al momento), inventario bajo (una vez al día) y consumo alto (lunes 9 a. m.).
+--  Igual que logic.js (statsConsumible) y DemoStore.
+-- =====================================================================
+create table if not exists public.consumibles (
+  id                 uuid primary key default gen_random_uuid(),
+  local_id           uuid not null references public.locales (id) on delete cascade,
+  nombre             text not null,
+  unidad             text not null default 'unidad',
+  stock              numeric(10,2) not null default 0,
+  minimo             numeric(10,2),
+  activo             boolean not null default true,
+  -- receta (café): vasitos por taza, vasitos que salen de una unidad (p. ej. un paquete) y agua por taza
+  vasitos_por_taza   numeric(6,3),
+  vasitos_por_unidad numeric(8,2),
+  agua_ml_por_taza   numeric(6,1),
+  orden              int not null default 0,
+  creado_en          timestamptz not null default now()
+);
+create unique index if not exists consumibles_local_nombre on public.consumibles (local_id, lower(nombre));
+create table if not exists public.consumibles_mov (
+  id             uuid primary key default gen_random_uuid(),
+  consumible_id  uuid not null references public.consumibles (id) on delete cascade,
+  tipo           text not null check (tipo in ('compra', 'entrega', 'uso', 'ajuste')),
+  cantidad       numeric(10,2) not null,          -- compra/entrega/uso: lo que entró o salió; ajuste: la diferencia
+  stock_despues  numeric(10,2),
+  persona_id     uuid references public.personas (id) on delete set null,   -- quién lo recibió o lo usó
+  autor          uuid default auth.uid(),                                    -- quién lo entregó o lo anotó
+  pedido_id      uuid,
+  asignacion_id  uuid references public.asignaciones (id) on delete set null,
+  nota           text,
+  creado_en      timestamptz not null default now()
+);
+create index if not exists consumibles_mov_idx on public.consumibles_mov (consumible_id, creado_en);
+create table if not exists public.consumibles_pedidos (
+  id            uuid primary key default gen_random_uuid(),
+  consumible_id uuid not null references public.consumibles (id) on delete cascade,
+  persona_id    uuid not null references public.personas (id) on delete cascade,
+  nota          text,
+  estado        text not null default 'pendiente' check (estado in ('pendiente', 'entregado', 'cancelado')),
+  creado_en     timestamptz not null default now(),
+  atendido_por  uuid,
+  atendido_en   timestamptz
+);
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'plantillas_consumible_fk') then
+    alter table public.plantillas add constraint plantillas_consumible_fk foreign key (consumible_id) references public.consumibles (id) on delete set null;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'asignaciones_consumible_fk') then
+    alter table public.asignaciones add constraint asignaciones_consumible_fk foreign key (consumible_id) references public.consumibles (id) on delete set null;
+  end if;
+end $$;
+-- Solo gerencia los ve y edita directo; el resto pasa por las funciones de abajo
+alter table public.consumibles enable row level security;
+alter table public.consumibles_mov enable row level security;
+alter table public.consumibles_pedidos enable row level security;
+revoke all on public.consumibles, public.consumibles_mov, public.consumibles_pedidos from anon, authenticated;
+grant select, insert, update, delete on public.consumibles to authenticated;
+grant select on public.consumibles_mov, public.consumibles_pedidos to authenticated;
+drop policy if exists consumibles_admin on public.consumibles;
+create policy consumibles_admin on public.consumibles for all to authenticated using (public.es_admin()) with check (public.es_admin());
+drop policy if exists consumibles_mov_admin on public.consumibles_mov;
+create policy consumibles_mov_admin on public.consumibles_mov for select to authenticated using (public.es_admin());
+drop policy if exists consumibles_pedidos_admin on public.consumibles_pedidos;
+create policy consumibles_pedidos_admin on public.consumibles_pedidos for select to authenticated using (public.es_admin());
+
+-- Los de siempre (una sola vez; después se agregan desde la app)
+insert into public.consumibles (local_id, nombre, unidad, orden)
+select l.id, v.nombre, v.unidad, v.orden from public.locales l
+join (values ('CIL', 'Lavaplatos', 'galón', 1), ('CIL', 'Desinfectante', 'litro', 2), ('CIL', 'Café', 'paquete de 500 g', 3),
+             ('CIL', 'Tirro', 'rollo', 4), ('BQTO', 'Desinfectante', 'litro', 1)) v(local, nombre, unidad, orden) on upper(l.nombre) = v.local
+where not exists (select 1 from public.consumibles c where c.local_id = l.id and lower(c.nombre) = lower(v.nombre));
+
+-- ¿Puede entregar en ese local? Gerencia, o el encargado activo de ese local
+create or replace function public._entregador(p_local uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select public.es_admin() or exists (select 1 from personas where id = auth.uid() and activo and entrega_consumibles and local_id = p_local)
+$$;
+
+-- Movimiento + inventario en un solo paso
+create or replace function public._mover(p_cons uuid, p_tipo text, p_cant numeric, p_persona uuid, p_pedido uuid, p_asig uuid, p_nota text) returns numeric
+language plpgsql security definer set search_path = public as $$
+declare st numeric;
+begin
+  update consumibles set stock = stock + case when p_tipo in ('entrega', 'uso') then -p_cant else p_cant end
+  where id = p_cons returning stock into st;
+  insert into consumibles_mov (consumible_id, tipo, cantidad, stock_despues, persona_id, pedido_id, asignacion_id, nota)
+  values (p_cons, p_tipo, p_cant, st, p_persona, p_pedido, p_asig, nullif(trim(coalesce(p_nota, '')), ''));
+  return st;
+end $$;
+
+-- Lo que cada quien necesita en la app (va dentro de datos_app)
+create or replace function public.consumo_datos() returns json
+language plpgsql stable security definer set search_path = public as $$
+declare yo public.personas; adm boolean := public.es_admin(); ent boolean;
+begin
+  select * into yo from personas where id = auth.uid() and activo;
+  if yo.id is null then return null; end if;
+  ent := adm or yo.entrega_consumibles;
+  return json_build_object(
+    'puede_entregar', ent,
+    -- para pedir: solo nombre y unidad, sin cantidades
+    'para_pedir', (select coalesce(json_agg(json_build_object('id', c.id, 'nombre', c.nombre, 'unidad', c.unidad) order by c.orden, c.nombre), '[]'::json)
+                   from consumibles c where c.activo and c.local_id = yo.local_id),
+    'recetas', (select coalesce(json_object_agg(c.id, json_build_object('nombre', c.nombre, 'unidad', c.unidad, 'vasitos_por_taza', c.vasitos_por_taza, 'agua_ml_por_taza', c.agua_ml_por_taza)), '{}'::json)
+                from consumibles c where adm or c.local_id = yo.local_id),
+    'mis_pedidos', (select coalesce(json_agg(json_build_object('id', p.id, 'consumible_id', p.consumible_id, 'estado', p.estado, 'creado_en', p.creado_en, 'atendido_en', p.atendido_en) order by p.creado_en desc), '[]'::json)
+                    from consumibles_pedidos p where p.persona_id = yo.id and (p.estado = 'pendiente' or p.creado_en > now() - interval '2 days')),
+    'pendientes', case when ent then (select coalesce(json_agg(json_build_object('id', p.id, 'consumible_id', p.consumible_id, 'nombre', c.nombre, 'unidad', c.unidad,
+                       'local_id', c.local_id, 'persona_id', p.persona_id, 'persona', coalesce(nullif(pe.nombre, ''), pe.email), 'nota', p.nota, 'creado_en', p.creado_en) order by p.creado_en), '[]'::json)
+                    from consumibles_pedidos p join consumibles c on c.id = p.consumible_id join personas pe on pe.id = p.persona_id
+                    where p.estado = 'pendiente' and (adm or c.local_id = yo.local_id)) else '[]'::json end,
+    -- inventario y movimientos: solo gerencia
+    'inventario', case when adm then (select coalesce(json_agg(c order by c.orden, c.nombre), '[]'::json) from consumibles c) else '[]'::json end,
+    'movimientos', case when adm then (select coalesce(json_agg(m order by m.creado_en), '[]'::json) from consumibles_mov m where m.creado_en > now() - interval '70 days') else '[]'::json end
+  );
+end $$;
+
+-- Empleado: pide un consumible de su local (uno pendiente a la vez por consumible)
+create or replace function public.pedir_consumible(p_consumible uuid, p_nota text default null) returns void
+language plpgsql security definer set search_path = public as $$
+declare c public.consumibles; yo public.personas; nom text;
+begin
+  if not public.tiene_acceso('tareas') then raise exception 'No tienes acceso a Tareas.'; end if;
+  select * into yo from personas where id = auth.uid();
+  select * into c from consumibles where id = p_consumible and activo;
+  if c.id is null or c.local_id is distinct from yo.local_id then raise exception 'Ese consumible no está disponible.'; end if;
+  if exists (select 1 from consumibles_pedidos where consumible_id = c.id and persona_id = yo.id and estado = 'pendiente') then
+    raise exception 'Ya lo pediste: espera a que te lo entreguen.';
+  end if;
+  insert into consumibles_pedidos (consumible_id, persona_id, nota) values (c.id, yo.id, left(nullif(trim(coalesce(p_nota, '')), ''), 200));
+  nom := coalesce(nullif(yo.nombre, ''), yo.email);
+  insert into avisos_cola (persona_id, titulo, cuerpo, url)
+  select x.id, nom || ' pide: ' || c.nombre, coalesce(left(nullif(trim(coalesce(p_nota, '')), ''), 120), 'Entrégalo y márcalo en la app.'), './#/'
+  from personas x where x.activo and x.id <> yo.id and (x.rol = 'admin' or (x.entrega_consumibles and x.local_id = c.local_id));
+end $$;
+
+create or replace function public.cancelar_pedido(p_id uuid) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  update consumibles_pedidos set estado = 'cancelado', atendido_en = now()
+  where id = p_id and estado = 'pendiente' and (persona_id = auth.uid() or public.es_admin());
+  if not found then raise exception 'Ese pedido ya no está pendiente.'; end if;
+end $$;
+
+-- Gerencia o el encargado entrega (con pedido o sin él)
+create or replace function public.entregar_consumible(p_consumible uuid, p_persona uuid, p_cantidad numeric, p_pedido uuid default null) returns numeric
+language plpgsql security definer set search_path = public as $$
+declare c public.consumibles; st numeric;
+begin
+  select * into c from consumibles where id = p_consumible for update;
+  if c.id is null then raise exception 'Ese consumible no existe.'; end if;
+  if not public._entregador(c.local_id) then raise exception 'Solo gerencia o el encargado pueden entregar.'; end if;
+  if p_cantidad is null or p_cantidad <= 0 or p_cantidad > 1000 then raise exception 'Escribe cuánto entregaste.'; end if;
+  if p_persona is null or not exists (select 1 from personas where id = p_persona) then raise exception 'Elige a quién se lo entregaste.'; end if;
+  if p_pedido is not null then
+    update consumibles_pedidos set estado = 'entregado', atendido_por = auth.uid(), atendido_en = now()
+    where id = p_pedido and consumible_id = c.id and estado = 'pendiente';
+    if not found then raise exception 'Ese pedido ya fue atendido.'; end if;
+  end if;
+  st := public._mover(c.id, 'entrega', p_cantidad, p_persona, p_pedido, null, null);
+  return st;
+end $$;
+
+-- Compra (entra al inventario) o conteo (p_cantidad = lo que hay de verdad). Compra: gerencia o encargado; conteo: gerencia.
+create or replace function public.mover_consumible(p_consumible uuid, p_tipo text, p_cantidad numeric, p_nota text default null) returns numeric
+language plpgsql security definer set search_path = public as $$
+declare c public.consumibles;
+begin
+  select * into c from consumibles where id = p_consumible for update;
+  if c.id is null then raise exception 'Ese consumible no existe.'; end if;
+  if p_cantidad is null or p_cantidad < 0 or p_cantidad > 100000 then raise exception 'Cantidad no válida.'; end if;
+  if p_tipo = 'compra' then
+    if not public._entregador(c.local_id) then raise exception 'Solo gerencia o el encargado.'; end if;
+    if p_cantidad = 0 then raise exception 'Escribe cuánto entró.'; end if;
+    return public._mover(c.id, 'compra', p_cantidad, null, null, null, p_nota);
+  elsif p_tipo = 'ajuste' then
+    if not public.es_admin() then raise exception 'Solo gerencia.'; end if;
+    return public._mover(c.id, 'ajuste', p_cantidad - c.stock, null, null, null, coalesce(nullif(trim(coalesce(p_nota, '')), ''), 'Conteo'));
+  end if;
+  raise exception 'Movimiento no válido.';
+end $$;
+
+-- Marca hecha una tarea que gasta un consumible (p. ej. «Hacer café») y lo descuenta.
+-- Café con receta: p_cantidad = tazas → unidades = tazas × vasitos por taza ÷ vasitos por unidad. Sin receta: unidades.
+create or replace function public.marcar_consumo(p_id uuid, p_cantidad numeric) returns void
+language plpgsql security definer set search_path = public as $$
+declare a public.asignaciones; c public.consumibles; u numeric; nota text;
+begin
+  if not public.tiene_acceso('tareas') then raise exception 'No tienes acceso a Tareas.'; end if;
+  if p_cantidad is null or p_cantidad <= 0 or p_cantidad > 500 then raise exception 'Escribe cuánto se hizo.'; end if;
+  select * into a from asignaciones where id = p_id;
+  if a.id is null then raise exception 'Esa tarea ya no existe.'; end if;
+  perform public._hecha(p_id, true, false);   -- mismas reglas que marcar_hecha (dueño, hora, «Llegué»)
+  select * into c from consumibles where id = a.consumible_id for update;
+  if c.id is null or exists (select 1 from consumibles_mov where asignacion_id = p_id and tipo = 'uso') then return; end if;
+  if c.vasitos_por_taza is not null then
+    nota := trim(to_char(p_cantidad, 'FM999990.##')) || ' tazas';
+    u := case when coalesce(c.vasitos_por_unidad, 0) > 0 then round(p_cantidad * c.vasitos_por_taza / c.vasitos_por_unidad, 2) else 0 end;
+  else
+    u := p_cantidad;
+  end if;
+  perform public._mover(c.id, 'uso', u, auth.uid(), null, p_id, nota);
+end $$;
+
+-- Al desmarcar la tarea, lo descontado vuelve al inventario
+create or replace function public._devolver_consumo(p_asig uuid) returns void
+language plpgsql security definer set search_path = public as $$
+declare m record;
+begin
+  for m in delete from consumibles_mov where asignacion_id = p_asig and tipo = 'uso' returning consumible_id, cantidad loop
+    update consumibles set stock = stock + m.cantidad where id = m.consumible_id;
+  end loop;
+end $$;
+
+grant execute on function public.consumo_datos(), public.pedir_consumible(uuid, text), public.cancelar_pedido(uuid),
+  public.entregar_consumible(uuid, uuid, numeric, uuid), public.mover_consumible(uuid, text, numeric, text), public.marcar_consumo(uuid, numeric) to authenticated;
 
 -- Listo. Siguiente paso de la guía: poner tu correo (y los de gerencia) como admin.

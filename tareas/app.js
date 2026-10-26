@@ -366,7 +366,62 @@
           }).join('') + '</div></section>';
       }
     }
+    if (consumo().puede_entregar) h += bloquePedidos(null);
+    h += bloquePedir();
     return h;
+  }
+
+  // ---------- Consumibles ----------
+  function consumo() { return (S.data && S.data.consumo) || { para_pedir: [], mis_pedidos: [], pendientes: [], recetas: {}, inventario: [], movimientos: [] }; }
+  function consumible(id) { return (consumo().inventario || []).filter(function (c) { return c.id === id; })[0] || null; }
+  function cantTxt(n) { var x = Math.round(Number(n || 0) * 100) / 100; return String(x).replace('.', ','); }
+  // Empleado: «¿Te falta algo?» (no ve cuánto hay, solo pide)
+  function bloquePedir() {
+    var c = consumo(), lista = c.para_pedir || [];
+    if (!lista.length) return '';
+    var pend = {}; (c.mis_pedidos || []).forEach(function (p) { if (p.estado === 'pendiente') pend[p.consumible_id] = p; });
+    return '<section class="bloque"><div class="bloque-head"><h2>¿Te falta algo?</h2><small class="muted">Pídelo y te lo entregan</small></div><div class="pedir-grid">' +
+      lista.map(function (x) {
+        var p = pend[x.id];
+        return p ? '<div class="pedir pedido"><b>' + esc(x.nombre) + '</b><span>Pedido ' + esc(L.fmtHora(p.creado_en)) + '</span><button class="btn link chico" data-acc="cancelar-pedido" data-id="' + esc(p.id) + '">Cancelar</button></div>'
+          : '<button class="pedir" data-acc="pedir" data-id="' + esc(x.id) + '"><b>' + esc(x.nombre) + '</b><span>Pedir</span></button>';
+      }).join('') + '</div></section>';
+  }
+  // Gerencia o encargado: pedidos por entregar (localId null = todos los que puede ver)
+  function bloquePedidos(localId) {
+    var pend = (consumo().pendientes || []).filter(function (p) { return !localId || p.local_id === localId; });
+    if (!pend.length) return '';
+    return '<section class="bloque alerta"><div class="bloque-head"><h2>Pedidos de consumibles</h2><small class="muted">' + pend.length + '</small></div><div class="lista">' +
+      pend.map(function (p) {
+        return '<div class="item"><div class="item-cuerpo"><span class="item-titulo">' + esc(p.persona) + ' pide ' + esc(p.nombre) + '</span>' +
+          '<span class="item-meta"><span class="extra">' + esc(L.fmtHora(p.creado_en)) + (variosLocales() ? ' · ' + esc(nombreLocal(p.local_id)) : '') + (p.nota ? ' · «' + esc(p.nota) + '»' : '') + '</span></span></div>' +
+          '<button class="btn chico" data-acc="entregar" data-id="' + esc(p.consumible_id) + '" data-pedido="' + esc(p.id) + '" data-persona="' + esc(p.persona_id) + '">Entregar</button></div>';
+      }).join('') + '</div></section>';
+  }
+  function modalEntregar(m) {
+    var c = consumible(m.id) || {}, rec = consumo().recetas[m.id] || {}, nombre = c.nombre || rec.nombre || 'Consumible', unidad = c.unidad || rec.unidad || '';
+    var pedido = (consumo().pendientes || []).filter(function (p) { return p.id === m.pedido; })[0];
+    var gente = esAdmin() ? empleados().filter(function (pe) { return !c.local_id || localDe(pe) === c.local_id; }) : [];
+    return '<h2>Entregar ' + esc(nombre) + '</h2>' + (c.id ? '<p class="muted">Hay ' + esc(cantTxt(c.stock)) + ' (' + esc(unidad) + ')</p>' : '') +
+      '<form data-form="entregar" data-id="' + esc(m.id) + '" data-pedido="' + esc(m.pedido || '') + '">' +
+      (pedido ? '<p class="nota">Para <b>' + esc(pedido.persona) + '</b>' + (pedido.nota ? ': «' + esc(pedido.nota) + '»' : '') + '</p><input type="hidden" name="persona" value="' + esc(pedido.persona_id) + '">'
+        : '<label class="campo">¿A quién?<select name="persona" required><option value="">Elige</option>' + gente.map(function (pe) { return '<option value="' + esc(pe.id) + '">' + esc(pe.nombre || pe.email) + '</option>'; }).join('') + '</select></label>') +
+      '<label class="campo">¿Cuánto entregaste? <small>(' + esc(unidad) + ')</small><input name="cantidad" type="number" min="0.1" max="1000" step="0.1" value="1" required inputmode="decimal"></label>' +
+      '<div class="acciones"><button class="btn grande" type="submit">Entregado</button></div></form>';
+  }
+  // Al marcar una tarea que gasta un consumible (p. ej. el café)
+  function modalConsumo(id) {
+    var a = asig(id); if (!a) return '';
+    var r = consumo().recetas[a.consumible_id] || {}, tazas = r.vasitos_por_taza != null;
+    var h = '<h2>' + tituloHtml(a) + '</h2>';
+    if (tazas) {
+      h += Number(r.vasitos_por_taza) > 0 ? '<div class="receta"><p class="receta-tit">Receta</p>' + [10, 15, 20, 25, 30].map(function (n) {
+        var x = L.receta(r, n); return '<p><b>' + n + ' tazas</b> → ' + esc(cantTxt(x.vasitos)) + ' vasitos de ' + esc(r.nombre.toLowerCase()) + (x.litros ? ' · ' + esc(cantTxt(x.litros)) + ' L de agua' : '') + '</p>';
+      }).join('') + '</div>' : '<p class="nota">La receta todavía no está cargada. Anota igual cuántas tazas hiciste.</p>';
+    }
+    return h + '<form data-form="consumo" data-id="' + esc(id) + '"><label class="campo">' + (tazas ? '¿Cuántas tazas hiciste?' : '¿Cuánto usaste? <small>(' + esc(r.unidad || '') + ')</small>') +
+      '<input name="cantidad" type="number" min="' + (tazas ? 1 : 0.1) + '" max="500" step="' + (tazas ? 1 : 0.1) + '" required inputmode="decimal"' + (tazas ? ' value="20"' : '') + '></label>' +
+      '<div class="acciones"><button class="btn grande" type="submit">Listo, hecha</button></div></form>';
   }
 
   // «antes de las 12» / vencida / hecha tarde
@@ -441,6 +496,7 @@
       h += '<a class="card reporte-listo" href="#/reporte?f=' + hoy + '"><b>Reporte del día</b><span class="muted">Ver y enviar por WhatsApp ›</span></a>';
     }
     h += bloqueOcultas();
+    h += bloquePedidos(null);
     if (!variosLocales()) return h + bloqueLocal(locales()[0] ? locales()[0].id : null, false);
     if (modoHoy() === 'juntos') {
       locales().forEach(function (l) { h += '<div class="local-sec"><h2 class="local-titulo">' + esc(l.nombre) + '</h2>' + bloqueLocal(l.id, true) + '</div>'; });
@@ -858,6 +914,10 @@
         return '<label class="check" data-local="' + esc(e.local_id || '') + '"' + (loc && e.local_id !== loc ? ' hidden' : '') + '><input type="checkbox" name="equipo" value="' + esc(e.id) + '"' + ((v.equipos || []).indexOf(e.id) >= 0 ? ' checked' : '') + '>' + esc(e.nombre) +
           (L.rangoTxt(e) ? ' <small class="muted">' + esc(L.rangoTxt(e)) + '</small>' : '') + '</label>';
       }).join('') : '<p class="ayuda">Todavía no hay equipos. Agrégalos en <a href="#/equipo/frio">Equipo → Equipos de frío</a>.</p>') + '</div>';
+    // Consumible que descuenta al marcarse (p. ej. «Hacer café»)
+    var invT = (consumo().inventario || []).filter(function (c) { return c.activo || c.id === v.consumible_id; });
+    if (invT.length) h += '<label class="campo">Al marcarla, descuenta <small>(por ejemplo «Hacer café»: pregunta cuántas tazas)</small><select name="consumible_id"><option value="">Nada</option>' +
+      invT.map(function (c) { return '<option value="' + esc(c.id) + '"' + (v.consumible_id === c.id ? ' selected' : '') + '>' + esc(c.nombre) + (variosLocales() ? ' · ' + esc(nombreLocal(c.local_id)) : '') + '</option>'; }).join('') + '</select></label>';
     // Tarea que sale después
     var conSeg = !!String(v.seguimiento_titulo || '').trim();
     if (!unica) {
@@ -1007,9 +1067,75 @@
     ['locales', 'Locales', 'Días de trabajo, Wi-Fi y ubicación'],
     ['frio', 'Equipos de frío', 'Neveras, cavas y contenedores'],
     ['calendario', 'Calendario', 'Feriados, vacaciones y días extra'],
+    ['consumibles', 'Consumibles', 'Café, lavaplatos, desinfectante… y quién los recibe'],
     ['avisos', 'Avisos', 'Notificaciones en el teléfono'],
     ['ajustes', 'Ajustes', 'Horarios, puntualidad y reglas generales']
   ];
+  var UNIDADES = ['unidad', 'galón', 'litro', 'rollo', 'paquete de 500 g', 'kg', 'caja'];
+  function seccionConsumibles() {
+    var c = consumo(), inv = c.inventario || [], movs = c.movimientos || [], ahora = new Date();
+    var h = '<h1>Consumibles</h1><p class="ayuda sin-margen">Los empleados los piden con un botón y no ven cuánto hay. Al entregar, anota cuánto: así se calcula el promedio y se avisa cuando se gasta de más o se está acabando. Cuenta una vez lo que hay y anota cada compra.</p>';
+    h += bloquePedidos(null);
+    var locs = locales().filter(function (l) { return inv.some(function (x) { return x.local_id === l.id; }); });
+    if (!locs.length) locs = locales().slice(0, 1);
+    locs.forEach(function (l) {
+      if (variosLocales()) h += '<h2 class="local-titulo">' + esc(l.nombre) + '</h2>';
+      inv.filter(function (x) { return x.local_id === l.id; }).forEach(function (x) {
+        var st = L.statsConsumible(x, movs, ahora), u = st.ultimaEntrega;
+        h += '<div class="card cons-card' + (x.activo ? '' : ' pausada') + (st.bajo ? ' alerta-card' : '') + '"><div class="cons-head"><div><b class="cons-nombre">' + esc(x.nombre) + '</b>' +
+          (st.bajo ? ' <span class="pill corregir">Se está acabando</span>' : '') + (st.alto ? ' <span class="pill corregir">Gasto alto</span>' : '') + (x.activo ? '' : ' <span class="pill">Pausado</span>') + '</div>' +
+          '<div class="cons-stock"><b>' + esc(cantTxt(x.stock)) + '</b><span>' + esc(x.unidad) + '</span></div></div>' +
+          '<p class="cons-meta">' + (st.dias !== null ? 'Alcanza para unos <b>' + st.dias + ' días</b>' : 'Todavía no hay datos para saber cuánto dura') +
+          ' · esta semana ' + esc(cantTxt(st.semana)) + (st.promedio > 0 ? ' (promedio ' + esc(cantTxt(st.promedio)) + ')' : '') + '</p>' +
+          (u ? '<p class="cons-meta">Última entrega: ' + esc(nombreDe(u.autor) || '—') + ' le dio ' + esc(cantTxt(u.cantidad)) + ' a ' + esc(nombreDe(u.persona_id) || '—') + ' · ' + esc(L.fmtFecha(L.hoyISO(new Date(u.creado_en)))) + '</p>' : '') +
+          (x.vasitos_por_taza != null ? '<p class="cons-meta">Receta: ' + (Number(x.vasitos_por_taza) > 0 ? '20 tazas → ' + esc(cantTxt(L.receta(x, 20).vasitos)) + ' vasitos' : 'falta cargarla') + '</p>' : '') +
+          '<div class="cons-botones"><button class="btn sec chico" data-acc="cons-mov" data-id="' + esc(x.id) + '" data-v="compra">+ Compra</button>' +
+          '<button class="btn sec chico" data-acc="entregar" data-id="' + esc(x.id) + '">Entregar</button>' +
+          '<button class="btn sec chico" data-acc="cons-mov" data-id="' + esc(x.id) + '" data-v="ajuste">Contar</button>' +
+          '<button class="btn fantasma chico" data-acc="cons-editar" data-id="' + esc(x.id) + '">Editar</button></div></div>';
+      });
+      h += '<button class="btn sec" data-acc="cons-editar" data-local="' + esc(l.id) + '">' + ICON.mas + 'Nuevo consumible' + (variosLocales() ? ' en ' + esc(l.nombre) : '') + '</button>';
+    });
+    var otros = locales().filter(function (l) { return locs.indexOf(l) < 0; });
+    if (otros.length) h += '<p class="ayuda">Agregar en otro local: ' + otros.map(function (l) { return '<a href="#" data-acc="cons-editar" data-local="' + esc(l.id) + '">' + esc(l.nombre) + '</a>'; }).join(' · ') + '</p>';
+    var ult = movs.slice().sort(function (a, b) { return a.creado_en < b.creado_en ? 1 : -1; }).slice(0, 20);
+    if (ult.length) {
+      var TIPO = { compra: 'Compra', entrega: 'Entrega', uso: 'Uso', ajuste: 'Conteo' };
+      h += '<details class="mas"><summary>Últimos movimientos</summary><div class="lista">' + ult.map(function (m) {
+        var x = consumible(m.consumible_id) || {};
+        return '<div class="item"><div class="item-cuerpo"><span class="item-titulo">' + esc(TIPO[m.tipo] || m.tipo) + ': ' + esc(x.nombre || '') + ' ' + (m.tipo === 'ajuste' && m.cantidad > 0 ? '+' : m.tipo === 'compra' ? '+' : m.tipo === 'ajuste' ? '' : '−') + esc(cantTxt(m.cantidad)) + '</span>' +
+          '<span class="item-meta"><span class="extra">' + esc(L.fmtFecha(L.hoyISO(new Date(m.creado_en)))) + ' ' + esc(L.fmtHora(m.creado_en)) + (m.persona_id ? ' · ' + esc(nombreDe(m.persona_id)) : '') + (m.autor && m.tipo === 'entrega' ? ' · entregó ' + esc(nombreDe(m.autor)) : '') + (m.nota ? ' · ' + esc(m.nota) : '') + '</span></span></div></div>';
+      }).join('') + '</div></details>';
+    }
+    return h;
+  }
+  function modalConsMov(m) {
+    var x = consumible(m.id); if (!x) return '';
+    var compra = m.mov === 'compra';
+    return '<h2>' + (compra ? 'Entró compra: ' : 'Contar: ') + esc(x.nombre) + '</h2><p class="muted">Ahora hay ' + esc(cantTxt(x.stock)) + ' (' + esc(x.unidad) + ')</p>' +
+      '<form data-form="cons-mov" data-id="' + esc(x.id) + '" data-v="' + (compra ? 'compra' : 'ajuste') + '">' +
+      '<label class="campo">' + (compra ? '¿Cuánto entró?' : '¿Cuánto hay de verdad?') + ' <small>(' + esc(x.unidad) + ')</small><input name="cantidad" type="number" min="0" max="100000" step="0.1" required inputmode="decimal"></label>' +
+      '<label class="campo">Nota <small>(opcional)</small><input name="nota" maxlength="120"></label>' +
+      '<div class="acciones"><button class="btn grande" type="submit">Guardar</button></div></form>';
+  }
+  function modalConsEditar(m) {
+    var x = m.id ? consumible(m.id) : null, v = x || { nombre: '', unidad: 'unidad', minimo: null, activo: true }, tazas = v.vasitos_por_taza != null;
+    var uns = UNIDADES.indexOf(v.unidad) < 0 ? UNIDADES.concat([v.unidad]) : UNIDADES;
+    var nv = function (k) { return v[k] == null ? '' : esc(String(v[k])); };
+    return '<h2>' + (x ? 'Editar ' + esc(x.nombre) : 'Nuevo consumible') + '</h2>' +
+      '<form data-form="cons-editar" data-id="' + esc(x ? x.id : '') + '" data-local="' + esc(m.local || (x && x.local_id) || '') + '">' +
+      '<label class="campo">Nombre<input name="nombre" required maxlength="40" value="' + esc(v.nombre) + '"></label>' +
+      '<label class="campo">Se cuenta por<select name="unidad">' + uns.map(function (u) { return '<option' + (u === v.unidad ? ' selected' : '') + '>' + esc(u) + '</option>'; }).join('') + '</select></label>' +
+      '<label class="campo">Avisar cuando queden <small>(opcional)</small><input name="minimo" type="number" min="0" step="0.1" value="' + nv('minimo') + '" inputmode="decimal"></label>' +
+      '<label class="check"><input type="checkbox" name="activo"' + (v.activo !== false ? ' checked' : '') + '>Activo <small class="muted">(los empleados lo pueden pedir)</small></label>' +
+      '<label class="check"><input type="checkbox" name="tazas"' + (tazas ? ' checked' : '') + '>Se prepara en tazas <small class="muted">(café: la tarea pregunta cuántas tazas y descuenta según la receta)</small></label>' +
+      '<div class="campo sub-campo"><span>Receta <small>(solo gerencia la cambia)</small></span>' +
+      '<label class="campo">Vasitos de café por taza<input name="vpt" type="number" min="0" step="0.01" value="' + nv('vasitos_por_taza') + '" inputmode="decimal" placeholder="Ej.: 0,2 (= 4 vasitos para 20 tazas)"></label>' +
+      '<label class="campo">Vasitos que salen de 1 ' + esc(v.unidad) + '<input name="vpu" type="number" min="0" step="0.1" value="' + nv('vasitos_por_unidad') + '" inputmode="decimal"></label>' +
+      '<label class="campo">Agua por taza (ml) <small>(opcional)</small><input name="agua" type="number" min="0" step="10" value="' + nv('agua_ml_por_taza') + '" inputmode="numeric"></label></div>' +
+      '<div class="acciones"><button class="btn grande" type="submit">Guardar</button></div></form>';
+  }
+
   function vistaEquipo(sec) {
     var d = db();
     var sel = SECCIONES_EQUIPO.filter(function (x) { return x[0] === sec; })[0];
@@ -1039,6 +1165,7 @@
     if (sec === 'frio') return h + seccionEquipos();
     if (sec === 'calendario') return h + seccionCalendario();
     if (sec === 'avisos') return h + seccionAvisos();
+    if (sec === 'consumibles') return h + seccionConsumibles();
     return h + seccionAjustes();
   }
   function seccionPersonas() {
@@ -1262,6 +1389,10 @@
     else if (m.tipo === 'justificar') c = modalJustificar(m.id);
     else if (m.tipo === 'salida') c = modalSalida();
     else if (m.tipo === 'registro') c = modalRegistro(m.id);
+    else if (m.tipo === 'consumo') c = modalConsumo(m.id);
+    else if (m.tipo === 'entregar') c = modalEntregar(m);
+    else if (m.tipo === 'cons-mov') c = modalConsMov(m);
+    else if (m.tipo === 'cons-editar') c = modalConsEditar(m);
     else if (m.tipo === 'sinpunt') c = modalSinPunt(m.id);
     else if (m.tipo === 'revision') c = modalRevision(m.id);
     else if (m.tipo === 'confirmar') c = '<h2>' + esc(m.texto) + '</h2><div class="acciones"><button class="btn warn" data-acc="confirmar-si">' + esc(m.boton) + '</button><button class="btn sec" data-acc="cerrar">Cancelar</button></div>';
@@ -1663,7 +1794,8 @@
       }).join('') + '</div>' : '') +
       (pe.rol === 'empleado' ? '<label class="check"><input type="checkbox" name="rota"' + (pe.rota !== false ? ' checked' : '') + '>Entra en las tareas «para cualquiera»</label>' +
         '<p class="ayuda sin-margen">Desmárcalo para personal administrativo: solo recibe las tareas de sus grupos o las que le asignes. Igual marca «Llegué» y sale en el reporte.</p>' +
-        '<label class="check"><input type="checkbox" name="despacha"' + (pe.despacha ? ' checked' : '') + '>Sale a despachar <small class="muted">(ve el botón «Salí a despachar», si está encendido en Ajustes)</small></label>' : '') +
+        '<label class="check"><input type="checkbox" name="despacha"' + (pe.despacha ? ' checked' : '') + '>Sale a despachar <small class="muted">(ve el botón «Salí a despachar», si está encendido en Ajustes)</small></label>' +
+        '<label class="check"><input type="checkbox" name="entrega_consumibles"' + (pe.entrega_consumibles ? ' checked' : '') + '>Encargado de consumibles <small class="muted">(entrega lo que piden en su local, como gerencia)</small></label>' : '') +
       (store.modo === 'supabase' && pe.rol !== 'admin' ? '<div class="campo"><span>Módulos a los que entra <small>(gerencia entra a todos)</small></span>' +
         [['tareas', 'Tareas'], ['contenido', 'Contenido'], ['mensajes', 'Armador de mensajes']].map(function (m) {
           return '<label class="check"><input type="checkbox" name="acceso" value="' + m[0] + '"' + ((pe.accesos || []).indexOf(m[0]) >= 0 ? ' checked' : '') + '>' + m[1] + '</label>';
@@ -1705,6 +1837,11 @@
     else if (acc === 'cerrar-ir') { S.modal = null; pintarCapas(); }
     else if (acc === 'recargar') { S.red = null; recargar(false); }  // vuelve a revisar la red (por si cambió de Wi-Fi)
     else if (acc === 'filtros-quitar') cambiarFiltroTareas(null);
+    else if (acc === 'pedir') ejecutar(store.rpc('pedir_consumible', { p_consumible: id, p_nota: null }), 'Pedido. Te avisan cuando te lo entreguen.');
+    else if (acc === 'cancelar-pedido') ejecutar(store.rpc('cancelar_pedido', { p_id: id }), 'Pedido cancelado.');
+    else if (acc === 'entregar') abrirModal({ tipo: 'entregar', id: id, pedido: el.getAttribute('data-pedido') || null });
+    else if (acc === 'cons-mov') abrirModal({ tipo: 'cons-mov', id: id, mov: el.getAttribute('data-v') });
+    else if (acc === 'cons-editar') abrirModal({ tipo: 'cons-editar', id: id || null, local: el.getAttribute('data-local') || null });
     else if (acc === 'libre-quitar') {
       var lq = (persona(id).libres || []).slice(); lq.splice(Number(el.getAttribute('data-i')), 1);
       confirmar('¿Quitar esas vacaciones o permiso? Vuelve a recibir tareas esos días.', 'Quitar', function () { ejecutar(store.actualizar('personas', id, { libres: lq }), 'Quitado.', true); });
@@ -1926,7 +2063,7 @@
       if (fd.get('local_id')) patch.local_id = fd.get('local_id');
       if (fd.get('capacidad')) { patch.capacidad = Number(fd.get('capacidad')); patch.tarea_max = fd.get('tarea_max') ? Number(fd.get('tarea_max')) : null; }
       if (persona(pid) && persona(pid).rol === 'empleado' && grupos().length) patch.grupos = fd.getAll('grupo');
-      if (persona(pid) && persona(pid).rol === 'empleado') { patch.rota = !!fd.get('rota'); patch.despacha = !!fd.get('despacha'); }
+      if (persona(pid) && persona(pid).rol === 'empleado') { patch.rota = !!fd.get('rota'); patch.despacha = !!fd.get('despacha'); patch.entrega_consumibles = !!fd.get('entrega_consumibles'); }
       if (store.modo === 'supabase' && persona(pid) && persona(pid).rol !== 'admin') patch.accesos = fd.getAll('acceso');
       if (persona(pid) && persona(pid).rol === 'empleado') {
         var dt = fd.getAll('dtrab').map(Number).sort(), base = L.labDe(db(), patch.local_id || localDe(persona(pid))).slice().sort();
@@ -1955,6 +2092,33 @@
       var choca = (persona(lpid).libres || []).some(function (l) { return ld <= (l.hasta || l.desde) && lh >= l.desde; });
       if (choca) { aviso('Ya tiene vacaciones o permiso en esas fechas.'); return; }
       guardarLibres(lpid, (persona(lpid).libres || []).concat([{ desde: ld, hasta: lh, motivo: fd.get('motivo') || 'Vacaciones' }]), 'Anotado. Esos días no recibe tareas.');
+    }
+    else if (tipo === 'consumo') {
+      var qc = Number(fd.get('cantidad'));
+      if (!(qc > 0)) { aviso('Escribe cuánto.'); return; }
+      ejecutar(store.rpc('marcar_consumo', { p_id: f.getAttribute('data-id'), p_cantidad: qc }), '✓ Hecha', true);
+    }
+    else if (tipo === 'entregar') {
+      var qe = Number(fd.get('cantidad')), pe = fd.get('persona');
+      if (!pe) { aviso('Elige a quién se lo entregaste.'); return; }
+      if (!(qe > 0)) { aviso('Escribe cuánto entregaste.'); return; }
+      ejecutar(store.rpc('entregar_consumible', { p_consumible: f.getAttribute('data-id'), p_persona: pe, p_cantidad: qe, p_pedido: f.getAttribute('data-pedido') || null }), 'Entrega anotada.', true);
+    }
+    else if (tipo === 'cons-mov') {
+      var qm = Number(fd.get('cantidad')), mv = f.getAttribute('data-v');
+      if (isNaN(qm) || qm < 0 || fd.get('cantidad') === '') { aviso('Escribe la cantidad.'); return; }
+      ejecutar(store.rpc('mover_consumible', { p_consumible: f.getAttribute('data-id'), p_tipo: mv, p_cantidad: qm, p_nota: String(fd.get('nota') || '').trim() || null }),
+        mv === 'compra' ? 'Compra anotada.' : 'Conteo anotado.', true);
+    }
+    else if (tipo === 'cons-editar') {
+      var num = function (k) { var v = String(fd.get(k) || '').replace(',', '.').trim(); return v === '' ? null : Number(v); };
+      var cf = { nombre: String(fd.get('nombre') || '').trim(), unidad: String(fd.get('unidad') || '').trim() || 'unidad', minimo: num('minimo'), activo: !!fd.get('activo'),
+        vasitos_por_taza: fd.get('tazas') ? (num('vpt') == null ? 0 : num('vpt')) : null, vasitos_por_unidad: fd.get('tazas') ? num('vpu') : null, agua_ml_por_taza: fd.get('tazas') ? num('agua') : null };
+      if (!cf.nombre) { aviso('Escribe el nombre.'); return; }
+      if ([cf.minimo, cf.vasitos_por_taza, cf.vasitos_por_unidad, cf.agua_ml_por_taza].some(function (x) { return x != null && (isNaN(x) || x < 0 || x > 100000); })) { aviso('Revisa los números.'); return; }
+      var cid = f.getAttribute('data-id');
+      ejecutar(cid ? store.actualizar('consumibles', cid, cf)
+        : store.insertar('consumibles', Object.assign(cf, { local_id: f.getAttribute('data-local'), stock: 0, orden: (consumo().inventario || []).length + 1 })), 'Guardado.', true);
     }
     else if (tipo === 'aprobar-oculta') {
       ejecutar(store.rpc('aprobar_oculta', { p_id: f.getAttribute('data-id'), p_persona: fd.get('persona') || null }), 'Aprobada: ya aparece en su lista.');
@@ -2076,6 +2240,7 @@
     }
     fila.momentos = veces === 1 && !mom[0].antes && !mom[0].desde ? [] : mom;
     fila.registro = !!fd.get('registro');
+    if (f.querySelector('[name="consumible_id"]')) fila.consumible_id = fd.get('consumible_id') || null;
     fila.equipos = fila.registro ? fd.getAll('equipo') : [];
     if (!unica) {
       var segT = fd.get('con_seg') ? String(fd.get('seg_titulo') || '').trim() : '';
@@ -2129,6 +2294,7 @@
       if (!(s && s.estado === 'presente') && !llegadaEnCola()) { aviso('Primero marca «Llegué».'); return; }
     }
     if (hecha && a.registro) { abrirModal({ tipo: 'registro', id: id }); return; }
+    if (hecha && a.consumible_id) { abrirModal({ tipo: 'consumo', id: id }); return; }
     var antes = { estado: a.estado, hecha_en: a.hecha_en, hecha_por: a.hecha_por, repetir: a.repetir };
     S.marcando[id] = true; S.ultimaMarca = Date.now();
     if (hecha) { a.estado = 'hecha'; a.hecha_en = new Date().toISOString(); a.hecha_por = a.asignado_a || yo().id; a.repetir = false; }
@@ -2222,7 +2388,7 @@
     }
   }
   if (!(CFG.supabaseUrl && CFG.supabaseKey) && !window.TBDemo) {
-    var sc = document.createElement('script'); sc.src = 'demo.js?v=9'; sc.onload = arrancar;
+    var sc = document.createElement('script'); sc.src = 'demo.js?v=10'; sc.onload = arrancar;
     sc.onerror = function () { $app.innerHTML = '<div class="centro"><h2>No se pudo cargar</h2><p class="muted">Revisa el internet y vuelve a abrir.</p></div>'; };
     document.head.appendChild(sc);
   } else arrancar();

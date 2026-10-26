@@ -481,7 +481,7 @@
           arrastra: p.frecuencia !== 'diaria', asignado_a: quien, asignado_original: quien, motivo: mot,
           estado: 'pendiente', hecha_en: null, hecha_por: null, creado_en: new Date().toISOString(),
           local_id: p.local_id, momento: i, momento_nombre: (m && String(m.nombre || '').trim()) || null, antes: (m && m.antes) || null,
-          desde: (m && m.desde) || null, registro: !!p.registro, equipos: (p.equipos || []).slice(), puesto: puesto
+          desde: (m && m.desde) || null, registro: !!p.registro, equipos: (p.equipos || []).slice(), puesto: puesto, consumible_id: p.consumible_id || null
         };
         db.asignaciones.push(a);
         nuevas.push(a);
@@ -724,6 +724,31 @@
   }
 
   // Carga típica: minutos que toca hacer cada día laborable en promedio (próximas 4 semanas)
+  // ---------- Consumibles (igual que los avisos 4d y 4e de avisos_pendientes en supabase.sql) ----------
+  // semana: lo gastado (entregas + usos) en los últimos 7 días; promedio: semanal de las 4 semanas anteriores;
+  // alto: más de 30 % sobre el promedio (con 3 semanas de datos); dias: para cuántos días alcanza (con 2 semanas de datos).
+  function statsConsumible(c, movs, ahora) {
+    var t = (ahora || new Date()).getTime(), D = 864e5, sem = 0, prev = 0, s28 = 0, primero = null, ultima = null;
+    (movs || []).forEach(function (m) {
+      if (m.consumible_id !== c.id) return;
+      if (m.tipo === 'entrega' && (!ultima || m.creado_en > ultima.creado_en)) ultima = m;
+      if (m.tipo !== 'entrega' && m.tipo !== 'uso') return;
+      var x = new Date(m.creado_en).getTime(), q = Number(m.cantidad) || 0;
+      if (primero === null || x < primero) primero = x;
+      if (x >= t - 7 * D) sem += q; else if (x >= t - 35 * D) prev += q;
+      if (x > t - 28 * D) s28 += q;
+    });
+    var promedio = prev / 4, stock = Number(c.stock) || 0;
+    var dias = s28 > 0 && primero !== null && primero < t - 14 * D ? Math.floor(Math.max(stock, 0) / (s28 / 28)) : null;
+    return { semana: sem, promedio: promedio, alto: prev > 0 && primero < t - 21 * D && sem > 1.3 * promedio, dias: dias,
+      bajo: (c.minimo != null && stock <= Number(c.minimo)) || (dias !== null && dias < 7), ultimaEntrega: ultima };
+  }
+  // Café: vasitos para N tazas (redondeado a medio vasito) y litros de agua
+  function receta(r, tazas) {
+    if (!r || r.vasitos_por_taza == null) return null;
+    return { vasitos: Math.round(tazas * Number(r.vasitos_por_taza) * 2) / 2, litros: r.agua_ml_por_taza ? Math.round(tazas * Number(r.agua_ml_por_taza) / 100) / 10 : null };
+  }
+
   // Minutos de un día normal en las próximas 4 semanas. filtro(p): solo esas tareas; dia (0-6): solo ese día de la semana.
   // Una tarea de varias personas cuenta sus minutos por cada persona.
   function cargaTipica(db, desde, localId, filtro, dia) {
@@ -750,7 +775,7 @@
     localDe: localDe, localPrincipal: localPrincipal, labDe: labDe, laborable: laborable, laborableFn: laborableFn, trabaja: trabaja, libreDe: libreDe, especial: especial, localDePersona: localDePersona, frecuenciaTxt: frecuenciaTxt, proximas: proximas, siguienteLaborable: siguienteLaborable,
     seFue: seFue, anteriorLaborable: anteriorLaborable, carga: carga, capacidad: capacidad, cabeEn: cabeEn, estadoAsistencia: estadoAsistencia, estaPresente: estaPresente, asistenciaDe: asistenciaDe,
     esEmpleadoActivo: esEmpleadoActivo, plantillaDe: plantillaDe, puedeHacer: puedeHacer, puedeRescatar: puedeRescatar,
-    elegirPersona: elegirPersona, puedeSegun: puedeSegun, generarDia: generarDia, repartoAutomatico: repartoAutomatico, almorzandoGrupo: almorzandoGrupo, balance: balance, sobrecargados: sobrecargados, sugerenciasBalance: sugerenciasBalance, factorDia: factorDia, personasDe: personasDe, companerosDe: companerosDe, tareasDe: tareasDe, delPool: delPool,
+    elegirPersona: elegirPersona, puedeSegun: puedeSegun, generarDia: generarDia, repartoAutomatico: repartoAutomatico, almorzandoGrupo: almorzandoGrupo, balance: balance, sobrecargados: sobrecargados, sugerenciasBalance: sugerenciasBalance, factorDia: factorDia, personasDe: personasDe, statsConsumible: statsConsumible, receta: receta, companerosDe: companerosDe, tareasDe: tareasDe, delPool: delPool,
     sugerirReasignacion: sugerirReasignacion, reporteDia: reporteDia, textoReporte: textoReporte,
     historial: historial, cargaTipica: cargaTipica
   };

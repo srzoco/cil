@@ -35,6 +35,7 @@ App web unificada **CIL** en GitHub Pages: https://srzoco.github.io/cil/
 - "Prender contenedores" genera "Apagar contenedores" 45 min después.
 - Rescate urgente a mitad de la ventana. "Salí a despachar"/"Volví" es opcional (`usar_salidas`), y sus reglas dependientes se apagan con él.
 - "Llegué" solo desde el Wi-Fi del local (IP registrada). **No rastrear ubicaciones.** Desde afuera sale un error genérico, sin explicar por qué.
+- Consumibles (Equipo → Consumibles): inventario por local; el empleado pide con un botón sin ver cantidades; entrega gerencia o el encargado (`entrega_consumibles`), anotando quién dio y quién recibió. El café va en una tarea con `consumible_id`: pregunta tazas y descuenta según la receta en vasitos (solo gerencia la edita). Avisos: pedido al momento, inventario bajo 1 vez al día, consumo alto los lunes (+30 % sobre el promedio de 4 semanas).
 - Quien no tiene el acceso `tareas` (por ejemplo Verónica, de contenido, que trabaja en línea) no marca "Llegué" ni entra en la rotación.
 
 ## Seguridad

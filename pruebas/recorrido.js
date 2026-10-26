@@ -7,7 +7,7 @@ const { chromium } = require(process.env.PLAYWRIGHT || 'playwright');
 const BASE = process.env.BASE || 'http://localhost:8765';
 const RUTAS_ADMIN = ['/', '/tareas', '/tareas?ver=unica', '/tarea/nueva?tipo=rec', '/tarea/nueva?tipo=unica', '/reporte', '/historial', '/temperaturas',
   '/equipo', '/equipo/personas', '/equipo/grupos', '/equipo/locales', '/equipo/frio', '/equipo/calendario', '/equipo/avisos', '/equipo/ajustes',
-  '/perfil', '/balance', '/ayuda'];
+  '/equipo/consumibles', '/perfil', '/balance', '/ayuda'];
 // No se tocan: cierran la sesión, borran la demo, salen de la app o piden permisos del teléfono
 const NO_TOCAR = ['salir', 'reiniciar-demo', 'copiar', 'activar-avisos', 'aviso-prueba', 'guardar-ubicacion', 'cerrar-ir'];
 const XSS = '<img src=x onerror="window.__xss=1">"\'&';

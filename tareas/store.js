@@ -46,7 +46,7 @@
     this.clave = 'tareasbf_demo_v1';
     this.semilla = semilla;
     this.db = LS.get(this.clave);
-    if (!this.db || !this.db.personas || this.db.version !== 13) { this.db = semilla(); this._guardar(); }
+    if (!this.db || !this.db.personas || this.db.version !== 14) { this.db = semilla(); this._guardar(); }
     var u = LS.get('tareasbf_demo_usuario');
     this.usuarioId = (u && this.db.personas.some(function (p) { return p.id === u; })) ? u : this.db.personas[0].id;
   }
@@ -112,7 +112,8 @@
         revisiones: adm ? (db.revisiones || []).filter(function (r) { return r.fecha >= desde; }) : [],
         plantillas: adm ? db.plantillas : [],
         asignaciones: asigs,
-        asistencia: db.asistencia.filter(function (s) { return s.fecha >= desde && (adm || s.persona_id === yo.id); })
+        asistencia: db.asistencia.filter(function (s) { return s.fecha >= desde && (adm || s.persona_id === yo.id); }),
+        consumo: self._consumoDatos()
       };
     });
   };
@@ -264,11 +265,52 @@
         self._evento(b.id, 'deshecha', null, b.asignado_a);
       });
       db.lecturas = (db.lecturas || []).filter(function (x) { return x.asignacion_id !== a.id; });
+      this._devolverConsumo(a.id);
       if ((a.momento || 0) < 50) db.asignaciones = db.asignaciones.filter(function (x) {
         return !(x.plantilla_id === a.plantilla_id && x.fecha === a.fecha && x.momento === (a.momento || 0) + 50 && x.estado === 'pendiente');
       });
     }
   };
+  // ---------- Consumibles (igual que consumo_datos y sus funciones en supabase.sql) ----------
+  DemoStore.prototype._cons = function () {
+    var db = this.db; db.consumibles = db.consumibles || []; db.consumibles_mov = db.consumibles_mov || []; db.consumibles_pedidos = db.consumibles_pedidos || []; return db;
+  };
+  DemoStore.prototype._entregador = function (localId) { var y = this._yo(); return this._admin() || !!(y && y.activo && y.entrega_consumibles && y.local_id === localId); };
+  DemoStore.prototype._mover = function (c, tipo, cant, persona, pedido, asig, nota) {
+    c.stock = Math.round(((Number(c.stock) || 0) + (tipo === 'entrega' || tipo === 'uso' ? -cant : cant)) * 100) / 100;
+    this._cons().consumibles_mov.push({ id: uuid(), consumible_id: c.id, tipo: tipo, cantidad: cant, stock_despues: c.stock, persona_id: persona || null,
+      autor: (this._yo() || {}).id, pedido_id: pedido || null, asignacion_id: asig || null, nota: nota || null, creado_en: new Date().toISOString() });
+    return c.stock;
+  };
+  DemoStore.prototype._devolverConsumo = function (asigId) {
+    var db = this._cons();
+    db.consumibles_mov = db.consumibles_mov.filter(function (m) {
+      if (m.asignacion_id !== asigId || m.tipo !== 'uso') return true;
+      var c = db.consumibles.filter(function (x) { return x.id === m.consumible_id; })[0]; if (c) c.stock = Math.round(((Number(c.stock) || 0) + m.cantidad) * 100) / 100;
+      return false;
+    });
+  };
+  DemoStore.prototype._consumoDatos = function () {
+    var db = this._cons(), yo = this._yo(), adm = this._admin(); if (!yo || !yo.activo) return null;
+    var ent = adm || !!yo.entrega_consumibles, nom = function (id) { var p = db.personas.filter(function (x) { return x.id === id; })[0]; return p ? (p.nombre || p.email) : ''; };
+    var porId = function (id) { return db.consumibles.filter(function (c) { return c.id === id; })[0] || {}; };
+    var recetas = {};
+    db.consumibles.forEach(function (c) { if (adm || c.local_id === yo.local_id) recetas[c.id] = { nombre: c.nombre, unidad: c.unidad, vasitos_por_taza: c.vasitos_por_taza == null ? null : c.vasitos_por_taza, agua_ml_por_taza: c.agua_ml_por_taza == null ? null : c.agua_ml_por_taza }; });
+    var hace2 = Date.now() - 2 * 864e5, hace70 = Date.now() - 70 * 864e5;
+    return copia({
+      puede_entregar: ent,
+      para_pedir: db.consumibles.filter(function (c) { return c.activo && c.local_id === yo.local_id; }).sort(function (a, b) { return (a.orden || 0) - (b.orden || 0); })
+        .map(function (c) { return { id: c.id, nombre: c.nombre, unidad: c.unidad }; }),
+      recetas: recetas,
+      mis_pedidos: db.consumibles_pedidos.filter(function (p) { return p.persona_id === yo.id && (p.estado === 'pendiente' || new Date(p.creado_en).getTime() > hace2); }),
+      pendientes: ent ? db.consumibles_pedidos.filter(function (p) { return p.estado === 'pendiente' && (adm || porId(p.consumible_id).local_id === yo.local_id); }).map(function (p) {
+        var c = porId(p.consumible_id); return { id: p.id, consumible_id: p.consumible_id, nombre: c.nombre, unidad: c.unidad, local_id: c.local_id, persona_id: p.persona_id, persona: nom(p.persona_id), nota: p.nota, creado_en: p.creado_en };
+      }) : [],
+      inventario: adm ? db.consumibles : [],
+      movimientos: adm ? db.consumibles_mov.filter(function (m) { return new Date(m.creado_en).getTime() > hace70; }) : []
+    });
+  };
+
   // Igual que registrar_lecturas
   DemoStore.prototype._registrar = function (id, lecturas) {
     var db = this.db, yo = this._yo(), adm = this._admin(), hoy = L.hoyISO();
@@ -350,6 +392,51 @@
         ra.rescatada_de = de; ra.asignado_a = yo.id; ra.incumplida = inc; ra.motivo = 'rescate';
         this._evento(ra.id, 'reasignada', de, yo.id, inc ? 'rescate' : 'rescate_excusa');
         r = { incumplida: inc };
+      } else if (nombre === 'pedir_consumible') {
+        var dbc = this._cons(), cp = dbc.consumibles.filter(function (c) { return c.id === args.p_consumible && c.activo; })[0];
+        if (!cp || cp.local_id !== yo.local_id) throw errorUsuario('Ese consumible no está disponible.');
+        if (dbc.consumibles_pedidos.some(function (p) { return p.consumible_id === cp.id && p.persona_id === yo.id && p.estado === 'pendiente'; })) throw errorUsuario('Ya lo pediste: espera a que te lo entreguen.');
+        dbc.consumibles_pedidos.push({ id: uuid(), consumible_id: cp.id, persona_id: yo.id, nota: (String(args.p_nota || '').trim() || null), estado: 'pendiente', creado_en: new Date().toISOString() });
+      } else if (nombre === 'cancelar_pedido') {
+        var pc = this._cons().consumibles_pedidos.filter(function (p) { return p.id === args.p_id && p.estado === 'pendiente' && (p.persona_id === yo.id || adm); })[0];
+        if (!pc) throw errorUsuario('Ese pedido ya no está pendiente.');
+        pc.estado = 'cancelado'; pc.atendido_en = new Date().toISOString();
+      } else if (nombre === 'entregar_consumible') {
+        var ce = this._cons().consumibles.filter(function (c) { return c.id === args.p_consumible; })[0];
+        if (!ce) throw errorUsuario('Ese consumible no existe.');
+        if (!this._entregador(ce.local_id)) throw errorUsuario('Solo gerencia o el encargado pueden entregar.');
+        var qe = Number(args.p_cantidad);
+        if (!(qe > 0) || qe > 1000) throw errorUsuario('Escribe cuánto entregaste.');
+        if (!args.p_persona || !db.personas.some(function (p) { return p.id === args.p_persona; })) throw errorUsuario('Elige a quién se lo entregaste.');
+        if (args.p_pedido) {
+          var pe2 = this._cons().consumibles_pedidos.filter(function (p) { return p.id === args.p_pedido && p.consumible_id === ce.id && p.estado === 'pendiente'; })[0];
+          if (!pe2) throw errorUsuario('Ese pedido ya fue atendido.');
+          pe2.estado = 'entregado'; pe2.atendido_por = yo.id; pe2.atendido_en = new Date().toISOString();
+        }
+        r = this._mover(ce, 'entrega', qe, args.p_persona, args.p_pedido || null, null, null);
+      } else if (nombre === 'mover_consumible') {
+        var cm = this._cons().consumibles.filter(function (c) { return c.id === args.p_consumible; })[0];
+        if (!cm) throw errorUsuario('Ese consumible no existe.');
+        var qm = Number(args.p_cantidad);
+        if (isNaN(qm) || qm < 0 || qm > 100000) throw errorUsuario('Cantidad no válida.');
+        if (args.p_tipo === 'compra') {
+          if (!this._entregador(cm.local_id)) throw errorUsuario('Solo gerencia o el encargado.');
+          if (qm === 0) throw errorUsuario('Escribe cuánto entró.');
+          r = this._mover(cm, 'compra', qm, null, null, null, args.p_nota || null);
+        } else if (args.p_tipo === 'ajuste') {
+          if (!adm) throw errorUsuario('Solo gerencia.');
+          r = this._mover(cm, 'ajuste', Math.round((qm - (Number(cm.stock) || 0)) * 100) / 100, null, null, null, String(args.p_nota || '').trim() || 'Conteo');
+        } else throw errorUsuario('Movimiento no válido.');
+      } else if (nombre === 'marcar_consumo') {
+        var qc = Number(args.p_cantidad);
+        if (!(qc > 0) || qc > 500) throw errorUsuario('Escribe cuánto se hizo.');
+        var ac = this._asig(args.p_id); if (!ac) throw errorUsuario('Esa tarea ya no existe.');
+        this._hecha(args.p_id, true, false);
+        var cc = this._cons().consumibles.filter(function (c) { return c.id === ac.consumible_id; })[0];
+        if (cc && !this._cons().consumibles_mov.some(function (m) { return m.asignacion_id === ac.id && m.tipo === 'uso'; })) {
+          var uc = cc.vasitos_por_taza != null ? (cc.vasitos_por_unidad > 0 ? Math.round(qc * cc.vasitos_por_taza / cc.vasitos_por_unidad * 100) / 100 : 0) : qc;
+          this._mover(cc, 'uso', uc, yo.id, null, ac.id, cc.vasitos_por_taza != null ? qc + ' tazas' : null);
+        }
       } else if (nombre === 'registrar_lecturas') {
         r = this._registrar(args.p_id, args.p_lecturas || []);
       } else if (nombre === 'tomar_del_pool') {
@@ -731,7 +818,7 @@
       (d.asignaciones || []).forEach(function (a) { if (a.antes) a.antes = String(a.antes).slice(0, 5); if (a.desde) a.desde = String(a.desde).slice(0, 5); });
       return { completo: !!d.completo, mi_mes: d.mi_mes || null, dias_sin_puntualidad: d.dias_sin_puntualidad || [], equipos: d.equipos || [], lecturas: d.lecturas || [], salidas_rato: d.salidas_rato || [], yo: yo, personas: personas, ajustes: aj, locales: d.locales || [], grupos: d.grupos || [], dias_especiales: d.dias_especiales || [],
         revisiones: d.revisiones || [], plantillas: d.plantillas || [], asignaciones: d.asignaciones || [], asistencia: d.asistencia || [],
-        companeros: d.companeros || {}, almorzando_grupo: d.almorzando_grupo || [], redes_nuevas: d.redes_nuevas || [], con_avisos: d.con_avisos || null };
+        companeros: d.companeros || {}, almorzando_grupo: d.almorzando_grupo || [], redes_nuevas: d.redes_nuevas || [], con_avisos: d.con_avisos || null, consumo: d.consumo || null };
     });
   };
   // En la base unificada, dos tablas de Tareas llevan prefijo (Contenido ya usa esos nombres)

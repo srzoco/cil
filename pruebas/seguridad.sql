@@ -93,3 +93,15 @@ select public.prueba('X (desactivado) marcar_hecha', $$select public.marcar_hech
 select public.prueba('RPC reasignar', format($q$select public.reasignar('[{"id":"%s","a":"e0000000-0000-0000-0000-000000000001"}]'::jsonb)$q$, :'t2'), 'e0000000-0000-0000-0000-000000000001');
 select public.prueba('E1 datos_app asignaciones ajenas', $q$select 1 from json_array_elements(public.datos_app(true)->'asignaciones') x where x->>'asignado_a' <> 'e0000000-0000-0000-0000-000000000001'$q$, 'e0000000-0000-0000-0000-000000000001');
 select public.prueba('E1 menu_pendientes', 'select public.menu_pendientes()', 'e0000000-0000-0000-0000-000000000001');
+insert into consumibles (local_id, nombre, unidad, stock) select id, 'Café prueba', 'paquete', 5 from locales where principal on conflict do nothing;
+select id as cons from consumibles limit 1 \gset
+select public.prueba('RPC entregar consumible', format($q$select public.entregar_consumible(%L, 'e0000000-0000-0000-0000-000000000001', 1, null)$q$, :'cons'), :E1);
+select public.prueba('RPC compra consumible', format($q$select public.mover_consumible(%L, 'compra', 5, null)$q$, :'cons'), :E1);
+select public.prueba('RPC conteo consumible', format($q$select public.mover_consumible(%L, 'ajuste', 99, null)$q$, :'cons'), :E1);
+select public.prueba('TABLA consumibles stock', $q$update consumibles set stock = 999$q$, :E1);
+select public.prueba('TABLA crear consumible', $q$insert into consumibles (local_id, nombre) select id, 'x' from locales limit 1$q$, :E1);
+select public.prueba('TABLA movimiento directo', $q$insert into consumibles_mov (consumible_id, tipo, cantidad) select id, 'compra', 1 from consumibles limit 1$q$, :E1);
+select public.prueba('LEER inventario (0)', 'select * from consumibles', :E1);
+select public.prueba('LEER movimientos (0)', 'select * from consumibles_mov', :E1);
+select public.prueba('LEER pedidos (0)', 'select * from consumibles_pedidos', :E1);
+select public.prueba('C (contenido) pedir consumible', format($q$select public.pedir_consumible(%L, null)$q$, :'cons'), 'c0000000-0000-0000-0000-000000000001');
