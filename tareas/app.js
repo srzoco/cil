@@ -925,6 +925,9 @@
       h += '<div class="campo sub-campo seg-campos"' + (conSeg ? '' : ' hidden') + '><label class="campo">¿Qué tarea?<input name="seg_titulo" maxlength="120" value="' + esc(v.seguimiento_titulo || '') + '" placeholder="Ej.: Apagar contenedores"></label>' +
         '<div class="fila-dos"><label class="campo">¿Cuántos minutos después?<input type="number" name="seg_despues" min="1" max="600" value="' + esc(v.seguimiento_despues || 45) + '" inputmode="numeric"></label>' +
         '<label class="campo">¿Cuánto tarda?<input type="number" name="seg_minutos" min="1" max="600" value="' + esc(v.seguimiento_minutos || 5) + '" inputmode="numeric"></label></div>' +
+        (invT.length ? '<label class="campo">Al marcarla, descuenta<select name="seg_consumible_id"><option value="">Nada</option>' +
+          invT.concat((consumo().inventario || []).filter(function (c) { return !c.activo && c.id === v.seguimiento_consumible_id; })).map(function (c) {
+            return '<option value="' + esc(c.id) + '"' + (v.seguimiento_consumible_id === c.id ? ' selected' : '') + '>' + esc(c.nombre) + (variosLocales() ? ' · ' + esc(nombreLocal(c.local_id)) : '') + '</option>'; }).join('') + '</select></label>' : '') +
         '<p class="ayuda">Sale en su lista a esa hora y tiene 15 minutos para marcarla. La app no puede sonar una alarma en el teléfono: si es crítico, que pongan un temporizador.</p></div>';
     }
 
@@ -2248,6 +2251,7 @@
       fila.seguimiento_titulo = segT || null;
       fila.seguimiento_despues = Math.max(1, Math.min(600, Math.round(Number(fd.get('seg_despues')) || 45)));
       fila.seguimiento_minutos = Math.max(1, Math.min(600, Math.round(Number(fd.get('seg_minutos')) || 5)));
+      if (f.querySelector('[name="seg_consumible_id"]')) fila.seguimiento_consumible_id = segT ? (fd.get('seg_consumible_id') || null) : null;
     }
 
     var p = id ? store.actualizar('plantillas', id, fila) : store.insertar('plantillas', fila);

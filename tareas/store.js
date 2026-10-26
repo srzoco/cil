@@ -251,7 +251,7 @@
         if (ya) { if (ya.estado === 'pendiente') { ya.desde = hhmmAhora(t); ya.antes = hhmmAhora(t2); ya.asignado_a = quien; ya.asignado_original = quien; } }
         else db.asignaciones.push({ id: uuid(), plantilla_id: p.id, fecha: a.fecha, titulo: String(p.seguimiento_titulo).trim(), detalle: null, minutos: p.seguimiento_minutos || 5,
           arrastra: false, asignado_a: quien, asignado_original: quien, motivo: 'fija', estado: 'pendiente', hecha_en: null, hecha_por: null,
-          creado_en: new Date().toISOString(), local_id: a.local_id, momento: mom, momento_nombre: a.momento_nombre || null, desde: hhmmAhora(t), antes: hhmmAhora(t2), registro: false });
+          creado_en: new Date().toISOString(), local_id: a.local_id, momento: mom, momento_nombre: a.momento_nombre || null, desde: hhmmAhora(t), antes: hhmmAhora(t2), registro: false, consumible_id: p.seguimiento_consumible_id || null });
       }
     } else {
       if (a.estado !== 'hecha') return;
@@ -614,7 +614,7 @@
     try { this._soloAdmin(); } catch (e) { return Promise.reject(e); }
     var f = Object.assign({ id: uuid(), creado_en: new Date().toISOString() }, fila);
     if (tabla === 'plantillas') f = Object.assign({ detalle: null, dias_semana: [], cada_n: 1, dia_mes: null, fecha_inicio: L.hoyISO(), fecha_unica: null, solo_pueden: [], asignar_a: null, al_pool: false, activa: true, momentos: [], local_id: (L.localPrincipal(this.db) || {}).id,
-      registro: false, equipos: [], seguimiento_titulo: null, seguimiento_despues: 45, seguimiento_minutos: 5 }, f);
+      registro: false, equipos: [], seguimiento_titulo: null, seguimiento_despues: 45, seguimiento_minutos: 5, seguimiento_consumible_id: null }, f);
     if (tabla === 'grupos') f = Object.assign({ nombre: 'Grupo' }, f);
     if (!this.db[tabla]) this.db[tabla] = [];
     if (tabla === 'dias_sin_puntualidad') {

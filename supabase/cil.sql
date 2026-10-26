@@ -178,6 +178,7 @@ alter table public.plantillas add column if not exists personas int not null def
 alter table public.plantillas add column if not exists seguimiento_titulo text;
 alter table public.plantillas add column if not exists seguimiento_despues int not null default 45 check (seguimiento_despues between 1 and 600);
 alter table public.plantillas add column if not exists seguimiento_minutos int not null default 5 check (seguimiento_minutos between 1 and 600);
+alter table public.plantillas add column if not exists seguimiento_consumible_id uuid;
 update public.plantillas set local_id = public._local_principal() where local_id is null;
 
 -- ---------- Asignaciones (la tarea de un día, para una persona) ----------
@@ -931,9 +932,9 @@ begin
       t := date_trunc('minute', (now() at time zone 'America/Caracas') + make_interval(mins => p.seguimiento_despues))::time;
       quien := coalesce(a.asignado_a, auth.uid());
       insert into asignaciones (plantilla_id, fecha, titulo, minutos, arrastra, asignado_a, asignado_original, motivo, local_id,
-                                momento, momento_nombre, desde, antes)
+                                momento, momento_nombre, desde, antes, consumible_id)
       values (p.id, a.fecha, trim(p.seguimiento_titulo), p.seguimiento_minutos, false, quien, quien, 'fija', a.local_id,
-              a.momento + 50, a.momento_nombre, t, (t + interval '15 minutes')::time)
+              a.momento + 50, a.momento_nombre, t, (t + interval '15 minutes')::time, p.seguimiento_consumible_id)
       on conflict (plantilla_id, fecha, momento, puesto) do update set desde = excluded.desde, antes = excluded.antes,
         asignado_a = excluded.asignado_a, asignado_original = excluded.asignado_original
         where asignaciones.estado = 'pendiente';
@@ -2204,6 +2205,9 @@ create table if not exists public.consumibles_pedidos (
 do $$ begin
   if not exists (select 1 from pg_constraint where conname = 'plantillas_consumible_fk') then
     alter table public.plantillas add constraint plantillas_consumible_fk foreign key (consumible_id) references public.consumibles (id) on delete set null;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'plantillas_seg_consumible_fk') then
+    alter table public.plantillas add constraint plantillas_seg_consumible_fk foreign key (seguimiento_consumible_id) references public.consumibles (id) on delete set null;
   end if;
   if not exists (select 1 from pg_constraint where conname = 'asignaciones_consumible_fk') then
     alter table public.asignaciones add constraint asignaciones_consumible_fk foreign key (consumible_id) references public.consumibles (id) on delete set null;
