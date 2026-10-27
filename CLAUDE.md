@@ -41,6 +41,7 @@ App web unificada **CIL** en GitHub Pages: https://srzoco.github.io/cil/
 - Quien no tiene el acceso `tareas` (por ejemplo Verónica, de contenido, que trabaja en línea) no marca "Llegué" ni entra en la rotación.
 
 ## Seguridad
+- **Sesión en el teléfono** (incidente 27/10/2026: la app abría con la cuenta de otra persona): todas las apps comparten `barquero_sesion` y `bfcontenido_sesion`. Si guardan personas distintas, no se usa ninguna (se borran y se pide entrar). Al renovar nunca se escribe encima de la sesión de otra persona (la pantalla vieja se recarga). Al entrar se borran las demás; al salir, todas. Probado en `pruebas/sesiones.js`. Cambios únicos en SQL van con `cil_migraciones`.
 - La clave privada VAPID solo va en los Secrets de Supabase, nunca en el repositorio.
 - **Nunca re-ejecutar el `supabase.sql` viejo de contenidoBF**: reabre Contenido a todos los usuarios. Las políticas de Contenido ahora exigen `tiene_acceso('contenido')`.
 - Los usuarios se crean en Supabase → Authentication (registro abierto apagado). Se descartó entrar con nombre de usuario: se quiere conservar la recuperación de clave por correo.

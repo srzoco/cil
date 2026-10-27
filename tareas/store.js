@@ -693,11 +693,16 @@
   // Se comparte la más reciente de las dos: así no hay que poner la clave dos veces, y ninguna app usa un
   // «refresh token» viejo (Supabase cierra la sesión de las dos si se reutiliza uno ya cambiado).
   var CLAVES_SESION = ['barquero_sesion', 'bfcontenido_sesion'];
+  // Seguridad: si los lugares donde se guarda la sesión tienen personas DISTINTAS (quedó una sesión vieja de otra
+  // persona en este teléfono), no se usa ninguna: se borran todas y se pide entrar de nuevo. Nunca se abre con otra cuenta.
   function sesionCompartida() {
-    var mejor = null;
-    CLAVES_SESION.forEach(function (k) { var x = LS.get(k); if (x && x.refresh_token && x.user && (!mejor || (x.expires_at || 0) > (mejor.expires_at || 0))) mejor = x; });
+    var mejor = null, usuarios = {};
+    CLAVES_SESION.forEach(function (k) { var x = LS.get(k); if (x && x.refresh_token && x.user) { usuarios[x.user.id] = 1; if (!mejor || (x.expires_at || 0) > (mejor.expires_at || 0)) mejor = x; } });
+    if (Object.keys(usuarios).length > 1) { CLAVES_SESION.forEach(function (k) { LS.del(k); }); return null; }
     return mejor;
   }
+  // ¿Quién tiene la sesión guardada ahora en el teléfono? (para no escribir encima de la de otra persona)
+  function usuarioGuardado() { var x = sesionCompartida(); return x ? x.user.id : null; }
   SupabaseStore.prototype.sesion = function () { return this.ses ? { user: this.ses.user } : null; };
 
   SupabaseStore.prototype._pedir = function (url, opciones) {
@@ -723,8 +728,12 @@
     if (token) h.Authorization = 'Bearer ' + token;
     return this._pedir(this.url + '/auth/v1/' + ruta, { method: 'POST', headers: h, body: JSON.stringify(cuerpo || {}) });
   };
-  SupabaseStore.prototype._guardarSesion = function (d) {
+  SupabaseStore.prototype._guardarSesion = function (d, esEntrada) {
     var ahora = Math.floor(Date.now() / 1000);
+    // Al renovar (no al entrar): si mientras tanto entró OTRA persona en este teléfono, esta pantalla quedó vieja.
+    // No se escribe encima de su sesión: esta se descarta y la app se vuelve a abrir con la persona correcta.
+    var otro = usuarioGuardado();
+    if (!esEntrada && otro && otro !== d.user.id) { this.ses = null; if (typeof location !== 'undefined') location.reload(); throw errorUsuario('Entró otra persona en este teléfono.', { sesion: true }); }
     this.ses = {
       access_token: d.access_token,
       refresh_token: d.refresh_token,
@@ -744,7 +753,9 @@
         if (r.status === 400 || /invalid/i.test(m)) throw errorUsuario('Correo o contraseña incorrectos.');
         throw errorUsuario('No se pudo iniciar sesión (' + r.status + '). ' + m);
       }
-      self._guardarSesion(r.cuerpo);
+      // al entrar se borra cualquier sesión de otra persona que hubiera quedado guardada
+      CLAVES_SESION.forEach(function (k) { LS.del(k); });
+      self._guardarSesion(r.cuerpo, true);
     });
   };
   SupabaseStore.prototype.salir = function () {
@@ -770,6 +781,9 @@
   SupabaseStore.prototype._token = function () {
     var self = this;
     if (!self.ses) return Promise.reject(errorUsuario('Inicia sesión para continuar.', { sesion: true }));
+    // Si en este teléfono ahora hay guardada otra persona (o nadie, porque salió en otra pantalla), esta pantalla quedó vieja
+    var guardado = usuarioGuardado();
+    if (guardado !== self.ses.user.id) { self.ses = null; if (typeof location !== 'undefined') location.reload(); return Promise.reject(errorUsuario('La sesión cambió en este teléfono.', { sesion: true })); }
     if (self.ses.expires_at - 60 < Date.now() / 1000) return self._refrescar().then(function () { return self.ses.access_token; });
     return Promise.resolve(self.ses.access_token);
   };

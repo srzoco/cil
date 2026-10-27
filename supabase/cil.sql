@@ -2776,4 +2776,25 @@ grant execute on function public.pend_datos(), public.pend_hilo(uuid), public.pe
   -- la usan las reglas de la carpeta de fotos
   public._pend_foto_ok(text) to authenticated;
 
+-- =====================================================================
+--  Cambios que se hacen UNA sola vez (aunque cil.sql se vuelva a correr)
+-- =====================================================================
+create table if not exists public.cil_migraciones (nombre text primary key, hecho_en timestamptz not null default now());
+alter table public.cil_migraciones enable row level security;
+revoke all on public.cil_migraciones from anon, authenticated;
+
+-- 27/10/2026: en un teléfono quedaron guardadas sesiones de otras personas (gerencia incluida) y la app abría con otra
+-- cuenta. Se corrigieron las apps y se cierran TODAS las sesiones abiertas una vez: cada quien vuelve a entrar con su clave.
+do $$ begin
+  if exists (select 1 from public.cil_migraciones where nombre = 'cerrar-sesiones-2026-10-27') then return; end if;
+  if to_regclass('auth.sessions') is null then raise notice 'Sin auth.sessions: nada que cerrar.'; return; end if;
+  begin
+    if to_regclass('auth.refresh_tokens') is not null then execute 'delete from auth.refresh_tokens'; end if;
+    execute 'delete from auth.sessions';
+  exception when insufficient_privilege then
+    raise warning 'No se pudieron cerrar las sesiones (permisos): %', sqlerrm; return;
+  end;
+  insert into public.cil_migraciones (nombre) values ('cerrar-sesiones-2026-10-27');
+end $$;
+
 -- Listo. Siguiente paso de la guía: poner tu correo (y los de gerencia) como admin.

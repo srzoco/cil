@@ -21,12 +21,18 @@
   // La sesión se comparte con Contenido («bfcontenido_sesion», mismo sitio): se usa la más reciente de las dos
   // y se guarda en ambas, para no pedir la clave otra vez al abrir Contenido.
   var CLAVES = [CLAVE, 'bfcontenido_sesion'];
+  // Seguridad: si quedaron guardadas sesiones de personas DISTINTAS en este teléfono, no se usa ninguna (se pide entrar)
   function leer() {
-    var mejor = null;
-    CLAVES.forEach(function (k) { var x = null; try { x = JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { /* nada */ } if (x && x.refresh_token && x.user && (!mejor || (x.expires_at || 0) > (mejor.expires_at || 0))) mejor = x; });
+    var mejor = null, usuarios = {};
+    CLAVES.forEach(function (k) { var x = null; try { x = JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { /* nada */ } if (x && x.refresh_token && x.user) { usuarios[x.user.id] = 1; if (!mejor || (x.expires_at || 0) > (mejor.expires_at || 0)) mejor = x; } });
+    if (Object.keys(usuarios).length > 1) { olvidar(); return null; }
     return mejor;
   }
-  function guardar(d) {
+  function guardar(d, esEntrada) {
+    // al renovar: si mientras tanto entró otra persona en este teléfono, no se escribe encima de su sesión
+    var actual = leer();
+    if (!esEntrada && actual && actual.user.id !== d.user.id) throw new Error('sesion');
+    if (esEntrada) olvidar();
     var ses = { access_token: d.access_token, refresh_token: d.refresh_token, expires_at: d.expires_at || Math.floor(Date.now() / 1000) + (d.expires_in || 3600), user: { id: d.user.id, email: d.user.email } };
     CLAVES.forEach(function (k) { try { localStorage.setItem(k, JSON.stringify(ses)); } catch (e) { /* sin almacenamiento */ } });
     return ses;
@@ -61,7 +67,7 @@
       auth('token?grant_type=password', { email: String(f.get('email') || '').trim(), password: f.get('clave') }).then(function (r) {
         if (!r.ok) throw new Error(r.status === 400 ? 'Correo o clave incorrectos.' : 'No se pudo entrar (' + r.status + ').');
         return r.json();
-      }).then(function (d) { guardar(d); cargar(); }, function (e) { login(e.message === 'Failed to fetch' ? 'No hay conexión. Revisa el internet.' : e.message); });
+      }).then(function (d) { guardar(d, true); cargar(); }, function (e) { login(e.message === 'Failed to fetch' ? 'No hay conexión. Revisa el internet.' : e.message); });
     });
   }
 

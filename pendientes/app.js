@@ -14,12 +14,17 @@
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 
   // ---------- Sesión (la misma del menú de CIL) ----------
+  // Seguridad: si quedaron sesiones de personas DISTINTAS en este teléfono, no se usa ninguna (se pide entrar)
   function leer() {
-    var mejor = null;
-    CLAVES.forEach(function (k) { var x = null; try { x = JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { /* nada */ } if (x && x.refresh_token && x.user && (!mejor || (x.expires_at || 0) > (mejor.expires_at || 0))) mejor = x; });
+    var mejor = null, usuarios = {};
+    CLAVES.forEach(function (k) { var x = null; try { x = JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { /* nada */ } if (x && x.refresh_token && x.user) { usuarios[x.user.id] = 1; if (!mejor || (x.expires_at || 0) > (mejor.expires_at || 0)) mejor = x; } });
+    if (Object.keys(usuarios).length > 1) { CLAVES.forEach(function (k) { try { localStorage.removeItem(k); } catch (e) { /* nada */ } }); return null; }
     return mejor;
   }
   function guardar(d) {
+    // al renovar: si mientras tanto entró otra persona en este teléfono, no se escribe encima de su sesión
+    var actual = leer();
+    if (actual && actual.user.id !== d.user.id) throw new Error('sesion');
     var ses = { access_token: d.access_token, refresh_token: d.refresh_token, expires_at: d.expires_at || Math.floor(Date.now() / 1000) + (d.expires_in || 3600), user: { id: d.user.id, email: d.user.email } };
     CLAVES.forEach(function (k) { try { localStorage.setItem(k, JSON.stringify(ses)); } catch (e) { /* nada */ } });
     return ses;
