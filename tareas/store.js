@@ -233,6 +233,8 @@
           if (db.ajustes.solo_en_tienda) throw errorUsuario('Primero marca «Llegué».');
           this._llegada(yo.id);
         }
+        var ld = L.listaDesde(db, a, yo.id, new Date());
+        if (ld) throw errorUsuario('Esta tarea dura ' + a.minutos + ' min: la podrás marcar desde las ' + horaTxt(hhmmAhora(ld)));
       }
       a.estado = 'hecha'; a.hecha_en = new Date().toISOString(); a.hecha_por = a.asignado_a || yo.id; a.repetir = false;
       this._evento(a.id, 'hecha', null, a.hecha_por);
@@ -790,7 +792,7 @@
         if (r.status === 403 || /row-level security/i.test(m)) throw errorUsuario('No tienes permiso para hacer eso.');
         if (/relation .* does not exist|could not find the (table|function)/i.test(m)) throw errorUsuario('La base de datos no está preparada: falta ejecutar supabase.sql.');
         if (/^NO_TIENDA/.test(m)) throw errorUsuario(m, { noTienda: true });
-        throw errorUsuario(/^(Esa|Solo|El pool|El local|Alguien|Tu usuario|Escribe|Inicia|No estás|No se pudo marcar|Primero|No se pudo detectar)/.test(m) ? m : 'No se pudo guardar: ' + m);
+        throw errorUsuario(/^(Esa|Esta tarea|Solo|El pool|El local|Alguien|Tu usuario|Escribe|Inicia|No estás|No se pudo marcar|Primero|No se pudo detectar)/.test(m) ? m : 'No se pudo guardar: ' + m);
       }
       return r.cuerpo;
     });

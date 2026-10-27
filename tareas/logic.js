@@ -113,6 +113,23 @@
     if (a.fecha !== hoyISO(ahora)) return a.fecha > hoyISO(ahora);
     return ahora.getHours() * 60 + ahora.getMinutes() < aMin(hhmm(a.desde));
   }
+  // Una tarea de X minutos no se puede marcar antes de que pasen X minutos desde que la persona llegó
+  // (o desde su hora «desde», si empieza más tarde). Igual que _hecha en supabase.sql.
+  // Devuelve la hora (Date) desde la que se puede marcar, o null si ya se puede.
+  function listaDesde(db, a, personaId, ahora) {
+    ahora = ahora || new Date();
+    if (!a || a.estado === 'hecha' || !(a.minutos > 0)) return null;
+    var hoy = hoyISO(ahora);
+    var s = (db.asistencia || []).filter(function (x) { return x.persona_id === personaId && x.fecha === hoy && x.estado === 'presente'; })[0];
+    if (!s || !s.llegada) return null;
+    var ini = new Date(s.llegada);
+    if (a.desde && a.fecha === hoy) {
+      var p = hhmm(a.desde).split(':'), d = new Date(ahora); d.setHours(+p[0], +p[1], 0, 0);
+      if (d > ini) ini = d;
+    }
+    var fin = new Date(ini.getTime() + a.minutos * 60000);
+    return ahora < fin ? fin : null;
+  }
   // ---------- Rescate de tareas con horario (igual que _urgente / _excusado en supabase.sql) ----------
   function tsHoy(f, hm) { var p = f.split('-').map(Number), h = String(hm).split(':').map(Number); return new Date(p[0], p[1] - 1, p[2], h[0], h[1] || 0).getTime(); }
   function fueraEn(db, personaId, ts) {
@@ -770,7 +787,7 @@
     hoyISO: hoyISO, addDias: addDias, difDias: difDias, dow: dow, lunesDe: lunesDe, fmtFecha: fmtFecha, fmtFechaLarga: fmtFechaLarga,
     fmtHora: fmtHora, fmtHoraTxt: fmtHoraTxt, minutosTxt: minutosTxt, pasoLimite: pasoLimite, llegoTarde: llegoTarde,
     aTiempoHasta: aTiempoHasta, pasoATiempo: pasoATiempo, puntualidadMes: puntualidadMes, sinPuntualidad: sinPuntualidad,
-    toca: toca, distanciaM: distanciaM, estadoHora: estadoHora, antesDeHora: antesDeHora,
+    toca: toca, distanciaM: distanciaM, estadoHora: estadoHora, antesDeHora: antesDeHora, listaDesde: listaDesde,
     equiposDe: equiposDe, fueraDeRango: fueraDeRango, rangoTxt: rangoTxt, esUrgente: esUrgente, excusado: excusado, estaFuera: estaFuera, fueraEn: fueraEn, hhmm: hhmm, tituloCompleto: tituloCompleto,
     localDe: localDe, localPrincipal: localPrincipal, labDe: labDe, laborable: laborable, laborableFn: laborableFn, trabaja: trabaja, libreDe: libreDe, especial: especial, localDePersona: localDePersona, frecuenciaTxt: frecuenciaTxt, proximas: proximas, siguienteLaborable: siguienteLaborable,
     seFue: seFue, anteriorLaborable: anteriorLaborable, carga: carga, capacidad: capacidad, cabeEn: cabeEn, estadoAsistencia: estadoAsistencia, estaPresente: estaPresente, asistenciaDe: asistenciaDe,

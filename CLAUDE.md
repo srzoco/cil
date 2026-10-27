@@ -30,6 +30,7 @@ App web unificada **CIL** en GitHub Pages: https://srzoco.github.io/cil/
 - Llegar tarde no reduce el trabajo: quien llega tarde recibe tareas pendientes de quien lo cubrió por 100–120 % de los minutos cubiertos. Si ninguna combinación cae en ese rango, la más cercana; si hay empate, la de más minutos (`_compensar`).
 - Feriados: lo semanal o mensual que cae en día libre pasa al día laboral **anterior**.
 - Semanal o mensual sin hacer: sigue con su dueño como atrasada (si vino, no se reasigna sola) y **vence** al salir la siguiente vez (queda en el historial como no hecha). Para que otro pueda hacerla el mismo día, se le pone hora (sale como urgente).
+- Una tarea de X minutos no se puede marcar antes de que pasen X minutos desde que la persona llegó (o desde su «desde», si es más tarde). Gerencia sí puede (`listaDesde` en logic.js y `_hecha` en SQL).
 - "Me voy antes" reparte lo pendiente igual que una falta. "Día que no cuenta" para imprevistos generales.
 - Récord de puntualidad oculto para empleados el primer mes (`mostrar_record`).
 - Temperaturas de equipos de frío 3 veces al día (8:30, 1 pm, 4 pm), con estado normal, defrost o apagado. Nota obligatoria si está fuera de rango. **Sin fotos** (almacenamiento).

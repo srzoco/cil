@@ -570,7 +570,8 @@
           '<span class="pill ' + ESTADO_TONO[e] + '">' + (e === 'libre' && L.libreDe(pe, hoy) ? esc(L.libreDe(pe, hoy).motivo || 'Vacaciones') : ESTADO_TXT[e]) + (s && s.llegada ? ' · ' + esc(L.fmtHora(s.llegada)) : '') + '</span>' +
           (s && s.salida && s.estado === 'presente' ? '<span class="pill corregir">Se fue ' + esc(L.fmtHora(s.salida)) + '</span>' : '') +
           (L.estaFuera(d, pe.id, hoy) ? '<span class="pill hora">Fuera (despachando)</span>' : '') +
-          (otro ? '<span class="pill edita">Vino a ' + esc(nombreLocal(s.local_id)) + '</span>' : '') + '</button>';
+          (otro ? '<span class="pill edita">Vino a ' + esc(nombreLocal(s.local_id)) + '</span>' : '') +
+          (s && s.llegada && s.estado === 'presente' ? '<span class="asis-verif">' + esc(verifCorto(s, pe.id)) + '</span>' : '') + '</button>';
       }).join('') +
       visitas.map(function (pe) {
         var s = L.asistenciaDe(d, pe.id, hoy);
@@ -1513,6 +1514,11 @@
     return '<li class="ev"><div class="ev-cuerpo"><p class="ev-txt">' + esc(txt) + '</p><time>' + esc(L.fmtFecha(L.hoyISO(new Date(e.creado_en)))) + ', ' + esc(L.fmtHora(e.creado_en)) + esc(autor) + '</time></div></li>';
   }
 
+  // Cómo marcó «Llegué», en corto (para la tarjeta de asistencia)
+  function verifCorto(s, id) {
+    return { wifi: '📶 Wi-Fi del local', gps: '📍 Ubicación', gerencia: '👤 Lo marcó gerencia', sin_wifi: 'Día sin Wi-Fi', sin_conexion: 'Sin internet' }[s.verificado] ||
+      (s.marcado_por === id ? '⚠️ Sin revisar la red' : '👤 Lo marcó gerencia');
+  }
   function modalAsistencia(id) {
     var pe = persona(id); if (!pe) return '';
     var e = L.estadoAsistencia(db(), id, S.hoy, new Date()), s = L.asistenciaDe(db(), id, S.hoy);
@@ -2329,6 +2335,10 @@
     if (hecha && !esAdmin() && aj().solo_en_tienda) {
       var s = L.asistenciaDe(db(), yo().id, S.hoy);
       if (!(s && s.estado === 'presente') && !llegadaEnCola()) { aviso('Primero marca «Llegué».'); return; }
+    }
+    if (hecha && !esAdmin()) {
+      var ld = L.listaDesde(db(), a, yo().id, new Date());
+      if (ld) { aviso('Esta tarea dura ' + a.minutos + ' min: la podrás marcar desde las ' + L.fmtHora(ld)); return; }
     }
     if (hecha && a.registro) { abrirModal({ tipo: 'registro', id: id }); return; }
     if (hecha && a.consumible_id) { abrirModal({ tipo: 'consumo', id: id }); return; }

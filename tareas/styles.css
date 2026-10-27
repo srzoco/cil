@@ -656,3 +656,5 @@ html.marco-fijo .tabs { position: static; flex: none; }
 html.marco-fijo .desliza .contenido { padding-bottom: calc(28px + env(safe-area-inset-bottom)); }
 html.marco-fijo .desliza:has(~ .tabs) .contenido { padding-bottom: 28px; }
 .bloque-head > a, .bloque-head .ver-mas { white-space: nowrap; flex: none; }
+.asis-verif { font-size: .76rem; color: var(--muted); font-weight: 500; }
+.asis .pill { white-space: nowrap; }

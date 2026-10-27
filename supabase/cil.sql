@@ -886,7 +886,7 @@ $$;
 
 create or replace function public._hecha(p_id uuid, p_hecha boolean, p_con_registro boolean) returns void
 language plpgsql security definer set search_path = public as $$
-declare a public.asignaciones; adm boolean := public.es_admin(); p public.plantillas; t time; quien uuid;
+declare a public.asignaciones; adm boolean := public.es_admin(); p public.plantillas; t time; quien uuid; lista timestamptz;
 begin
   -- solo quien tiene el acceso «Tareas» y está activo (al desactivar a alguien, su sesión puede durar hasta 1 hora)
   if not public.tiene_acceso('tareas') then raise exception 'No tienes acceso a Tareas.'; end if;
@@ -911,6 +911,15 @@ begin
     if not adm and not exists (select 1 from asistencia where persona_id = auth.uid() and fecha = public.hoy() and estado = 'presente') then
       if (select solo_en_tienda from tareas_ajustes where id = 1) then raise exception 'Primero marca «Llegué».'; end if;
       perform public._llegada(auth.uid());
+    end if;
+    -- Una tarea de X minutos no se marca antes de que pasen X minutos desde que llegó (o desde su hora «desde»).
+    -- Igual que listaDesde en logic.js.
+    if not adm and a.minutos > 0 then
+      select greatest(s.llegada, case when a.desde is not null and a.fecha = public.hoy() then public._ts_hoy(a.desde) end) + make_interval(mins => a.minutos)
+        into lista from asistencia s where s.persona_id = auth.uid() and s.fecha = public.hoy() and s.estado = 'presente';
+      if lista is not null and now() < lista then
+        raise exception 'Esta tarea dura % min: la podrás marcar desde las %', a.minutos, public._hora_txt((lista at time zone 'America/Caracas')::time);
+      end if;
     end if;
     update asignaciones set estado = 'hecha', hecha_en = now(), hecha_por = coalesce(a.asignado_a, auth.uid()), repetir = false where id = p_id;
     insert into tareas_eventos (asignacion_id, tipo, a) values (p_id, 'hecha', coalesce(a.asignado_a, auth.uid()));
