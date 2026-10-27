@@ -850,7 +850,7 @@
           return '<a class="cal-pieza t-' + p.tipo + (riesgo ? ' riesgo' : '') + '" href="#/p/' + p.id + '" title="' + esc(L.estadoDe(p, S.hoy).texto) + '"><span class="dot"></span>' + ic + ' ' + esc(p.titulo) +
             (riesgo ? ' <small>(' + esc(L.estadoDe(p, S.hoy).texto.split(' · ')[0].toLowerCase()) + ')</small>' : '') + '</a>';
         }).join('');
-        if (!en.length) cont = d >= S.hoy ? '<button class="cal-hueco" data-act="hueco" data-fecha="' + d + '" data-plat="' + pl + '" data-tipo="' + st + '">Hueco · llenar</button>' : '<span class="cal-vacio">Sin publicación</span>';
+        if (!en.length) cont = d >= S.hoy ? '<button class="cal-hueco" data-act="hueco" data-fecha="' + d + '" data-plat="' + pl + '" data-tipo="' + st + '">' + esc(L.TIPO_DIA[st] || 'Hueco') + ' · llenar</button>' : '<span class="cal-vacio">Sin publicación</span>';
         return '<div class="cal-fila"><span class="plat ' + pl + '">' + L.PLAT_CORTO[pl] + '</span><div class="cal-items">' + cont + '</div></div>';
       }).join('');
       var gs = grabaciones().filter(function (g) { return g.fecha === d && g.estado !== 'cancelada'; });
@@ -858,9 +858,8 @@
         var ok = g.estado === 'hecha' ? '✅' : L.estadoGrabacion(g, S.data.equipo).completa ? '✓' : '⏳';
         return '<a class="cal-grab" href="#/grabacion/' + g.id + '">🎬 Grabación ' + L.fmtHora(g.hora) + ' ' + ok + '</a>';
       }).join('');
-      var c = L.diaCfg(ajustes(), d);
       html += '<div class="cal-dia' + (d === S.hoy ? ' hoy' : '') + (d < S.hoy ? ' pasado' : '') + '">' +
-        '<div class="cal-dia-head"><b>' + L.fmtFecha(d) + '</b><span>IG: ' + L.TIPO_DIA[c.tipo].toLowerCase() + '</span></div>' + filaG +
+        '<div class="cal-dia-head"><b>' + L.fmtFecha(d) + '</b></div>' + filaG +
         (filas || '<p class="cal-libre">Día libre</p>') + '</div>';
     });
     return html + '</div><p class="ayuda leyenda"><span class="dot-ley reel"></span> Reel · <span class="dot-ley carrusel"></span> Carrusel<br>✅ publicada · 🟢 lista · 👀 por aprobar · ✂️ en edición · 🎬 por grabar · 💡 idea · ⚠️ pasó sin publicar</p>';
