@@ -628,3 +628,6 @@ html.marco-fijo .desliza .contenido { padding-bottom: calc(28px + env(safe-area-
 html.marco-fijo .desliza:has(~ .tabs) .contenido { padding-bottom: 28px; }
 
 .cta-revisar { margin: 0 0 12px; }
+.cal-extra { border-color: var(--line); color: var(--muted); }
+.cron-extra .cron-fila { grid-template-columns: 84px 1fr; }
+.motivo-tipo span { font-weight: 600; }

@@ -172,7 +172,11 @@
   }
   function slotTipo(ajustes, plat, iso) { return cron(ajustes)[plat][String(diaSemana(iso))] || 'descanso'; }
   function publicable(t) { return t === 'reel' || t === 'carrusel' || t === 'cualquiera'; }
-  function cabe(ajustes, plat, iso, tipo) { var t = slotTipo(ajustes, plat, iso); return t === tipo || (t === 'cualquiera' && !!tipo); }
+  // Pieza extra opcional de un día (p. ej. un carrusel extra el miércoles en Instagram): se puede poner sin motivo,
+  // pero no sale como hueco ni se sugiere (no pasa todas las semanas). cronograma.extra = { ig: { '3': 'carrusel' } }
+  function slotExtra(ajustes, plat, iso) { var e = (cron(ajustes).extra || {})[plat]; return (e && e[String(diaSemana(iso))]) || null; }
+  function cabePrincipal(ajustes, plat, iso, tipo) { var t = slotTipo(ajustes, plat, iso); return t === tipo || (t === 'cualquiera' && !!tipo); }
+  function cabe(ajustes, plat, iso, tipo) { return cabePrincipal(ajustes, plat, iso, tipo) || (!!tipo && slotExtra(ajustes, plat, iso) === tipo); }
   function diaCfg(ajustes, iso) { return { tipo: slotTipo(ajustes, 'ig', iso) }; } // tipo del día en Instagram (para mostrar)
   function minimo(ajustes) { var m = ajustes && ajustes.dias_minimos; return (m == null || isNaN(m)) ? 3 : +m; }
   function enBanco(p) {
@@ -212,7 +216,7 @@
     limite = limite || 120;
     for (var i = 0; i < limite; i++) {
       var d = addDias(desde, i);
-      if (cabe(ajustes, plat, d, tipo) && !ocupado(piezas, plat, d, excluirId)) return d;
+      if (cabePrincipal(ajustes, plat, d, tipo) && !ocupado(piezas, plat, d, excluirId)) return d;
     }
     return null;
   }
@@ -478,7 +482,21 @@
     };
   }
 
-  function accionFechas(p, fechas, ajustes) {
+  // Fechas nuevas que caen en un día de otro tipo (p. ej. un reel en día de carrusel en Instagram).
+  // Se permiten, pero con un motivo escrito. Las que ya tenía la pieza no se vuelven a preguntar.
+  function fueraDeTipo(p, fechas, ajustes) {
+    var res = [];
+    plataformasDe(p).forEach(function (pl) {
+      var f = fechas && fechas['fecha_' + pl];
+      if (!f || publicadoEn(p, pl) || f === p['fecha_' + pl] || cabe(ajustes, pl, f, p.tipo)) return;
+      res.push({ plataforma: pl, fecha: f, toca: slotTipo(ajustes, pl, f) });
+    });
+    return res;
+  }
+  function textoFueraDeTipo(p, x) {
+    return PLATAFORMAS[x.plataforma] + ': el ' + DIAS[diaSemana(x.fecha)].toLowerCase() + ' ' + (x.toca === 'descanso' ? 'es de descanso' : x.toca === 'historias' ? 'es solo de historias' : 'toca ' + TIPO_DIA[x.toca].toLowerCase()) + ' y esta pieza es ' + TIPOS[p.tipo].toLowerCase() + '.';
+  }
+  function accionFechas(p, fechas, ajustes, motivo) {
     if (['idea', 'produccion', 'aprobada'].indexOf(p.fase) < 0) throw err(p.fase === 'publicada' ? 'Ya está publicada.' : 'Esta pieza no está activa.');
     if (p.en_espera) throw err('Está en espera de mercancía: marca «Llegó» antes de ponerle fecha.');
     var fp = fechasPatch(p, fechas);
@@ -487,6 +505,11 @@
     var nueva = Object.assign({}, p, fp);
     var datos = { fecha_ig: fp.fecha_ig, fecha_tt: fp.fecha_tt, primero: fp.primero, fase: p.fase, limite: fechaLimite(nueva, ajustes) };
     if (!fp.fecha_ig && !fp.fecha_tt) datos.sinfecha = true;
+    var fuera = fueraDeTipo(p, fp, ajustes);
+    if (fuera.length) {
+      if (!txt(motivo)) throw err(textoFueraDeTipo(p, fuera[0]) + ' Escribe por qué no va lo que toca.');
+      datos.fuera_de_tipo = fuera; datos.motivo = String(motivo).trim().slice(0, 300);
+    }
     return { patch: fp, match: { en_espera: false }, eventos: [{ tipo: 'fechas', texto: null, datos: datos }] };
   }
 
@@ -953,7 +976,7 @@
     plataformasDe: plataformasDe, fechaDe: fechaDe, publicadoEn: publicadoEn, pendientesDePublicar: pendientesDePublicar,
     etapasDe: etapasDe, etapaNorm: etapaNorm, esFinal: esFinal, gruposChips: gruposChips, COLUMNAS: COLUMNAS, columnaDe: columnaDe, leToca: leToca, pasosDe: pasosDe,
     entrega: entrega, proximaFecha: proximaFecha, fechaLimite: fechaLimite, accionAGrabacion: accionAGrabacion, puedeVolverARevision: puedeVolverARevision, accionVolverARevision: accionVolverARevision,
-    puedeDesmarcarPublicado: puedeDesmarcarPublicado, accionDesmarcarPublicado: accionDesmarcarPublicado, puedeVolverAIdea: puedeVolverAIdea, accionVolverAIdea: accionVolverAIdea, eventosEtapaActual: eventosEtapaActual, ocupa: ocupa, diaCfg: diaCfg, cron: cron, slotTipo: slotTipo, publicable: publicable, cabe: cabe, checklistDe: checklistDe, minimo: minimo, enBanco: enBanco, estadoDe: estadoDe,
+    puedeDesmarcarPublicado: puedeDesmarcarPublicado, accionDesmarcarPublicado: accionDesmarcarPublicado, puedeVolverAIdea: puedeVolverAIdea, accionVolverAIdea: accionVolverAIdea, eventosEtapaActual: eventosEtapaActual, ocupa: ocupa, diaCfg: diaCfg, cron: cron, slotTipo: slotTipo, publicable: publicable, cabe: cabe, checklistDe: checklistDe, minimo: minimo, enBanco: enBanco, estadoDe: estadoDe, fueraDeTipo: fueraDeTipo, textoFueraDeTipo: textoFueraDeTipo, slotExtra: slotExtra, cabePrincipal: cabePrincipal,
     ocupado: ocupado, slotLibre: slotLibre, sugerirFechas: sugerirFechas, validarFechas: validarFechas,
     huecos: huecos, candidatosHueco: candidatosHueco,
     nuevaPieza: nuevaPieza, accionEnviar: accionEnviar, accionAprobar: accionAprobar, accionCorregir: accionCorregir,

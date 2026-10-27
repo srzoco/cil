@@ -159,11 +159,17 @@
     var b = document.querySelector('[data-buscar-en]');
     if (b && b.value) aplicarBusqueda(b);
   }
+  // Modal, aviso de arriba y mensaje de abajo, cada uno en su lugar: mostrar un error ya no vuelve a pintar el
+  // modal (antes se perdía lo que la persona había escrito, por ejemplo la fecha nueva)
   function pintarCapas() {
     var c = document.getElementById('capas');
     if (!c) return;
-    c.innerHTML = modalHtml() + flashHtml() + toastHtml();
-    if (S.modal) despuesDePintar(c);
+    if (!c.querySelector('#capa-modal')) c.innerHTML = '<div id="capa-modal"></div><div id="capa-flash"></div><div id="capa-toast"></div>';
+    var m = c.querySelector('#capa-modal'), mh = modalHtml();
+    if (m._html !== mh) { m.innerHTML = mh; m._html = mh; if (S.modal) despuesDePintar(m); }
+    var f = c.querySelector('#capa-flash'), fh = flashHtml();
+    if (f._html !== fh) { f.innerHTML = fh; f._html = fh; }
+    c.querySelector('#capa-toast').innerHTML = toastHtml();
   }
   function vistaRuta() {
     var r = ruta();
@@ -713,6 +719,7 @@
       case 'fechas':
         ic = '📅'; txt = quien + ((d.sinfecha || d.banco) ? ' le quitó la fecha' : ' programó: ' + fTxt(d));
         if (d.limite) extra += '<p class="muted">Entregar antes del ' + L.fmtFecha(d.limite) + '</p>';
+        if (d.motivo) extra += '<p class="muted">Va en día de otro tipo: «' + esc(d.motivo) + '»</p>';
         break;
       case 'publicado': ic = '🚀'; txt = quien + ' publicó en ' + (L.PLATAFORMAS[d.plataforma] || ''); if (d.enlace) extra += '<p><a href="' + esc(d.enlace) + '" target="_blank" rel="noopener">Ver post</a></p>'; break;
       case 'vistas': ic = '👀'; txt = quien + ' anotó vistas: ' + ['ig', 'tt'].filter(function (k) { return d['vistas_' + k] != null; }).map(function (k) { return L.PLAT_CORTO[k] + ' ' + Number(d['vistas_' + k]).toLocaleString('es'); }).join(' · '); break;
@@ -739,7 +746,9 @@
         '<input type="date" name="fecha_' + pl + '" value="' + esc(vals['fecha_' + pl] || '') + '"' + (pub ? ' disabled' : '') + '><small class="dia-txt" data-dia="' + pl + '"></small></label>';
     }).join('') + '</div>' +
       '<div class="fechas-acc"><button type="button" class="btn link" data-act="sugerir">↻ Sugerir fechas</button><button type="button" class="btn link gris" data-act="limpiar-fechas">Quitar fechas</button></div>' +
-      '<ul class="avisos" data-avisos></ul><p class="ayuda" data-limite></p>' +
+      '<ul class="avisos" data-avisos></ul>' +
+      '<label class="campo motivo-tipo" data-motivo hidden><span data-motivo-txt></span><textarea name="motivo_tipo" rows="2" maxlength="300" placeholder="Ej.: el carrusel no estuvo listo a tiempo"></textarea></label>' +
+      '<p class="ayuda" data-limite></p>' +
       '<p class="ayuda">Se sugieren días que tocan en el cronograma y con mínimo ' + L.minimo(ajustes()) + ' días entre IG y TikTok.</p></fieldset>';
     return html;
   }
@@ -765,6 +774,13 @@
     var avisos = L.validarFechas(p, f, piezas(), ajustes(), S.hoy);
     var ul = fs.querySelector('[data-avisos]');
     if (ul) ul.innerHTML = avisos.map(function (a) { return '<li>⚠️ ' + esc(a) + '</li>'; }).join('');
+    // Si va un tipo distinto al que toca ese día, hay que escribir el motivo
+    var fuera = L.fueraDeTipo(p, f, ajustes()), mo = fs.querySelector('[data-motivo]');
+    if (mo) {
+      mo.hidden = !fuera.length;
+      var mt = mo.querySelector('[data-motivo-txt]');
+      if (mt) mt.textContent = fuera.length ? L.textoFueraDeTipo(p, fuera[0]) + ' ¿Por qué no va lo que toca?' : '';
+    }
     var li = fs.querySelector('[data-limite]');
     if (li) {
       var lim = L.fechaLimite(Object.assign({}, p, f), ajustes());
@@ -840,17 +856,20 @@
     dias.forEach(function (d) {
       var filas = ['ig', 'tt'].map(function (pl) {
         var en = piezas().filter(function (p) { return p[pl] && L.fechaDe(p, pl) === d && L.ocupa(p); });
-        var st = L.slotTipo(ajustes(), pl, d), slot = L.publicable(st);
-        if (!en.length && !slot) return '';
+        var st = L.slotTipo(ajustes(), pl, d), slot = L.publicable(st), ex = L.slotExtra(ajustes(), pl, d);
+        if (!en.length && !slot && !ex) return '';
         var cont = en.map(function (p) {
           var pub = L.publicadoEn(p, pl);
           var col = L.columnaDe(p);
           var ic = pub ? '✅' : (col === 'lista' && d < S.hoy) ? '⚠️' : ICON_COL[col];
           var riesgo = !pub && col !== 'lista' && col !== 'publicada';
           return '<a class="cal-pieza t-' + p.tipo + (riesgo ? ' riesgo' : '') + '" href="#/p/' + p.id + '" title="' + esc(L.estadoDe(p, S.hoy).texto) + '"><span class="dot"></span>' + ic + ' ' + esc(p.titulo) +
-            (riesgo ? ' <small>(' + esc(L.estadoDe(p, S.hoy).texto.split(' · ')[0].toLowerCase()) + ')</small>' : '') + '</a>';
+            (riesgo ? ' <small>(' + esc(L.estadoDe(p, S.hoy).texto.split(' · ')[0].toLowerCase()) + ')</small>' : '') +
+            (!L.cabe(ajustes(), pl, d, p.tipo) ? ' <small class="muted">(en día de ' + esc(L.TIPO_DIA[st].toLowerCase()) + ')</small>' : ex && p.tipo === ex && !L.cabePrincipal(ajustes(), pl, d, p.tipo) ? ' <small class="muted">(extra)</small>' : '') + '</a>';
         }).join('');
-        if (!en.length) cont = d >= S.hoy ? '<button class="cal-hueco" data-act="hueco" data-fecha="' + d + '" data-plat="' + pl + '" data-tipo="' + st + '">' + esc(L.TIPO_DIA[st] || 'Hueco') + ' · llenar</button>' : '<span class="cal-vacio">Sin publicación</span>';
+        if (!en.length && slot) cont = d >= S.hoy ? '<button class="cal-hueco" data-act="hueco" data-fecha="' + d + '" data-plat="' + pl + '" data-tipo="' + st + '">' + esc(L.TIPO_DIA[st] || 'Hueco') + ' · llenar</button>' : '<span class="cal-vacio">Sin publicación</span>';
+        // Extra opcional: un botón discreto, solo si todavía no hay una pieza de ese tipo ese día
+        if (ex && d >= S.hoy && !en.some(function (p) { return p.tipo === ex; })) cont += '<button class="cal-hueco cal-extra" data-act="hueco" data-fecha="' + d + '" data-plat="' + pl + '" data-tipo="' + ex + '">+ ' + esc(L.TIPO_DIA[ex].toLowerCase()) + ' extra (opcional)</button>';
         return '<div class="cal-fila"><span class="plat ' + pl + '">' + L.PLAT_CORTO[pl] + '</span><div class="cal-items">' + cont + '</div></div>';
       }).join('');
       var gs = grabaciones().filter(function (g) { return g.fecha === d && g.estado !== 'cancelada'; });
@@ -1020,6 +1039,12 @@
         }).join('') + '</select>';
       }).join('') + '</div>';
     }).join('') + '</div>' +
+      '<div class="campo"><span class="label">Pieza extra opcional en Instagram <small>Por si una semana sale una pieza de más. Se puede poner sin explicar por qué, pero no sale como hueco ni se sugiere.</small></span><div class="cron cron-extra">' +
+      [1, 2, 3, 4, 5, 6, 0].map(function (i) {
+        var ex = ((cr.extra || {}).ig || {})[String(i)] || '';
+        return '<div class="cron-fila"><b>' + L.DIAS[i] + '</b><select name="extra_ig_' + i + '" aria-label="Extra en Instagram el ' + L.DIAS[i] + '"' + (editable ? '' : ' disabled') + '>' +
+          [['', 'Sin extra'], ['carrusel', 'Carrusel extra'], ['reel', 'Reel extra']].map(function (o) { return '<option value="' + o[0] + '"' + (ex === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></div>';
+      }).join('') + '</div></div>' +
       '<div class="campo"><span class="label">Grabación semanal por defecto <small>La app la propone sola cada semana</small></span><div class="fila-dos"><select name="grabacion_dia"' + (editable ? '' : ' disabled') + '>' + [1, 2, 3, 4, 5, 6, 0].map(function (i) {
         return '<option value="' + i + '"' + (+(aj.grabacion_dia == null ? 2 : aj.grabacion_dia) === i ? ' selected' : '') + '>' + L.DIAS[i] + '</option>';
       }).join('') + '</select><input type="time" name="grabacion_hora" value="' + esc(aj.grabacion_hora || '11:00') + '"' + (editable ? '' : ' disabled') + '></div></div>' +
@@ -1486,7 +1511,7 @@
       var p = pieza(f.dataset.id);
       var fe = leerFechas(f.querySelector('fieldset.fechas'));
       var r;
-      try { r = L.accionFechas(p, fe, ajustes()); } catch (e) { return aviso(e.message); }
+      try { r = L.accionFechas(p, fe, ajustes(), val(f, 'motivo_tipo')); } catch (e) { return aviso(e.message); }
       accion(function () { return ejecutar(p, r); }, function () {
         S.modal = null;
         var d = r.eventos[0].datos;
@@ -1537,6 +1562,9 @@
     ajustes: function (f, btn) {
       var cron = { ig: {}, tt: {} };
       for (var i = 0; i < 7; i++) { cron.ig[String(i)] = val(f, 'ig_' + i); cron.tt[String(i)] = val(f, 'tt_' + i); }
+      var extra = {};
+      for (var j = 0; j < 7; j++) { var ex = val(f, 'extra_ig_' + j); if (ex === 'carrusel' || ex === 'reel') extra[String(j)] = ex; }
+      if (Object.keys(extra).length) cron.extra = { ig: extra };
       var dm = parseInt(val(f, 'dias_minimos'), 10), de = parseInt(val(f, 'dias_entrega'), 10);
       if (isNaN(dm) || dm < 0 || dm > 30) return aviso('Los días mínimos deben estar entre 0 y 30.');
       if (isNaN(de) || de < 0 || de > 14) return aviso('Los días de anticipación deben estar entre 0 y 14.');
