@@ -82,6 +82,8 @@
       aplicarCola(d);
       S.data = d; S.hoy = L.hoyISO(); S.error = null; S.cargando = false;
       guardarCache(d);
+      // Si ahora entra a más de un módulo, el inicio vuelve a mostrar el menú (index.html deja de saltar directo aquí)
+      if (d.yo && (d.yo.rol === 'admin' || (d.yo.accesos || []).length > 1)) ST.LS.del('barquero_directo');
       if (colaLeer().length) setTimeout(enviarCola, 0);
       // no borrar lo que alguien está escribiendo en un formulario
       if (silencioso && S.sucio) return;

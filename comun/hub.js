@@ -31,7 +31,7 @@
     CLAVES.forEach(function (k) { try { localStorage.setItem(k, JSON.stringify(ses)); } catch (e) { /* sin almacenamiento */ } });
     return ses;
   }
-  function olvidar() { try { CLAVES.forEach(function (k) { localStorage.removeItem(k); }); Object.keys(localStorage).forEach(function (k) { if (k.indexOf('barquero_cache_') === 0) localStorage.removeItem(k); }); } catch (e) { /* nada */ } }
+  function olvidar() { try { CLAVES.forEach(function (k) { localStorage.removeItem(k); }); localStorage.removeItem('barquero_directo'); Object.keys(localStorage).forEach(function (k) { if (k.indexOf('barquero_cache_') === 0) localStorage.removeItem(k); }); } catch (e) { /* nada */ } }
   function auth(ruta, cuerpo, tok) {
     var h = { apikey: KEY, 'Content-Type': 'application/json' }; if (tok) h.Authorization = 'Bearer ' + tok;
     return fetch(URL_SB + '/auth/v1/' + ruta, { method: 'POST', headers: h, body: JSON.stringify(cuerpo || {}) });
@@ -71,7 +71,10 @@
     if (!p.activo) mios = [];
     // Un solo módulo (por ejemplo, el personal de mantenimiento): directo a él
     // (?avisos: viene de «Activar avisos» en Contenido; se queda en el menú para mostrar la tarjeta)
-    if (!admin && mios.length === 1 && !sessionStorage.getItem('barquero_en_menu') && !/avisos/.test(location.search)) { location.replace(mios[0].href); return; }
+    // (se recuerda en el teléfono: la próxima vez index.html salta directo, sin esperar al menú)
+    var directo = !admin && mios.length === 1 ? mios[0].href : null;
+    try { if (directo) localStorage.setItem('barquero_directo', directo); else localStorage.removeItem('barquero_directo'); } catch (e) { /* nada */ }
+    if (directo && !sessionStorage.getItem('barquero_en_menu') && !/avisos/.test(location.search)) { location.replace(directo); return; }
     var nombre = (p.nombre || '').split(' ')[0] || (p.email || '').split('@')[0];
     var h = new Date().getHours(), saludo = h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
     var html = '<div class="hub"><header class="hub-top"><a class="hub-marca" href="./"><span class="hub-logo">CIL</span><b>CIL</b></a>' +

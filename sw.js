@@ -1,9 +1,9 @@
 /* CIL — guarda la app en el teléfono para que abra al instante (menú y módulos).
    Los datos (Supabase) nunca se guardan aquí: siempre se piden a internet.
    Al publicar una versión nueva, se sube el número de VERSION y el ?v= de index.html. */
-var VERSION = 'cil-v45';
-var ARCHIVOS = ['./', 'index.html', 'comun/tema.css?v=2', 'comun/tema.js?v=1', 'comun/hub.css?v=5', 'comun/hub.js?v=8',
-  'tareas/', 'tareas/styles.css?v=24', 'tareas/logic.js?v=22', 'tareas/store.js?v=32', 'tareas/app.js?v=44', 'pendientes/', 'pendientes/styles.css?v=1', 'pendientes/app.js?v=3',
+var VERSION = 'cil-v46';
+var ARCHIVOS = ['./', 'index.html', 'comun/tema.css?v=2', 'comun/tema.js?v=1', 'comun/hub.css?v=5', 'comun/hub.js?v=9',
+  'tareas/', 'tareas/styles.css?v=24', 'tareas/logic.js?v=22', 'tareas/store.js?v=32', 'tareas/app.js?v=45', 'pendientes/', 'pendientes/styles.css?v=1', 'pendientes/app.js?v=3',
   'manifest.webmanifest', 'icon-192.png'];
 
 self.addEventListener('install', function (e) {
@@ -18,12 +18,26 @@ self.addEventListener('activate', function (e) {
 self.addEventListener('fetch', function (e) {
   var req = e.request, url = new URL(req.url);
   if (req.method !== 'GET' || url.origin !== location.origin) return;  // Supabase y lo demás: directo a internet
-  // La página y config.js: primero internet (para ver cambios); si no hay, lo guardado
+  // La página: primero internet (para ver los cambios), pero si tarda más de 1,5 s se abre lo guardado
+  // y lo nuevo queda guardado para la próxima vez. Con internet lento ya no se queda la pantalla en blanco.
+  // config.js casi nunca cambia: lo guardado de una vez, y se actualiza por detrás.
   if (req.mode === 'navigate' || /config\.js$/.test(url.pathname)) {
-    e.respondWith(fetch(req).then(function (r) {
+    var red = fetch(req).then(function (r) {
       if (r.ok) { var copia = r.clone(); caches.open(VERSION).then(function (c) { c.put(req, copia); }); }
       return r;
-    }).catch(function () { return caches.match(req, { ignoreSearch: true }).then(function (hit) { return hit || caches.match('index.html'); }); }));
+    });
+    var guardado = caches.match(req, { ignoreSearch: true });
+    e.waitUntil(red.catch(function () { /* sin internet */ }));
+    if (/config\.js$/.test(url.pathname)) {
+      e.respondWith(guardado.then(function (hit) { return hit || red; }));
+      return;
+    }
+    e.respondWith(new Promise(function (ok, mal) {
+      var listo = false, fin = function (r) { if (!listo && r) { listo = true; ok(r); } };
+      var plan = function () { guardado.then(function (hit) { if (hit) fin(hit); else red.then(fin, function () { caches.match('index.html').then(function (x) { if (x) fin(x); else mal(new Error('sin red')); }); }); }); };
+      var t = setTimeout(plan, 1500);
+      red.then(function (r) { clearTimeout(t); fin(r); }, function () { clearTimeout(t); plan(); });
+    }));
     return;
   }
   // Archivos con versión (?v=): lo guardado primero
