@@ -34,3 +34,5 @@
 .listo-wa { text-align: center; display: flex; flex-direction: column; gap: 12px; align-items: stretch; }
 .pref-avisos { margin-top: 28px; }
 .pref-avisos select { font: inherit; padding: 8px 10px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--card); color: var(--ink); }
+.grupo-t { font: 700 .82rem var(--sans); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 18px 0 8px; }
+.grupo-t:first-of-type { margin-top: 4px; }

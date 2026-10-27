@@ -125,6 +125,22 @@
       (prev ? '<span class="previa">' + esc(prev) + '</span>' : '') + '</span><span class="flecha">›</span></a>';
   }
   function lista(xs, vacio) { return xs.length ? '<div class="lista">' + xs.map(item).join('') + '</div>' : '<p class="muted vacio">' + esc(vacio) + '</p>'; }
+  // Lo abierto, agrupado: Hoy (con lo vencido), Resto de la semana (hasta el domingo), Más adelante y Sin fecha
+  function finDeSemana(hoy) { var p = hoy.split('-'), d = new Date(+p[0], +p[1] - 1, +p[2]); d.setDate(d.getDate() + (7 - d.getDay()) % 7); return iso(d); }
+  function agrupada(xs, vacio) {
+    if (!xs.length) return '<p class="muted vacio">' + esc(vacio) + '</p>';
+    var hoy = S.d.hoy, dom = finDeSemana(hoy);
+    var orden = function (a, b) { return (a.vence || '') < (b.vence || '') ? -1 : (a.vence || '') > (b.vence || '') ? 1 : (a.hora || '99') < (b.hora || '99') ? -1 : 1; };
+    var grupos = [
+      ['Hoy', xs.filter(function (x) { return x.vence && x.vence <= hoy; }).sort(orden)],
+      ['Resto de la semana', xs.filter(function (x) { return x.vence && x.vence > hoy && x.vence <= dom; }).sort(orden)],
+      ['Más adelante', xs.filter(function (x) { return x.vence && x.vence > dom; }).sort(orden)],
+      ['Sin fecha', xs.filter(function (x) { return !x.vence; })]
+    ];
+    return grupos.filter(function (g) { return g[1].length; }).map(function (g) {
+      return '<h3 class="grupo-t">' + esc(g[0]) + ' <span class="muted">' + g[1].length + '</span></h3><div class="lista">' + g[1].map(item).join('') + '</div>';
+    }).join('');
+  }
 
   function vistaListas(tab) {
     var yo = S.d.yo, xs = S.d.pendientes || [];
@@ -136,15 +152,15 @@
     var n = function (l) { var k = l.filter(function (x) { return x.nuevo || (x.vence && x.vence <= S.d.hoy) || (x.hecho_en && x.creado_por === S.d.yo); }).length; return k ? '<span class="num">' + k + '</span>' : ''; };
     var tabs = [['mi', 'Para mí', n(paraMi)], ['pedi', 'Lo que pedí', n(pedi)], ['personas', 'Por persona', ''], ['cerrados', 'Cerrados', '']];
     var h = '<h1>Pendientes</h1><div class="seg">' + tabs.map(function (t) { return '<a href="#/' + t[0] + '"' + (t[0] === tab ? ' class="activo"' : '') + '>' + t[1] + t[2] + '</a>'; }).join('') + '</div>';
-    if (tab === 'mi') h += lista(paraMi, 'Nada pendiente para ti. 🎉');
-    else if (tab === 'pedi') h += lista(pedi, 'No estás esperando respuesta de nadie.');
+    if (tab === 'mi') h += agrupada(paraMi, 'Nada pendiente para ti. 🎉');
+    else if (tab === 'pedi') h += agrupada(pedi, 'No estás esperando respuesta de nadie.');
     else if (tab === 'cerrados') h += lista(cerrados, 'Todavía no hay pendientes cerrados.') + '<p class="nota-suave">Se muestran los cerrados de los últimos 60 días. Las fotos de un pendiente se borran 60 días después de cerrarlo.</p>';
     else {
       var otros = (S.d.gerencia || []).filter(function (p) { return p.id !== yo; });
       if (!otros.length) h += '<p class="muted vacio">Todavía no hay más personas de gerencia en CIL.</p>';
       otros.forEach(function (p) {
         var con = abiertos.filter(function (x) { return x.creado_por === p.id || x.para === p.id; });
-        h += '<div class="persona-sec"><h2>' + esc(p.nombre) + '</h2><a class="btn chico sec" href="#/nuevo?para=' + esc(p.id) + '">Pedirle algo</a></div>' + lista(con, 'Nada pendiente con ' + p.nombre.split(' ')[0] + '.');
+        h += '<div class="persona-sec"><h2>' + esc(p.nombre) + '</h2><a class="btn chico sec" href="#/nuevo?para=' + esc(p.id) + '">Pedirle algo</a></div>' + agrupada(con, 'Nada pendiente con ' + p.nombre.split(' ')[0] + '.');
       });
     }
     h += '<div class="acciones"><a class="btn grande" href="#/nuevo">+ Nuevo pendiente</a></div>';
