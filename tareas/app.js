@@ -1517,7 +1517,9 @@
     var pe = persona(id); if (!pe) return '';
     var e = L.estadoAsistencia(db(), id, S.hoy, new Date()), s = L.asistenciaDe(db(), id, S.hoy);
     var VERIF = { wifi: ' (Wi-Fi del local)', gps: ' (ubicación)', gerencia: ' (marcado por gerencia)', sin_wifi: ' (día sin Wi-Fi)', sin_conexion: ' (marcado sin internet)' };
-    var h = '<h2>' + esc(pe.nombre) + '</h2><p class="muted">Hoy: ' + ESTADO_TXT[e] + (s && s.llegada ? ' · llegó ' + esc(L.fmtHora(s.llegada)) + (VERIF[s.verificado] || '') : '') + '</p><div class="seg vertical botones">';
+    // Sin verificación: su local no tenía Wi-Fi registrado o la regla «solo desde el local» estaba apagada
+    var verif = s && s.llegada ? (VERIF[s.verificado] || (!s.verificado && s.marcado_por === id ? ' (sin revisar la red: su local no tenía Wi-Fi registrado)' : '')) : '';
+    var h = '<h2>' + esc(pe.nombre) + '</h2><p class="muted">Hoy: ' + ESTADO_TXT[e] + (s && s.llegada ? ' · llegó ' + esc(L.fmtHora(s.llegada)) + esc(verif) : '') + '</p><div class="seg vertical botones">';
     if (!L.estaPresente(e)) h += '<button class="btn" data-acc="asis-set" data-id="' + esc(id) + '" data-v="presente">Llegó (marcar ahora)</button>';
     if (e !== 'ausente') h += '<button class="btn sec" data-acc="asis-set" data-id="' + esc(id) + '" data-v="ausente">No viene hoy</button>';
     if (aj().usar_almuerzo && L.estaPresente(e) && s && !s.salida && !s.almuerzo) {
