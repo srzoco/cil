@@ -87,12 +87,15 @@ sql(`insert into auth.users (id, email) values ('${JAVIER}', 'javier@x.com') on 
   if (await p.locator('[data-acc="cerrar"]').count()) fallas.push('Javier puede cerrar lo que pidió Sara');
   await p.fill('form[data-form="mensaje"] textarea', 'Sí, 2 cajas'); await p.click('form[data-form="mensaje"] button[type="submit"]'); await p.waitForTimeout(800);
   await debe('Sí, 2 cajas');
+  await p.click('[data-acc="hecho"]'); await p.waitForTimeout(800); await debe('Marcaste que ya lo hiciste');
+  await p.click('[data-acc="no-hecho"]'); await p.waitForTimeout(800); await debe('Ya lo hice');
+  await p.click('[data-acc="hecho"]'); await p.waitForTimeout(800); await revisar();
   for (const t of ['#/pedi', '#/personas', '#/cerrados']) { donde = 'Javier ' + t; await p.goto(BASE + '/pendientes/' + t); await p.waitForTimeout(300); await revisar(); }
 
   // Sara ve la respuesta, cierra, y el recordatorio repetido sale para el mes siguiente
   donde = 'Sara cierra'; await como(SARA);
-  await p.goto(BASE + '/pendientes/#/pedi'); await p.waitForTimeout(300); await debe('Javier: Sí, 2 cajas');
-  await p.click('a.item'); await p.waitForTimeout(700);
+  await p.goto(BASE + '/pendientes/#/pedi'); await p.waitForTimeout(300); await debe('Javier: Sí, 2 cajas'); await debe('Por confirmar');
+  await p.click('a.item'); await p.waitForTimeout(700); await debe('Javier dice que ya lo hizo'); await revisar();
   await p.click('[data-acc="cerrar"]'); await p.waitForTimeout(800); await debe('Cerrado');
   await p.goto(BASE + '/pendientes/#/mi'); await p.waitForTimeout(300);
   await p.locator('a.item', { hasText: 'Pagar alquiler' }).click(); await p.waitForTimeout(600);

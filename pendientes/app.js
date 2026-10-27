@@ -108,6 +108,7 @@
       else if (x.vence === hoy) h += '<span class="pill hoy">Hoy' + (x.hora ? ' ' + esc(hora(x.hora)) : '') + '</span>';
       else h += '<span class="pill hora">' + esc(fecha(x.vence)) + (x.hora ? ' ' + esc(hora(x.hora)) : '') + '</span>';
     }
+    if (x.hecho_en && x.estado === 'abierto') h += '<span class="pill aprueba">' + (x.creado_por === S.d.yo ? 'Por confirmar' : 'Esperando que ' + esc(nombre(x.creado_por)) + ' confirme') + '</span>';
     if (x.repite) h += '<span class="pill banco">' + esc(REPITE[x.repite]) + '</span>';
     if (x.estado === 'cerrado') h += '<span class="pill ok">Cerrado</span>';
     return h;
@@ -124,9 +125,10 @@
     var yo = S.d.yo, xs = S.d.pendientes || [];
     var abiertos = xs.filter(function (x) { return x.estado === 'abierto'; });
     var paraMi = abiertos.filter(function (x) { return x.para === yo; });
-    var pedi = abiertos.filter(function (x) { return x.creado_por === yo && x.para !== yo; });
+    var pedi = abiertos.filter(function (x) { return x.creado_por === yo && x.para !== yo; })
+      .sort(function (a, b) { return (b.hecho_en ? 1 : 0) - (a.hecho_en ? 1 : 0); });  // lo «Por confirmar», arriba
     var cerrados = xs.filter(function (x) { return x.estado === 'cerrado'; }).sort(function (a, b) { return a.cerrado_en < b.cerrado_en ? 1 : -1; });
-    var n = function (l) { var k = l.filter(function (x) { return x.nuevo || (x.vence && x.vence <= S.d.hoy); }).length; return k ? '<span class="num">' + k + '</span>' : ''; };
+    var n = function (l) { var k = l.filter(function (x) { return x.nuevo || (x.vence && x.vence <= S.d.hoy) || (x.hecho_en && x.creado_por === S.d.yo); }).length; return k ? '<span class="num">' + k + '</span>' : ''; };
     var tabs = [['mi', 'Para mí', n(paraMi)], ['pedi', 'Lo que pedí', n(pedi)], ['personas', 'Por persona', ''], ['cerrados', 'Cerrados', '']];
     var h = '<h1>Pendientes</h1><div class="seg">' + tabs.map(function (t) { return '<a href="#/' + t[0] + '"' + (t[0] === tab ? ' class="activo"' : '') + '>' + t[1] + t[2] + '</a>'; }).join('') + '</div>';
     if (tab === 'mi') h += lista(paraMi, 'Nada pendiente para ti. 🎉');
@@ -181,15 +183,23 @@
     }
     h += '<div class="cab-detalle"><h1>' + esc(x.titulo) + '</h1><div class="item-meta">' + pillsDe(x) + '</div>' +
       '<p class="muted">' + (propio(x) ? 'Tu recordatorio' : 'De ' + esc(nombre(x.creado_por)) + ' para ' + esc(nombre(x.para))) + ' · creado ' + esc(cuando(x.creado_en)) + '</p></div>';
+    if (mio && x.hecho_en && x.estado === 'abierto') {
+      h += '<div class="card"><p><b>' + esc(nombre(x.para)) + ' dice que ya lo hizo</b> <small class="muted">(' + esc(cuando(x.hecho_en)) + ')</small></p>' +
+        '<div class="acciones-detalle"><button class="btn ok" data-acc="cerrar" data-id="' + esc(id) + '">Confirmar y cerrar</button>' +
+        '<button class="btn sec" data-acc="no-hecho" data-id="' + esc(id) + '">Todavía no está</button></div></div>';
+    }
     if (mio) {
-      h += '<div class="acciones-detalle">' + (x.estado === 'abierto' ? '<button class="btn ok" data-acc="cerrar" data-id="' + esc(id) + '">Cerrar: ya está resuelto</button>' : '<button class="btn sec" data-acc="reabrir" data-id="' + esc(id) + '">Reabrir</button>') +
+      h += '<div class="acciones-detalle">' + (x.estado === 'abierto' ? (x.hecho_en && !propio(x) ? '' : '<button class="btn ok" data-acc="cerrar" data-id="' + esc(id) + '">Cerrar: ya está resuelto</button>') : '<button class="btn sec" data-acc="reabrir" data-id="' + esc(id) + '">Reabrir</button>') +
         '<button class="btn sec" data-acc="editar">Cambiar</button>' + (!propio(x) && x.estado === 'abierto' ? botonWA(x) : '') + '</div>';
       h += '<form class="pendientes-form card" data-form="editar" data-id="' + esc(id) + '" hidden><label class="campo">¿Qué es?<input name="titulo" maxlength="200" required value="' + esc(x.titulo) + '"></label>' + camposFecha(x) +
         '<div class="acciones"><button class="btn" type="submit">Guardar</button></div>' +
         (S.borrando ? '<div class="confirmar-borrar">¿Borrar este pendiente con toda su conversación? No se puede deshacer.<div class="acciones-detalle"><button class="btn warn" type="button" data-acc="borrar-si" data-id="' + esc(id) + '">Sí, borrar</button><button class="btn sec" type="button" data-acc="borrar-no">No</button></div></div>'
           : '<button class="btn fantasma rojo" type="button" data-acc="borrar">Borrar pendiente</button>') + '</form>';
     } else if (x.estado === 'abierto') {
-      h += '<p class="ayuda">Contesta aquí abajo. ' + esc(nombre(x.creado_por)) + ' lo cierra cuando quede resuelto.</p>';
+      h += x.hecho_en
+        ? '<div class="card"><p>Marcaste que ya lo hiciste. ' + esc(nombre(x.creado_por)) + ' lo confirma y lo cierra.</p><button class="btn sec chico" data-acc="no-hecho" data-id="' + esc(id) + '">Deshacer</button></div>'
+        : '<div class="acciones-detalle"><button class="btn ok" data-acc="hecho" data-id="' + esc(id) + '">Ya lo hice</button></div>' +
+          '<p class="ayuda">Al tocarlo, a ' + esc(nombre(x.creado_por)) + ' le llega un aviso para que lo confirme y lo cierre. Si necesitas preguntar algo, escríbelo aquí abajo.</p>';
     }
     h += '<div class="hilo">' + (!hilo ? '<div class="spinner"></div>' : hilo.length ? hilo.map(function (m) {
       var yoM = m.autor === S.d.yo;
@@ -304,6 +314,8 @@
     if (S.ocupado) return;
     var p = null;
     if (acc === 'cerrar') p = rpc('pend_cerrar', { p_id: id }).then(function (nid) { return cargar().then(function () { aviso(nid ? 'Cerrado. Ya salió el de la próxima vez.' : 'Cerrado.', true); }); });
+    else if (acc === 'hecho') p = rpc('pend_hecho', { p_id: id, p_si: true }).then(cargar).then(function () { aviso('Listo: le avisamos a ' + nombre(pend(id).creado_por) + ' para que lo confirme.', true); });
+    else if (acc === 'no-hecho') p = rpc('pend_hecho', { p_id: id, p_si: false }).then(cargar);
     else if (acc === 'reabrir') p = rpc('pend_reabrir', { p_id: id }).then(cargar).then(function () { aviso('Reabierto.', true); });
     else if (acc === 'borrar-si') p = rpc('pend_hilo', { p_id: id }).then(function (hilo) {
       // Primero las fotos: después de borrar el pendiente ya no hay permiso para tocarlas

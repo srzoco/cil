@@ -1731,11 +1731,11 @@ begin
     end if;
   end if;
   if yo.rol = 'admin' and to_regclass('public.pendientes') is not null then
-    execute $q$select count(*) from public.pendientes x where x.para = $1 and x.estado = 'abierto'
+    execute $q$select count(*) from public.pendientes x where x.estado = 'abierto' and ((x.creado_por = $1 and x.para <> $1 and x.hecho_en is not null) or (x.para = $1
       and ((x.vence is not null and x.vence <= public.hoy())
            or (x.creado_por <> $1 and not exists (select 1 from public.pendientes_vistos v where v.pendiente_id = x.id and v.persona_id = $1))
            or exists (select 1 from public.pendientes_mensajes m where m.pendiente_id = x.id and m.autor <> $1
-                        and m.creado_en > coalesce((select v.visto_en from public.pendientes_vistos v where v.pendiente_id = x.id and v.persona_id = $1), '-infinity')))$q$
+                        and m.creado_en > coalesce((select v.visto_en from public.pendientes_vistos v where v.pendiente_id = x.id and v.persona_id = $1), '-infinity')))))$q$
       into n using yo.id;
     r := r || jsonb_build_object('pendientes', n);
   end if;
@@ -2431,6 +2431,7 @@ grant execute on function public.consumo_datos(), public.pedir_consumible(uuid, 
 --  Pendientes de gerencia: recordatorios propios y pedidos entre personas de gerencia
 --  - Cada pendiente lo ven solo quien lo creó y para quien es (si es para uno mismo, es un recordatorio: solo lo ve esa persona).
 --  - Conversación dentro del pendiente, con fotos (achicadas en el teléfono, se borran 60 días después de cerrado).
+--  - Quien lo creó lo cierra. Quien lo recibió puede marcar «Ya lo hice» y queda «Por confirmar» para quien lo pidió.
 --  - Quien lo creó lo cierra. Si se repite (cada día, semana, 2 o 3 semanas, o mes), al cerrarlo sale el siguiente;
 --    si se reabre, ese siguiente se quita (si nadie lo ha tocado).
 --  - Avisos: al momento (pedido nuevo, respuesta) o un resumen a las 8 a. m. (lo elige cada quien), y el día que vence.
@@ -2450,6 +2451,7 @@ create table if not exists public.pendientes (
   actividad_en timestamptz not null default now(),
   constraint pendientes_repite_fecha check (repite = '' or vence is not null)
 );
+alter table public.pendientes add column if not exists hecho_en timestamptz;  -- «Ya lo hice»: espera que quien lo pidió confirme
 alter table public.pendientes drop constraint if exists pendientes_repite_check;
 alter table public.pendientes add constraint pendientes_repite_check check (repite in ('', 'diaria', 'semanal', 'semanas2', 'semanas3', 'mensual'));
 create index if not exists pendientes_para_idx on public.pendientes (para, estado);
@@ -2533,7 +2535,7 @@ begin
                  from personas p where p.activo and p.rol = 'admin'),
     'pendientes', (select coalesce(json_agg(json_build_object(
         'id', x.id, 'creado_por', x.creado_por, 'para', x.para, 'titulo', x.titulo, 'vence', x.vence, 'hora', to_char(x.hora, 'HH24:MI'),
-        'repite', x.repite, 'estado', x.estado, 'cerrado_en', x.cerrado_en, 'creado_en', x.creado_en, 'actividad_en', x.actividad_en,
+        'repite', x.repite, 'estado', x.estado, 'hecho_en', x.hecho_en, 'cerrado_en', x.cerrado_en, 'creado_en', x.creado_en, 'actividad_en', x.actividad_en,
         'mensajes', (select count(*) from pendientes_mensajes m where m.pendiente_id = x.id),
         'ultimo', (select json_build_object('autor', m.autor, 'texto', m.texto, 'foto', m.foto is not null, 'creado_en', m.creado_en)
                    from pendientes_mensajes m where m.pendiente_id = x.id order by m.creado_en desc limit 1),
@@ -2640,6 +2642,31 @@ begin
   return nuevo;
 end $$;
 
+-- «Ya lo hice» (quien lo recibió) o deshacerlo; quien lo pidió también puede decir «Todavía no está»
+create or replace function public.pend_hecho(p_id uuid, p_si boolean) returns void
+language plpgsql security definer set search_path = public as $$
+declare x public.pendientes := public._pend_mio(p_id);
+begin
+  if x.estado <> 'abierto' then raise exception 'Ese pendiente ya está cerrado.'; end if;
+  if x.creado_por = x.para then raise exception 'Es tu recordatorio: ciérralo directamente.'; end if;
+  if p_si then
+    if auth.uid() <> x.para then raise exception 'Solo quien lo recibió puede marcarlo como hecho.'; end if;
+    if x.hecho_en is not null then return; end if;
+    update pendientes set hecho_en = now(), actividad_en = now() where id = x.id;
+    -- si lo deshizo y lo volvió a marcar enseguida, no se avisa dos veces
+    if not exists (select 1 from avisos_cola c where c.persona_id = x.creado_por and c.url = 'pendientes/#/p/' || x.id
+                     and c.cuerpo = 'Confírmalo para cerrarlo.' and c.creado_en > now() - interval '30 minutes') then
+      perform public._pend_avisar(x, public._pend_nombre(auth.uid()) || ' ya lo hizo: ' || x.titulo, 'Confírmalo para cerrarlo.');
+    end if;
+  else
+    if x.hecho_en is null then return; end if;
+    update pendientes set hecho_en = null, actividad_en = now() where id = x.id;
+    if auth.uid() = x.creado_por then
+      perform public._pend_avisar(x, public._pend_nombre(auth.uid()) || ' dice que todavía no está: ' || x.titulo, 'Revisa la conversación.');
+    end if;
+  end if;
+end $$;
+
 -- Reabrir: el siguiente que había salido al cerrarlo se quita, si nadie lo ha tocado (si no, quedarían dos)
 create or replace function public.pend_reabrir(p_id uuid) returns void
 language plpgsql security definer set search_path = public as $$
@@ -2649,7 +2676,7 @@ begin
   if x.estado = 'abierto' then return; end if;
   delete from pendientes n where n.anterior = x.id and n.estado = 'abierto'
     and not exists (select 1 from pendientes_mensajes m where m.pendiente_id = n.id);
-  update pendientes set estado = 'abierto', cerrado_en = null, actividad_en = now() where id = x.id;
+  update pendientes set estado = 'abierto', cerrado_en = null, hecho_en = null, actividad_en = now() where id = x.id;
 end $$;
 
 create or replace function public.pend_borrar(p_id uuid) returns json
@@ -2708,7 +2735,7 @@ exception when insufficient_privilege then raise warning 'No se pudo preparar la
 end $$;
 
 grant execute on function public.pend_datos(), public.pend_hilo(uuid), public.pend_crear(text, uuid, date, time, text, text),
-  public.pend_editar(uuid, text, date, time, text), public.pend_mensaje(uuid, text, text), public.pend_cerrar(uuid), public.pend_reabrir(uuid),
+  public.pend_editar(uuid, text, date, time, text), public.pend_mensaje(uuid, text, text), public.pend_cerrar(uuid), public.pend_reabrir(uuid), public.pend_hecho(uuid, boolean),
   public.pend_borrar(uuid), public.pend_avisos(text), public.pend_fotos_vencidas(), public.pend_fotos_borradas(text[]),
   -- la usan las reglas de la carpeta de fotos
   public._pend_foto_ok(text) to authenticated;
