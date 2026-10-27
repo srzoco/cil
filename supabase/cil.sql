@@ -2431,7 +2431,8 @@ grant execute on function public.consumo_datos(), public.pedir_consumible(uuid, 
 --  Pendientes de gerencia: recordatorios propios y pedidos entre personas de gerencia
 --  - Cada pendiente lo ven solo quien lo creó y para quien es (si es para uno mismo, es un recordatorio: solo lo ve esa persona).
 --  - Conversación dentro del pendiente, con fotos (achicadas en el teléfono, se borran 60 días después de cerrado).
---  - Quien lo creó lo cierra. Si se repite (cada día, semana o mes), al cerrarlo sale el siguiente.
+--  - Quien lo creó lo cierra. Si se repite (cada día, semana, 2 o 3 semanas, o mes), al cerrarlo sale el siguiente;
+--    si se reabre, ese siguiente se quita (si nadie lo ha tocado).
 --  - Avisos: al momento (pedido nuevo, respuesta) o un resumen a las 8 a. m. (lo elige cada quien), y el día que vence.
 --  Todo pasa por las funciones de abajo: las tablas no se pueden leer directo desde la app.
 -- =====================================================================
@@ -2442,13 +2443,15 @@ create table if not exists public.pendientes (
   titulo       text not null check (char_length(titulo) between 1 and 200),
   vence        date,
   hora         time,
-  repite       text not null default '' check (repite in ('', 'diaria', 'semanal', 'mensual')),
+  repite       text not null default '' check (repite in ('', 'diaria', 'semanal', 'semanas2', 'semanas3', 'mensual')),
   estado       text not null default 'abierto' check (estado in ('abierto', 'cerrado')),
   cerrado_en   timestamptz,
   creado_en    timestamptz not null default now(),
   actividad_en timestamptz not null default now(),
   constraint pendientes_repite_fecha check (repite = '' or vence is not null)
 );
+alter table public.pendientes drop constraint if exists pendientes_repite_check;
+alter table public.pendientes add constraint pendientes_repite_check check (repite in ('', 'diaria', 'semanal', 'semanas2', 'semanas3', 'mensual'));
 create index if not exists pendientes_para_idx on public.pendientes (para, estado);
 create index if not exists pendientes_creado_idx on public.pendientes (creado_por, estado);
 create table if not exists public.pendientes_mensajes (
@@ -2461,6 +2464,18 @@ create table if not exists public.pendientes_mensajes (
   creado_en    timestamptz not null default now()
 );
 create index if not exists pendientes_mensajes_idx on public.pendientes_mensajes (pendiente_id, creado_en);
+-- De qué pendiente salió (al cerrar uno que se repite). Al agregarla por primera vez se limpian los duplicados
+-- que dejaba «Reabrir» antes de este arreglo (el siguiente que salió y nadie tocó).
+do $$ begin
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'pendientes' and column_name = 'anterior') then
+    alter table public.pendientes add column anterior uuid references public.pendientes (id) on delete set null;
+    delete from public.pendientes n
+    where n.estado = 'abierto' and n.repite <> ''
+      and not exists (select 1 from public.pendientes_mensajes m where m.pendiente_id = n.id)
+      and exists (select 1 from public.pendientes o where o.id <> n.id and o.estado = 'abierto' and o.creado_por = n.creado_por and o.para = n.para
+                    and o.titulo = n.titulo and o.repite = n.repite and o.vence < n.vence and o.creado_en < n.creado_en);
+  end if;
+end $$;
 create table if not exists public.pendientes_vistos (
   pendiente_id uuid not null references public.pendientes (id) on delete cascade,
   persona_id   uuid not null references public.personas (id) on delete cascade,
@@ -2551,7 +2566,7 @@ begin
   if t = '' then raise exception 'Escribe qué es.'; end if;
   if char_length(t) > 200 then raise exception 'El título es muy largo (máximo 200 letras).'; end if;
   if not exists (select 1 from personas where id = quien and activo and rol = 'admin') then raise exception 'Esa persona no es de gerencia.'; end if;
-  if coalesce(p_repite, '') not in ('', 'diaria', 'semanal', 'mensual') then raise exception 'Repetición no válida.'; end if;
+  if coalesce(p_repite, '') not in ('', 'diaria', 'semanal', 'semanas2', 'semanas3', 'mensual') then raise exception 'Repetición no válida.'; end if;
   if coalesce(p_repite, '') <> '' and p_vence is null then raise exception 'Para que se repita, ponle una fecha.'; end if;
   if p_hora is not null and p_vence is null then raise exception 'Para ponerle hora, ponle también una fecha.'; end if;
   insert into pendientes (creado_por, para, titulo, vence, hora, repite) values (auth.uid(), quien, t, p_vence, p_hora, coalesce(p_repite, ''))
@@ -2571,7 +2586,7 @@ begin
   if x.creado_por <> auth.uid() then raise exception 'Solo quien lo creó lo puede cambiar.'; end if;
   if t = '' then raise exception 'Escribe qué es.'; end if;
   if char_length(t) > 200 then raise exception 'El título es muy largo (máximo 200 letras).'; end if;
-  if coalesce(p_repite, '') not in ('', 'diaria', 'semanal', 'mensual') then raise exception 'Repetición no válida.'; end if;
+  if coalesce(p_repite, '') not in ('', 'diaria', 'semanal', 'semanas2', 'semanas3', 'mensual') then raise exception 'Repetición no válida.'; end if;
   if coalesce(p_repite, '') <> '' and p_vence is null then raise exception 'Para que se repita, ponle una fecha.'; end if;
   if p_hora is not null and p_vence is null then raise exception 'Para ponerle hora, ponle también una fecha.'; end if;
   update pendientes set titulo = t, vence = p_vence, hora = p_hora, repite = coalesce(p_repite, ''), actividad_en = now() where id = x.id;
@@ -2592,38 +2607,51 @@ begin
   perform public._pend_avisar(x, public._pend_nombre(auth.uid()) || ': ' || x.titulo, case when t = '' then '📷 Foto' else t end);
 end $$;
 
-create or replace function public._pend_siguiente(d date, r text) returns date
-language sql immutable as $$
-  select case r when 'diaria' then d + 1 when 'semanal' then d + 7 when 'mensual' then (d + interval '1 month')::date else d end
-$$;
+-- La próxima fecha después de hoy, contada desde la fecha original (así el día 31 no se corre a 28 para siempre)
+drop function if exists public._pend_siguiente(date, text);
+create or replace function public._pend_proxima(base date, r text, hoy date) returns date
+language plpgsql immutable as $$
+declare k int := 1; d date;
+begin
+  loop
+    d := case r when 'diaria' then base + k when 'semanal' then base + 7 * k when 'semanas2' then base + 14 * k
+                when 'semanas3' then base + 21 * k else (base + make_interval(months => k))::date end;
+    exit when d > hoy or k > 5000;
+    k := k + 1;
+  end loop;
+  return d;
+end $$;
 
--- Cerrar (solo quien lo creó). Si se repite, sale el siguiente con la próxima fecha que no haya pasado.
+-- Cerrar (solo quien lo creó). Si se repite, sale el siguiente con la próxima fecha que no haya pasado
+-- (una sola vez: si se reabrió y se vuelve a cerrar, no sale otro).
 create or replace function public.pend_cerrar(p_id uuid) returns uuid
 language plpgsql security definer set search_path = public as $$
-declare x public.pendientes := public._pend_mio(p_id); d date; nuevo uuid;
+declare x public.pendientes := public._pend_mio(p_id); nuevo uuid;
 begin
   if x.creado_por <> auth.uid() then raise exception 'Solo quien lo creó lo puede cerrar.'; end if;
   if x.estado = 'cerrado' then return null; end if;
   update pendientes set estado = 'cerrado', cerrado_en = now(), actividad_en = now() where id = x.id;
-  if x.repite <> '' then
-    d := public._pend_siguiente(x.vence, x.repite);
-    while d <= public.hoy() loop d := public._pend_siguiente(d, x.repite); end loop;
-    insert into pendientes (creado_por, para, titulo, vence, hora, repite) values (x.creado_por, x.para, x.titulo, d, x.hora, x.repite) returning id into nuevo;
+  if x.repite <> '' and not exists (select 1 from pendientes where anterior = x.id) then
+    insert into pendientes (creado_por, para, titulo, vence, hora, repite, anterior)
+    values (x.creado_por, x.para, x.titulo, public._pend_proxima(x.vence, x.repite, public.hoy()), x.hora, x.repite, x.id) returning id into nuevo;
     insert into pendientes_vistos (pendiente_id, persona_id) values (nuevo, auth.uid()) on conflict do nothing;
   end if;
   perform public._pend_avisar(x, public._pend_nombre(auth.uid()) || ' cerró: ' || x.titulo, 'Ya quedó resuelto.');
   return nuevo;
 end $$;
 
+-- Reabrir: el siguiente que había salido al cerrarlo se quita, si nadie lo ha tocado (si no, quedarían dos)
 create or replace function public.pend_reabrir(p_id uuid) returns void
 language plpgsql security definer set search_path = public as $$
 declare x public.pendientes := public._pend_mio(p_id);
 begin
   if x.creado_por <> auth.uid() then raise exception 'Solo quien lo creó lo puede reabrir.'; end if;
+  if x.estado = 'abierto' then return; end if;
+  delete from pendientes n where n.anterior = x.id and n.estado = 'abierto'
+    and not exists (select 1 from pendientes_mensajes m where m.pendiente_id = n.id);
   update pendientes set estado = 'abierto', cerrado_en = null, actividad_en = now() where id = x.id;
 end $$;
 
--- Borrar (solo quien lo creó). Devuelve las fotos para que el teléfono las borre del almacenamiento.
 create or replace function public.pend_borrar(p_id uuid) returns json
 language plpgsql security definer set search_path = public as $$
 declare x public.pendientes := public._pend_mio(p_id); fotos json;

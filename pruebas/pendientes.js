@@ -98,6 +98,17 @@ sql(`insert into auth.users (id, email) values ('${JAVIER}', 'javier@x.com') on 
   await p.locator('a.item', { hasText: 'Pagar alquiler' }).click(); await p.waitForTimeout(600);
   await p.click('[data-acc="cerrar"]'); await p.waitForTimeout(800); await debe('Ya salió el de la próxima vez');
   await p.goto(BASE + '/pendientes/#/mi'); await p.waitForTimeout(400); await debe('Pagar alquiler');
+  // Reabrir no lo duplica: se quita el de la próxima vez
+  donde = 'Sara reabre'; await p.goto(BASE + '/pendientes/#/cerrados'); await p.waitForTimeout(400);
+  await p.locator('a.item', { hasText: 'Pagar alquiler' }).click(); await p.waitForTimeout(600);
+  await p.click('[data-acc="reabrir"]'); await p.waitForTimeout(800); await debe('Reabierto');
+  await p.goto(BASE + '/pendientes/#/mi'); await p.waitForTimeout(400);
+  const nAlq = await p.locator('a.item', { hasText: 'Pagar alquiler' }).count(); if (nAlq !== 1) fallas.push('Al reabrir quedaron ' + nAlq + ' «Pagar alquiler»');
+  if (!(await p.locator('select[name="repite"] option[value="semanas3"]').count())) {
+    await p.goto(BASE + '/pendientes/#/nuevo'); await p.waitForTimeout(200);
+    if (!(await p.locator('select[name="repite"] option[value="semanas3"]').count())) fallas.push('No sale «Cada 3 semanas»');
+    await p.goto(BASE + '/pendientes/#/mi'); await p.waitForTimeout(400);
+  }
   // Cambiar y borrar
   donde = 'Sara borra'; await p.locator('a.item', { hasText: 'Pagar alquiler' }).click(); await p.waitForTimeout(600);
   await p.click('[data-acc="editar"]'); await p.click('[data-acc="borrar"]'); await p.waitForTimeout(200); await p.click('[data-acc="borrar-si"]'); await p.waitForTimeout(800);

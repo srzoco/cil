@@ -7,7 +7,7 @@
   var CLAVES = ['barquero_sesion', 'bfcontenido_sesion'];
   var $app = document.getElementById('app');
   var S = { d: null, hilos: {}, fotos: {}, foto: null, borrando: false, ocupado: false, nuevoId: null };
-  var REPITE = { '': 'No se repite', diaria: 'Cada día', semanal: 'Cada semana', mensual: 'Cada mes' };
+  var REPITE = { '': 'No se repite', diaria: 'Cada día', semanal: 'Cada semana', semanas2: 'Cada 2 semanas', semanas3: 'Cada 3 semanas', mensual: 'Cada mes' };
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   var DIAS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
 
@@ -304,10 +304,15 @@
     if (S.ocupado) return;
     var p = null;
     if (acc === 'cerrar') p = rpc('pend_cerrar', { p_id: id }).then(function (nid) { return cargar().then(function () { aviso(nid ? 'Cerrado. Ya salió el de la próxima vez.' : 'Cerrado.', true); }); });
-    else if (acc === 'reabrir') p = rpc('pend_reabrir', { p_id: id }).then(cargar);
-    else if (acc === 'borrar-si') p = rpc('pend_borrar', { p_id: id }).then(function (fotos) {
-      S.borrando = false;
-      if (fotos && fotos.length) almacen('DELETE', 'pendientes', JSON.stringify({ prefixes: fotos }), 'application/json').catch(function () { /* quedan huérfanas, no pasa nada */ });
+    else if (acc === 'reabrir') p = rpc('pend_reabrir', { p_id: id }).then(cargar).then(function () { aviso('Reabierto.', true); });
+    else if (acc === 'borrar-si') p = rpc('pend_hilo', { p_id: id }).then(function (hilo) {
+      // Primero las fotos: después de borrar el pendiente ya no hay permiso para tocarlas
+      var fotos = (hilo || []).map(function (m) { return m.foto; }).filter(Boolean);
+      return fotos.length ? almacen('DELETE', 'pendientes', JSON.stringify({ prefixes: fotos }), 'application/json').then(function (r) {
+        if (!r.ok) throw new Error('No se pudieron borrar las fotos. Intenta de nuevo.');
+      }) : null;
+    }).then(function () { return rpc('pend_borrar', { p_id: id }); }).then(function () {
+      S.borrando = false; delete S.hilos[id];
       location.hash = '#/mi'; return cargar().then(function () { aviso('Borrado.', true); });
     });
     if (!p) return;
@@ -329,6 +334,15 @@
 
   window.addEventListener('hashchange', function () { S.borrando = false; S.foto = null; if (S.nuevoId && ruta().partes[1] !== S.nuevoId) S.nuevoId = null; pintar(); window.scrollTo(0, 0); });
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && S.d && !S.ocupado) { var id = ruta().partes[0] === 'p' && ruta().partes[1]; if (id) delete S.hilos[id]; cargar(); } });
+  setInterval(function () {
+    var r = ruta(), ta = document.querySelector('form[data-form="mensaje"] textarea');
+    if (document.visibilityState !== 'visible' || S.ocupado || S.foto || !S.d || r.partes[0] !== 'p' || (ta && ta.value) || S.borrando) return;
+    var abierto = document.querySelector('form[data-form="editar"]:not([hidden])'); if (abierto) return;
+    rpc('pend_hilo', { p_id: r.partes[1] }).then(function (h) {
+      var antes = JSON.stringify(S.hilos[r.partes[1]] || []); S.hilos[r.partes[1]] = h || [];
+      if (JSON.stringify(h || []) !== antes && ruta().partes[1] === r.partes[1]) pintar();
+    }).catch(function () { /* se intenta otra vez */ });
+  }, 30000);
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('../sw.js', { scope: '../' }).catch(function () { /* nada */ });
   if (!URL_SB) $app.innerHTML = '<div class="centro"><h1>Pendientes</h1><p class="muted">Falta conectar la base de datos (config.js).</p></div>';
   else cargar();
