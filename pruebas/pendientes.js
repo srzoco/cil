@@ -58,12 +58,15 @@ sql(`insert into auth.users (id, email) values ('${JAVIER}', 'javier@x.com') on 
   const wa = await p.getAttribute('a.btn.wa', 'href'); if (!/wa\.me\/\?text=Hola%20Javier/.test(wa || '')) fallas.push('El botón de WhatsApp no arma el texto: ' + wa);
   await p.click('[data-acc="ya-visto"]'); await p.waitForTimeout(400);
   donde = 'Sara foto';
-  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg==', 'base64');
-  await p.setInputFiles('input[data-cambio="foto"]', { name: 'f.png', mimeType: 'image/png', buffer: png }); await p.waitForTimeout(500);
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGNQSDiAFTEMLQkAGplQAT43V5gAAAAASUVORK5CYII=', 'base64');
+  await p.setInputFiles('input[data-cambio="foto"]', { name: 'f.png', mimeType: 'image/png', buffer: png });
+  await p.waitForFunction(() => /Foto lista para enviar|foto/i.test(document.body.innerText), null, { timeout: 8000 }).catch(() => {});
   await debe('Foto lista para enviar');
+  if (!(await ve('Foto lista para enviar'))) fallas.push('Mensaje en pantalla: ' + (await p.evaluate(() => (document.querySelector('.toast') || {}).textContent || '(ninguno)')));
   await p.fill('form[data-form="mensaje"] textarea', 'Mira cómo está el estante');
-  await p.click('form[data-form="mensaje"] button[type="submit"]'); await p.waitForTimeout(900); await revisar();
-  await debe('Mira cómo está el estante');
+  await p.click('form[data-form="mensaje"] button[type="submit"]');
+  await p.waitForFunction(() => document.querySelector('.msj-txt') && /estante/.test(document.querySelector('.hilo').innerText), null, { timeout: 8000 }).catch(() => {});
+  await revisar(); await debe('Mira cómo está el estante');
   if (!Object.keys(fotos).length) fallas.push('No se subió la foto');
   // Recordatorio que se repite, con validación
   donde = 'Sara recordatorio';
