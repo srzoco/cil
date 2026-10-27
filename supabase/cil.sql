@@ -121,6 +121,14 @@ insert into public.tareas_ajustes (id) values (1) on conflict (id) do nothing;
 
 -- «Llegué» solo en el local: por Wi-Fi (IP pública del local) y, si no, por GPS. Los datos de cada local están en locales.
 alter table public.tareas_ajustes add column if not exists solo_en_tienda boolean not null default false;
+-- «Llegué» solo desde el Wi-Fi del local: decisión de gerencia, no negociable. Ya no se puede apagar.
+update public.tareas_ajustes set solo_en_tienda = true where not solo_en_tienda;
+alter table public.tareas_ajustes alter column solo_en_tienda set default true;
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'tareas_ajustes_solo_tienda') then
+    alter table public.tareas_ajustes add constraint tareas_ajustes_solo_tienda check (solo_en_tienda);
+  end if;
+end $$;
 -- Si no está en el Wi-Fi del local, ¿probar con la ubicación del teléfono? (el teléfono pide permiso)
 alter table public.tareas_ajustes add column if not exists usar_gps boolean not null default false;
 -- Puntualidad: «a tiempo» hasta esta hora (entrada 8:30 + 5 min). Después es «tarde»; la hora límite (8:50) es para dar la falta.
@@ -765,16 +773,11 @@ language plpgsql stable security definer set search_path = public as $$
 declare propio uuid; ip text := public._ip_cliente(); lo record;
 begin
   select local_id into propio from personas where id = p_persona;
-  if not (select solo_en_tienda from tareas_ajustes where id = 1) then return json_build_object('verif', 'libre', 'local', propio); end if;
   -- Wi-Fi: su local primero
   for lo in select id, redes from locales order by (id = propio) desc, principal desc loop
     if ip is not null and ip = any (lo.redes) then return json_build_object('verif', 'wifi', 'local', lo.id); end if;
   end loop;
-  -- Su local todavía no tiene Wi-Fi registrado (ni ubicación, si se usa): marca como si la opción estuviera apagada
-  if exists (select 1 from locales l where l.id = propio and cardinality(coalesce(l.redes, '{}')) = 0
-             and not ((select usar_gps from tareas_ajustes where id = 1) and l.lat is not null)) then
-    return json_build_object('verif', 'libre', 'local', propio);
-  end if;
+  -- Un local sin Wi-Fi registrado ya no deja marcar desde cualquier red: la red nueva le llega a gerencia para aprobarla
   -- Gerencia marcó que hoy no hay Wi-Fi en su local
   if exists (select 1 from locales where id = propio and sin_wifi_fecha = public.hoy()) then
     return json_build_object('verif', 'sin_wifi', 'local', propio);
@@ -909,13 +912,20 @@ begin
       raise exception 'Esa tarea todavía no toca: es para %.', coalesce(a.momento_nombre, 'más tarde');
     end if;
     if not adm and not exists (select 1 from asistencia where persona_id = auth.uid() and fecha = public.hoy() and estado = 'presente') then
-      if (select solo_en_tienda from tareas_ajustes where id = 1) then raise exception 'Primero marca «Llegué».'; end if;
-      perform public._llegada(auth.uid());
+      raise exception 'Primero marca «Llegué».';
     end if;
     -- Una tarea de X minutos no se marca antes de que pasen X minutos desde que llegó (o desde su hora «desde»).
     -- Igual que listaDesde en logic.js.
     if not adm and a.minutos > 0 then
       select greatest(s.llegada, case when a.desde is not null and a.fecha = public.hoy() then public._ts_hoy(a.desde) end) + make_interval(mins => a.minutos)
+        into lista from asistencia s where s.persona_id = auth.uid() and s.fecha = public.hoy() and s.estado = 'presente';
+      if lista is not null and now() < lista then
+        raise exception 'Esta tarea dura % min: la podrás marcar desde las %', a.minutos, public._hora_txt((lista at time zone 'America/Caracas')::time);
+      end if;
+      -- En total, lo marcado hoy no puede pasar de 1,5 veces el tiempo que lleva desde que llegó
+      -- (los tiempos de cada tarea son aproximados: hay margen del 50 %). Igual que listaDesde en logic.js.
+      select s.llegada + make_interval(secs => ceil(60 * (coalesce((select sum(x.minutos) from asignaciones x where x.hecha_por = auth.uid() and x.estado = 'hecha'
+                and x.hecha_en >= (public.hoy()::timestamp at time zone 'America/Caracas') and x.id <> a.id), 0) + a.minutos) / 1.5))
         into lista from asistencia s where s.persona_id = auth.uid() and s.fecha = public.hoy() and s.estado = 'presente';
       if lista is not null and now() < lista then
         raise exception 'Esta tarea dura % min: la podrás marcar desde las %', a.minutos, public._hora_txt((lista at time zone 'America/Caracas')::time);
@@ -1130,8 +1140,7 @@ begin
                                             and b.momento = a.momento and b.asignado_a = auth.uid()) then
     raise exception 'Ya tienes tu parte de esta tarea.';
   end if;
-  if (select solo_en_tienda from tareas_ajustes where id = 1)
-     and not exists (select 1 from asistencia where persona_id = auth.uid() and fecha = public.hoy() and estado = 'presente') then
+  if not exists (select 1 from asistencia where persona_id = auth.uid() and fecha = public.hoy() and estado = 'presente') then
     raise exception 'Primero marca «Llegué».';
   end if;
   update asignaciones set asignado_a = auth.uid(), asignado_original = auth.uid(), motivo = 'tomada' where id = p_id;

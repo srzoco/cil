@@ -46,7 +46,7 @@
     this.clave = 'tareasbf_demo_v1';
     this.semilla = semilla;
     this.db = LS.get(this.clave);
-    if (!this.db || !this.db.personas || this.db.version !== 14) { this.db = semilla(); this._guardar(); }
+    if (!this.db || !this.db.personas || this.db.version !== 15) { this.db = semilla(); this._guardar(); }
     var u = LS.get('tareasbf_demo_usuario');
     this.usuarioId = (u && this.db.personas.some(function (p) { return p.id === u; })) ? u : this.db.personas[0].id;
   }
@@ -128,12 +128,11 @@
   DemoStore.prototype._ubicar = function (personaId, lat, lng, prec) {
     var pe = this.db.personas.filter(function (p) { return p.id === personaId; })[0];
     var propio = pe && pe.local_id, ip = this._ip();
-    if (!this.db.ajustes.solo_en_tienda) return { verif: 'libre', local: propio };
+    // en la demo, cada quien «está» en el Wi-Fi de su propio local
+    var suyoL = this.db.locales.filter(function (l) { return l.id === propio; })[0];
+    if (!this.fuera() && suyoL && (suyoL.redes || []).length) ip = suyoL.redes[0];
     var ls = this.db.locales.slice().sort(function (a, b) { return (b.id === propio) - (a.id === propio) || (b.principal ? 1 : 0) - (a.principal ? 1 : 0); });
     for (var i = 0; i < ls.length; i++) if ((ls[i].redes || []).indexOf(ip) >= 0) return { verif: 'wifi', local: ls[i].id };
-    // Su local todavía no tiene Wi-Fi registrado (ni ubicación, si se usa): marca como si la opción estuviera apagada
-    var suyo = this.db.locales.filter(function (l) { return l.id === propio; })[0];
-    if (suyo && !(suyo.redes || []).length && !(this.db.ajustes.usar_gps && suyo.lat != null)) return { verif: 'libre', local: propio };
     if (this.db.ajustes.usar_gps && lat != null && lng != null) {
       var cerca = ls.filter(function (l) { return l.lat != null; }).map(function (l) { return { l: l, d: L.distanciaM(lat, lng, l.lat, l.lng) }; })
         .sort(function (a, b) { return (b.l.id === propio) - (a.l.id === propio) || a.d - b.d; });
@@ -229,10 +228,7 @@
       }
       if (!adm) {
         var pres = L.asistenciaDe(db, yo.id, hoy);
-        if (!(pres && pres.estado === 'presente')) {
-          if (db.ajustes.solo_en_tienda) throw errorUsuario('Primero marca «Llegué».');
-          this._llegada(yo.id);
-        }
+        if (!(pres && pres.estado === 'presente')) throw errorUsuario('Primero marca «Llegué».');
         var ld = L.listaDesde(db, a, yo.id, new Date());
         if (ld) throw errorUsuario('Esta tarea dura ' + a.minutos + ' min: la podrás marcar desde las ' + horaTxt(hhmmAhora(ld)));
       }
@@ -449,7 +445,7 @@
         if (!L.puedeRescatar(db, t, yo.id)) throw errorUsuario('Esa tarea solo la pueden hacer otras personas.');
         if (t.plantilla_id && db.asignaciones.some(function (b) { return b.plantilla_id === t.plantilla_id && b.fecha === t.fecha && (b.momento || 0) === (t.momento || 0) && b.asignado_a === yo.id; })) throw errorUsuario('Ya tienes tu parte de esta tarea.');
         var presT = L.asistenciaDe(db, yo.id, hoy);
-        if (db.ajustes.solo_en_tienda && !(presT && presT.estado === 'presente')) throw errorUsuario('Primero marca «Llegué».');
+        if (!(presT && presT.estado === 'presente')) throw errorUsuario('Primero marca «Llegué».');
         t.asignado_a = yo.id; t.asignado_original = yo.id; t.motivo = 'tomada';
         this._evento(t.id, 'tomada', null, yo.id);
       } else if (nombre === 'reprogramar_oculta') {

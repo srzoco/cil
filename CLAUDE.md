@@ -30,13 +30,13 @@ App web unificada **CIL** en GitHub Pages: https://srzoco.github.io/cil/
 - Llegar tarde no reduce el trabajo: quien llega tarde recibe tareas pendientes de quien lo cubrió por 100–120 % de los minutos cubiertos. Si ninguna combinación cae en ese rango, la más cercana; si hay empate, la de más minutos (`_compensar`).
 - Feriados: lo semanal o mensual que cae en día libre pasa al día laboral **anterior**.
 - Semanal o mensual sin hacer: sigue con su dueño como atrasada (si vino, no se reasigna sola) y **vence** al salir la siguiente vez (queda en el historial como no hecha). Para que otro pueda hacerla el mismo día, se le pone hora (sale como urgente).
-- Una tarea de X minutos no se puede marcar antes de que pasen X minutos desde que la persona llegó (o desde su «desde», si es más tarde). Gerencia sí puede (`listaDesde` en logic.js y `_hecha` en SQL).
+- Una tarea de X minutos no se puede marcar antes de que pasen X minutos desde que la persona llegó (o desde su «desde», si es más tarde). Gerencia sí puede (`listaDesde` en logic.js y `_hecha` en SQL). Además, en total lo marcado en el día no puede pasar de 1,5 × el tiempo desde que llegó.
 - "Me voy antes" reparte lo pendiente igual que una falta. "Día que no cuenta" para imprevistos generales.
 - Récord de puntualidad oculto para empleados el primer mes (`mostrar_record`).
 - Temperaturas de equipos de frío 3 veces al día (8:30, 1 pm, 4 pm), con estado normal, defrost o apagado. Nota obligatoria si está fuera de rango. **Sin fotos** (almacenamiento).
 - "Prender contenedores" genera "Apagar contenedores" 45 min después.
 - Rescate urgente a mitad de la ventana. "Salí a despachar"/"Volví" es opcional (`usar_salidas`), y sus reglas dependientes se apagan con él.
-- "Llegué" solo desde el Wi-Fi del local (IP registrada). **No rastrear ubicaciones.** Desde afuera sale un error genérico, sin explicar por qué.
+- "Llegué" solo desde el Wi-Fi del local (IP registrada). **No negociable**: `solo_en_tienda` ya no se puede apagar (restricción en SQL), un local sin Wi-Fi registrado no deja marcar, y «Hecho» exige «Llegué». Única excepción: gerencia marca «hoy no hay Wi-Fi» en un local. **No rastrear ubicaciones.** Desde afuera sale un error genérico, sin explicar por qué.
 - Consumibles (Equipo → Consumibles): inventario por local; el empleado pide con un botón sin ver cantidades; entrega gerencia o el encargado (`entrega_consumibles`), anotando quién dio y quién recibió. El café va en una tarea con `consumible_id`: pregunta tazas y descuenta según la receta en vasitos (solo gerencia la edita). Avisos: pedido al momento, inventario bajo 1 vez al día, consumo alto los lunes (+30 % sobre el promedio de 4 semanas).
 - Quien no tiene el acceso `tareas` (por ejemplo Verónica, de contenido, que trabaja en línea) no marca "Llegué" ni entra en la rotación.
 

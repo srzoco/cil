@@ -1250,7 +1250,7 @@
     h += '<label class="campo">Duración del almuerzo (minutos) <small>— mientras alguien de un grupo almuerza, los demás de ese grupo no pueden empezar</small><input type="number" name="minutos_almuerzo" min="10" max="180" step="5" value="' + esc(a.minutos_almuerzo || 60) + '" inputmode="numeric"></label>';
     h += '<label class="campo">Jornada (horas)<input type="number" name="jornada" min="1" max="15" step="0.5" value="' + (a.minutos_jornada / 60) + '" required inputmode="decimal"></label>';
     h += '<label class="check"><input type="checkbox" name="pool"' + (a.pool_activo ? ' checked' : '') + '><span>Pool de tareas libres <small class="muted">— los empleados ven las tareas sin dueño de su local y pueden tomarlas. Si lo apagas, lo que quede sin asignar solo lo ves tú.</small></span></label>';
-    h += '<label class="check"><input type="checkbox" name="solo_tienda"' + (a.solo_en_tienda ? ' checked' : '') + '><span>«Llegué» solo en el local <small class="muted">— solo funciona conectado al Wi-Fi de un local. Fuera, les sale «No se pudo marcar tu llegada», sin explicar por qué. Marcar «Hecho» también exige haber marcado «Llegué». En un local sin Wi-Fi registrado se puede marcar desde cualquier red hasta que lo registres.</small></span></label>';
+    h += '<p class="campo"><b>«Llegué» solo desde el Wi-Fi del local</b> <small class="muted">— siempre activo. Desde otra red les sale «No se pudo marcar tu llegada», sin explicar por qué, y a gerencia le llega un aviso para aprobar esa red si es la del local. Marcar «Hecho» exige haber marcado «Llegué».</small></p>';
     h += '<label class="check sub-check"><input type="checkbox" name="usar_gps"' + (a.usar_gps ? ' checked' : '') + '><span>Si no está en el Wi-Fi, probar con la ubicación del teléfono <small class="muted">— el teléfono les pedirá permiso de ubicación (eso no se puede ocultar). La ubicación no se guarda: solo se compara con la del local.</small></span></label>';
     h += '<label class="campo">Revisiones de calidad por día<select name="revisiones_dia">' + [0, 2, 4, 6, 8, 10].map(function (n) {
       return '<option value="' + n + '"' + ((a.revisiones_dia == null ? 4 : a.revisiones_dia) === n ? ' selected' : '') + '>' + (n ? n + ' al día (' + n / 2 + ' de la mañana y ' + n / 2 + ' de la tarde)' : 'Ninguna') + '</option>';
@@ -1369,7 +1369,7 @@
     var pasos = [
       ['Instala la app', '<ol>' + instalar + '</ol>'],
       ['Activa los avisos', '<p>En tu pantalla de inicio de la app toca <b>«Activar»</b> en la tarjeta «Avisos en el teléfono» y acepta el permiso.' + (so === 'ios' ? ' En iPhone solo funciona si la abriste desde el ícono (paso 1).' : '') + ' Así te avisa cuando te toca algo con hora.</p>'],
-      ['Al llegar: «Llegué»', '<p>Conéctate al <b>Wi-Fi del local</b> y toca <b>«Llegué»</b>. Aparece tu lista del día.' + (a.solo_en_tienda ? ' Desde otra red no funciona.' : '') + '</p>'],
+      ['Al llegar: «Llegué»', '<p>Conéctate al <b>Wi-Fi del local</b> y toca <b>«Llegué»</b>. Aparece tu lista del día. Desde otra red no funciona.</p>'],
       ['Marca cada tarea al terminarla', '<p>Toca el <b>cuadrito</b> de la tarea. Un toque y listo. Si te equivocaste, tócalo otra vez.</p><p>Si dice <b>«con María»</b>, la hacen entre dos: con que uno la marque, queda hecha para los dos.</p>'],
       ['Al empezar a almorzar', '<p>Toca <b>«Empiezo a almorzar»</b>. Si alguien de tu grupo está almorzando, espera a que termine: siempre se queda alguien del grupo.</p>'],
       ['Si no hay internet', '<p>Marca igual: se guarda en el teléfono y se envía solo cuando vuelva la conexión.</p>'],
@@ -2080,12 +2080,12 @@
     else if (tipo === 'tarea') guardarTarea(f, fd);
     else if (tipo === 'ajustes') {
       var horas = Number(fd.get('jornada'));
-      var solo = !!fd.get('solo_tienda'), msgAj = null;
+      var solo = true, msgAj = null;
       if (solo) {
         var gps = !!fd.get('usar_gps');
         var sinConfig = locales().filter(function (l) { return empleadosDe(l.id).length && !(l.redes || []).length && !(gps && l.lat != null); });
-        // Los locales sin Wi-Fi registrado siguen marcando desde cualquier red hasta que se registre
-        msgAj = sinConfig.length ? 'Guardado. Mientras no registres el Wi-Fi de ' + sinConfig.map(function (l) { return l.nombre; }).join(', ') + ', allí se puede marcar «Llegué» desde cualquier red.' : null;
+        // Un local sin Wi-Fi registrado: nadie puede marcar «Llegué» allí hasta registrarlo
+        msgAj = sinConfig.length ? 'Guardado. Ojo: ' + sinConfig.map(function (l) { return l.nombre; }).join(', ') + ' no tiene Wi-Fi registrado: allí nadie puede marcar «Llegué» hasta que lo registres en Equipo → Locales.' : null;
       }
       if (String(fd.get('a_tiempo_hasta')) > String(fd.get('hora_limite'))) { aviso('«A tiempo hasta» tiene que ser antes de la hora límite.'); return; }
       ejecutar(store.actualizar('ajustes', 1, { usar_salidas: !!fd.get('usar_salidas'), usar_almuerzo: !!fd.get('usar_almuerzo'), mostrar_record: !!fd.get('mostrar_record'), a_tiempo_hasta: fd.get('a_tiempo_hasta'), hora_limite: fd.get('hora_limite'), pool_activo: !!fd.get('pool'), minutos_jornada: Math.round(horas * 60), solo_en_tienda: solo,
@@ -2332,7 +2332,7 @@
   function marcarHecha(id, hecha) {
     var a = asig(id); if (!a || S.marcando[id]) return;
     if (hecha && !esAdmin() && L.antesDeHora(a, new Date())) { aviso('Todavía no toca: es desde las ' + L.fmtHoraTxt(L.hhmm(a.desde))); return; }
-    if (hecha && !esAdmin() && aj().solo_en_tienda) {
+    if (hecha && !esAdmin()) {
       var s = L.asistenciaDe(db(), yo().id, S.hoy);
       if (!(s && s.estado === 'presente') && !llegadaEnCola()) { aviso('Primero marca «Llegué».'); return; }
     }
@@ -2435,7 +2435,7 @@
     }
   }
   if (!(CFG.supabaseUrl && CFG.supabaseKey) && !window.TBDemo) {
-    var sc = document.createElement('script'); sc.src = 'demo.js?v=10'; sc.onload = arrancar;
+    var sc = document.createElement('script'); sc.src = 'demo.js?v=11'; sc.onload = arrancar;
     sc.onerror = function () { $app.innerHTML = '<div class="centro"><h2>No se pudo cargar</h2><p class="muted">Revisa el internet y vuelve a abrir.</p></div>'; };
     document.head.appendChild(sc);
   } else arrancar();

@@ -12,7 +12,7 @@
   var DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
   var DIAS_CORTOS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-  var AJUSTES_BASE = { hora_limite: '08:50', a_tiempo_hasta: '08:35', pool_activo: false, minutos_jornada: 480, solo_en_tienda: false,
+  var AJUSTES_BASE = { hora_limite: '08:50', a_tiempo_hasta: '08:35', pool_activo: false, minutos_jornada: 480, solo_en_tienda: true,
     usar_almuerzo: false, minutos_almuerzo: 60, carga_dias: { '0': 0, '1': 100, '2': 100, '3': 100, '4': 60, '5': 60, '6': 80 } };
   var LAB_BASE = [1, 2, 3, 4, 5, 6];
 
@@ -128,6 +128,12 @@
       if (d > ini) ini = d;
     }
     var fin = new Date(ini.getTime() + a.minutos * 60000);
+    // En total, lo marcado hoy no puede pasar de 1,5 veces el tiempo que lleva desde que llegó (margen del 50 %)
+    var hechos = (db.asignaciones || []).reduce(function (t, x) {
+      return t + (x.id !== a.id && x.hecha_por === personaId && x.estado === 'hecha' && x.hecha_en && hoyISO(new Date(x.hecha_en)) === hoy ? (x.minutos || 0) : 0);
+    }, 0);
+    var finTotal = new Date(new Date(s.llegada).getTime() + Math.ceil(60 * (hechos + a.minutos) / 1.5) * 1000);
+    if (finTotal > fin) fin = finTotal;
     return ahora < fin ? fin : null;
   }
   // ---------- Rescate de tareas con horario (igual que _urgente / _excusado en supabase.sql) ----------

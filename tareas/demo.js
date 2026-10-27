@@ -26,8 +26,8 @@
     function id(pref) { n++; return pref + '-' + String(n).padStart(4, '0') + '-demo'; }
     function persona(nombre, rol, email) { return { id: id('p'), email: email, nombre: nombre, rol: rol, activo: true, telefono: null }; }
 
-    var principal = { id: id('l'), nombre: 'Local principal', principal: true, dias_laborables: [1, 2, 3, 4, 5, 6], redes: [], lat: null, lng: null, radio_m: 150, creado_en: '2026-01-01T00:00:00Z' };
-    var segundo = { id: id('l'), nombre: 'Segundo local', principal: false, dias_laborables: [1, 2, 3, 4, 5], redes: [], lat: null, lng: null, radio_m: 150, creado_en: '2026-01-02T00:00:00Z' };
+    var principal = { id: id('l'), nombre: 'Local principal', principal: true, dias_laborables: [1, 2, 3, 4, 5, 6], redes: ['190.200.10.20'], lat: null, lng: null, radio_m: 150, creado_en: '2026-01-01T00:00:00Z' };
+    var segundo = { id: id('l'), nombre: 'Segundo local', principal: false, dias_laborables: [1, 2, 3, 4, 5], redes: ['190.200.10.21'], lat: null, lng: null, radio_m: 150, creado_en: '2026-01-02T00:00:00Z' };
     var sara = persona('Sara', 'admin', 'sara@demo'), papa = persona('Papá', 'admin', 'papa@demo');
     // Johandre y Josbel despachan (50% de su tiempo para tareas); Yureidy también prepara pedidos (70%); María solo limpieza (100%).
     var jose = persona('Johandre', 'empleado', 'johandre@demo'), yuli = persona('Josbel', 'empleado', 'josbel@demo');
@@ -82,7 +82,7 @@
       pl('Conciliar cuentas por cobrar', 60, 'semanal', { local_id: segundo.id, dias_semana: [5] })
     ];
     var db = {
-      version: 14,
+      version: 15,
       locales: [principal, segundo],
       grupos: [gDespacho, gLimpieza],
       dias_especiales: FERIADOS.map(function (x) { return { id: id('d'), fecha: x[0], local_id: null, tipo: 'libre', nombre: x[1] }; }),
@@ -95,7 +95,7 @@
       ],
       lecturas: [],
       personas: personas,
-      ajustes: { id: 1, hora_limite: '08:50', a_tiempo_hasta: '08:35', mostrar_record: false, pool_activo: false, minutos_jornada: 480, solo_en_tienda: false, usar_gps: false, revisiones_dia: 4 },
+      ajustes: { id: 1, hora_limite: '08:50', a_tiempo_hasta: '08:35', mostrar_record: false, pool_activo: false, minutos_jornada: 480, solo_en_tienda: true, usar_gps: false, revisiones_dia: 4 },
       plantillas: plantillas, asignaciones: [], asistencia: [], eventos: [],
       consumibles: consumibles, consumibles_mov: [], consumibles_pedidos: []
     };
