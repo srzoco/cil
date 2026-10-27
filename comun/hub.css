@@ -49,3 +49,7 @@ a { color: var(--accent); }
 .hub-avisos small { grid-column: 1 / -1; color: var(--accent); font-weight: 600; }
 .hub-avisos.on { background: transparent; }
 .btn-hub.chico { min-height: 40px; font-size: .9rem; }
+
+/* Gerencia: el reloj de avisos se detuvo */
+.hub-reloj { display: flex; flex-direction: column; gap: 4px; margin: 0 0 16px; padding: 14px 16px; border-radius: 14px; border: 1px solid var(--wine); background: var(--wine-bg); color: var(--wine); text-decoration: none; }
+.hub-reloj span { font-size: .9rem; }

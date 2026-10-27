@@ -491,12 +491,22 @@
           '<button class="btn chico sec" type="button" data-acc="reprogramar-oculta" data-id="' + esc(a.id) + '">Reprogramar</button></div><small class="muted">Reprogramar: vuelve a ' + esc(nombreDe(a.asignado_original || a.asignado_a)) + ' ese día.</small></form>';
       }).join('') + '</section>';
   }
+  // Gerencia: el reloj de avisos lleva más de 10 minutos sin correr (no están saliendo los avisos ni el reparto automático)
+  function alertaReloj() {
+    var r = S.data && S.data.reloj; if (!r || !r.ultimo) return '';
+    var min = Math.floor((new Date(r.ahora) - new Date(r.ultimo)) / 60000); if (min <= 10) return '';
+    return '<div class="card alerta-reloj" role="alert"><b>Los avisos no están saliendo</b><p>El reloj de avisos no corre desde ' + esc(L.fmtFecha(L.hoyISO(new Date(r.ultimo)))) + ', ' + esc(L.fmtHora(r.ultimo)) +
+      ' (hace ' + esc(min < 120 ? min + ' min' : Math.round(min / 60) + ' horas') + '). Tampoco se reparte solo lo de quien falta.</p>' +
+      '<p class="ayuda">Revisa en Supabase → Integrations → Cron que el trabajo «avisos» esté activo y sin errores, y en Edge Functions → avisos → Logs. Si no sabes qué ver, mándame una captura.</p></div>';
+  }
+
   function vistaHoy() {
     var hoy = S.hoy, ahora = new Date();
     var h = '<h1>Hoy</h1><p class="fecha-hoy">' + esc(L.fmtFechaLarga(hoy)) + ' · a tiempo hasta ' + esc(L.fmtHoraTxt(L.aTiempoHasta(aj()))) + ' · falta desde ' + esc(L.fmtHoraTxt(aj().hora_limite)) + '</p>';
     if (ahora.getHours() >= 17) {
       h += '<a class="card reporte-listo" href="#/reporte?f=' + hoy + '"><b>Reporte del día</b><span class="muted">Ver y enviar por WhatsApp ›</span></a>';
     }
+    h += alertaReloj();
     h += bloqueOcultas();
     h += bloquePedidos(null);
     if (!variosLocales()) return h + bloqueLocal(locales()[0] ? locales()[0].id : null, false);

@@ -79,7 +79,7 @@
     var h = new Date().getHours(), saludo = h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
     var html = '<div class="hub"><header class="hub-top"><a class="hub-marca" href="./"><span class="hub-logo">CIL</span><b>CIL</b></a>' +
       (window.BarqueroTema ? BarqueroTema.boton() : '') + '<button class="hub-salir" id="salir">Salir</button></header>' +
-      '<h1 class="hub-hola">' + esc(saludo) + (nombre ? ', ' + esc(nombre) : '') + '</h1>';
+      '<h1 class="hub-hola">' + esc(saludo) + (nombre ? ', ' + esc(nombre) : '') + '</h1>' + (admin ? '<a class="hub-reloj" id="hub-reloj" href="tareas/#/" hidden></a>' : '');
     if (!mios.length) {
       html += '<p class="hub-sub">' + (p.activo ? 'Todavía no tienes acceso a ningún módulo. Avísale a gerencia.' : 'Tu usuario está desactivado. Habla con gerencia.') + '</p>';
     } else {
@@ -101,6 +101,10 @@
     token().then(function (t) {
       return fetch(URL_SB + '/rest/v1/rpc/menu_pendientes', { method: 'POST', headers: { apikey: KEY, Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' }, body: '{}' });
     }).then(function (r) { return r.ok ? r.json() : {}; }).then(function (n) {
+      if (n && n.reloj_min > 10) {
+        var av = document.getElementById('hub-reloj');
+        if (av) { av.hidden = false; av.innerHTML = '<b>Los avisos no están saliendo</b><span>El reloj de avisos no corre hace ' + (n.reloj_min < 120 ? n.reloj_min + ' min' : Math.round(n.reloj_min / 60) + ' horas') + '. Detalle en Tareas → Hoy.</span>'; }
+      }
       Object.keys(n || {}).forEach(function (k) {
         var b = document.querySelector('[data-pend="' + k + '"]');
         if (b && n[k] > 0) { b.textContent = n[k] > 99 ? '99+' : n[k]; b.hidden = false; b.setAttribute('aria-label', n[k] + ' pendientes'); }

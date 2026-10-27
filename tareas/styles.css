@@ -627,3 +627,8 @@ button.pedir span { color: var(--accent); font-weight: 600; }
 .receta { background: var(--surface-2, rgba(0,30,84,.06)); border-radius: 12px; padding: 10px 14px; margin: 8px 0 12px; }
 .receta p { margin: 4px 0; }
 .receta-tit { font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+
+/* Gerencia: el reloj de avisos se detuvo */
+.alerta-reloj { border-color: var(--wine); background: var(--wine-bg); color: var(--wine); }
+.alerta-reloj p { margin: 6px 0 0; }
+.alerta-reloj .ayuda { color: var(--wine); opacity: .85; }

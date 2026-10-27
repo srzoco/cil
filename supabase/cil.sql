@@ -1400,6 +1400,7 @@ begin
                      from redes_nuevas r where r.fecha >= hoy - 3),
     'con_avisos', public._con_avisos(),
     'avisos_tel', public._avisos_tel(),
+    'reloj', public._reloj(),
     'consumo', public.consumo_datos(),
     'personas', (select coalesce(json_agg(x order by x.nombre), '[]'::json) from personas x),
     'ajustes', (select row_to_json(x) from tareas_ajustes x where x.id = 1),
@@ -1730,6 +1731,9 @@ begin
       r := r || jsonb_build_object('contenido', n);
     end if;
   end if;
+  if yo.rol = 'admin' then
+    r := r || jsonb_build_object('reloj_min', (select floor(extract(epoch from now() - ultimo) / 60)::int from reloj_avisos where id = 1));
+  end if;
   if yo.rol = 'admin' and to_regclass('public.pendientes') is not null then
     execute $q$select count(*) from public.pendientes x where x.estado = 'abierto' and ((x.creado_por = $1 and x.para <> $1 and x.hecho_en is not null) or (x.para = $1
       and ((x.vence is not null and x.vence <= public.hoy())
@@ -1785,10 +1789,24 @@ end $$;
 
 -- Lo que hay que avisar ahora. Cada aviso sale una sola vez (avisos_enviados) y solo si su hora fue hace menos de 10 minutos.
 -- Solo la puede llamar la función del servidor (rol service_role).
+-- Latido del reloj de avisos: cada vez que corre avisos_pendientes (cada minuto) queda la hora.
+-- Si pasan más de 10 minutos sin latido, gerencia ve una alerta en la app (los avisos no están saliendo).
+create table if not exists public.reloj_avisos (
+  id     int primary key default 1 check (id = 1),
+  ultimo timestamptz
+);
+alter table public.reloj_avisos enable row level security;
+revoke all on public.reloj_avisos from anon, authenticated;
+create or replace function public._reloj() returns json
+language sql stable security definer set search_path = public as $$
+  select case when public.es_admin() then (select json_build_object('ultimo', r.ultimo, 'ahora', now()) from reloj_avisos r where r.id = 1) end
+$$;
+
 create or replace function public.avisos_pendientes() returns table (persona_id uuid, endpoint text, p256dh text, auth text, titulo text, cuerpo text, url text)
 language plpgsql security definer set search_path = public as $$
 declare aj public.tareas_ajustes; ahora timestamptz := now(); hoy date := public.hoy(); hace timestamptz := now() - interval '10 minutes';
 begin
+  insert into reloj_avisos (id, ultimo) values (1, now()) on conflict (id) do update set ultimo = excluded.ultimo;
   select * into aj from tareas_ajustes where id = 1;
   -- Personal temporal: pasado su último día, lo pendiente queda sin asignar y se desactiva (cierra sus sesiones)
   if exists (select 1 from personas where activo and hasta is not null and hasta < hoy) then
@@ -2052,7 +2070,7 @@ grant execute on function public.hoy(), public.es_admin(), public.tiene_acceso(t
   public.crear_persona(text, text, text, uuid, text[], text), public.menu_pendientes(), public.aprobar_oculta(uuid, uuid), public.reprogramar_oculta(uuid, date),
   public.marcar_almuerzo(uuid, boolean, boolean), public.mi_grupo_almorzando(),
   -- las llama datos_app, que corre con los permisos de quien entra
-  public._companeros(date), public._con_avisos(), public._avisos_tel(), public.repartir_faltas() to authenticated;
+  public._companeros(date), public._con_avisos(), public._avisos_tel(), public._reloj(), public.repartir_faltas() to authenticated;
 -- Solo la función del servidor (avisos) puede pedir los avisos pendientes
 do $$ begin
   if exists (select 1 from pg_roles where rolname = 'service_role') then
