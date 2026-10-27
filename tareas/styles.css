@@ -51,9 +51,10 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 
 .tabs {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: grid; grid-template-columns: repeat(5, 1fr);
-  background: color-mix(in srgb, var(--card) 94%, transparent); border-top: 1px solid var(--line);
-  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-  padding: 6px max(8px, calc((100vw - 720px) / 2)) calc(6px + env(safe-area-inset-bottom));
+  /* Fondo sólido y en su propia capa: en el iPhone (Safari), el desenfoque sobre una barra fija hacía que se quedara
+     pegada a mitad de pantalla al subir y bajar la lista */
+  background: var(--card); border-top: 1px solid var(--line); transform: translateZ(0); -webkit-transform: translateZ(0);
+  padding: 6px max(8px, calc((100% - 720px) / 2)) calc(6px + env(safe-area-inset-bottom));
 }
 .tab {
   position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 2px;
@@ -551,7 +552,7 @@ table.temps td.vencida { color: var(--wine); }
 .quien { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 34vw; }
 @media (max-width: 400px) {
   .top { gap: 6px; padding-left: 12px; padding-right: 12px; }
-  .top .icono-btn, .top .boton-tema { width: 36px; height: 36px; }
+  .top .icono-btn, .top .boton-tema { width: 40px; height: 40px; }
   .marca-txt { display: none; }
 }
 .pill.gerencia { background: var(--accent); color: var(--accent-ink); }
@@ -632,3 +633,18 @@ button.pedir span { color: var(--accent); font-weight: 600; }
 .alerta-reloj { border-color: var(--wine); background: var(--wine-bg); color: var(--wine); }
 .alerta-reloj p { margin: 6px 0 0; }
 .alerta-reloj .ayuda { color: var(--wine); opacity: .85; }
+
+/* ---------- Tamaños para el dedo (mínimo ~44 px de alto en todo lo que se toca, en cualquier teléfono) ---------- */
+.icono-btn, .top .boton-tema { width: 44px; height: 44px; }
+.marca { min-height: 44px; }
+.btn { min-height: 44px; }
+.btn.chico { min-height: 40px; }
+.btn.link { min-height: 40px; display: inline-flex; align-items: center; }
+.volver, .ver-mas { display: inline-flex; align-items: center; min-height: 44px; }
+.seg-tabs a, .seg-tabs button { min-height: 44px; display: flex; align-items: center; justify-content: center; }
+.filtro, .chip { min-height: 40px; }
+.cal-hueco { min-height: 36px; }
+.cal-pieza, .cal-grab { min-height: 32px; display: flex; align-items: center; }
+input[type="checkbox"], input[type="radio"] { width: 22px; height: 22px; }
+label.check, label.opcion, .opcion { min-height: 44px; }
+.demo-rol button { min-height: 36px; }
