@@ -178,7 +178,11 @@
     else if (!y.activo) html = marco('<div class="centro"><h2>Tu usuario está desactivado</h2><p class="muted">Habla con gerencia.</p></div>', true);
     else if (!esAdmin() && y.accesos && y.accesos.indexOf('tareas') < 0) html = marco('<div class="centro"><h2>No tienes acceso a Tareas</h2><p class="muted">Si debería tenerlo, avísale a gerencia.</p><a class="btn" href="../">Ir al menú</a></div>', true);
     else html = marco(esAdmin() ? vistaAdmin() : vistaEmpleado(), !esAdmin());
+    // Al volver a pintar la misma pantalla, la lista se queda donde estaba
+    var dAntes = document.querySelector('.desliza'), yAntes = dAntes && S.rutaPintada === location.hash ? dAntes.scrollTop : 0;
     $app.innerHTML = html;
+    var dNuevo = document.querySelector('.desliza'); if (dNuevo && yAntes) dNuevo.scrollTop = yAntes;
+    S.rutaPintada = location.hash;
     S.sucio = false;
     pintarCapas();
   }
@@ -241,7 +245,9 @@
         tab('/reporte', 'reporte', ICON.reporte, 'Reporte') +
         tab('/equipo', 'equipo', ICON.equipo, 'Equipo') + '</nav>';
     }
-    return top + '<main class="contenido">' + contenido + '</main>' + nav + '<div id="capas"></div>';
+    // La barra de abajo no flota sobre la página: la lista se desliza dentro de su propio espacio y la barra queda
+    // debajo, como parte del marco (en el iPhone, una barra «fija» se quedaba a mitad de pantalla al cerrar el teclado)
+    return '<div class="desliza">' + top + '<main class="contenido">' + contenido + '</main></div>' + nav + '<div id="capas"></div>';
   }
 
   // ---------- Locales ----------
@@ -2388,7 +2394,7 @@
   }
 
   // ---------- Arranque ----------
-  window.addEventListener('hashchange', function () { S.modal = null; S.claves = null; render(); window.scrollTo(0, 0); });
+  window.addEventListener('hashchange', function () { S.modal = null; S.claves = null; render(); var d = document.querySelector('.desliza'); if (d) d.scrollTop = 0; window.scrollTo(0, 0); });
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState === 'visible' && S.data) {
       if (L.hoyISO() !== S.hoy) S.hoy = L.hoyISO();

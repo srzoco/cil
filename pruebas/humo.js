@@ -12,7 +12,7 @@ const RUTAS = ['/', '/tareas', '/tarea/nueva?tipo=unica', '/reporte', '/historia
   const fallas = [];
   p.on('pageerror', e => fallas.push('JS: ' + e.message));
   const ancho = async (donde) => {
-    const w = await p.evaluate(() => document.documentElement.scrollWidth);
+    const w = await p.evaluate(() => Math.max(document.documentElement.scrollWidth, ...[...document.querySelectorAll('.desliza, #app')].map(e => e.scrollWidth)));
     if (w > 361) fallas.push('Se sale de la pantalla (' + w + ' px) en ' + donde);
   };
   await p.goto(BASE + '/tareas/'); await p.waitForTimeout(800);

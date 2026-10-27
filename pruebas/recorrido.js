@@ -21,7 +21,7 @@ const MALOS = { text: [XSS, '', '   ', 'x'.repeat(400)], number: ['-5', '0', '99
   p.on('pageerror', e => fallas.add('JS en ' + donde + ': ' + e.message));
   p.on('dialog', d => { fallas.add('Ventana inesperada en ' + donde + ': ' + d.message()); d.dismiss(); });
   const revisar = async () => {
-    const r = await p.evaluate(() => ({ xss: !!window.__xss, w: document.documentElement.scrollWidth }));
+    const r = await p.evaluate(() => ({ xss: !!window.__xss, w: Math.max(document.documentElement.scrollWidth, ...[...document.querySelectorAll('.desliza, #app')].map(e => e.scrollWidth)) }));
     if (r.xss) fallas.add('Un texto se ejecutó como código en ' + donde);
     if (r.w > 361) fallas.add('Se sale de la pantalla (' + r.w + ' px) en ' + donde);
   };

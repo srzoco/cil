@@ -51,9 +51,7 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 
 .tabs {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: grid; grid-template-columns: repeat(5, 1fr);
-  /* Fondo sólido y en su propia capa: en el iPhone (Safari), el desenfoque sobre una barra fija hacía que se quedara
-     pegada a mitad de pantalla al subir y bajar la lista */
-  background: var(--card); border-top: 1px solid var(--line); transform: translateZ(0); -webkit-transform: translateZ(0);
+  background: var(--card); border-top: 1px solid var(--line);
   padding: 6px max(8px, calc((100% - 720px) / 2)) calc(6px + env(safe-area-inset-bottom));
 }
 .tab {
@@ -648,3 +646,13 @@ button.pedir span { color: var(--accent); font-weight: 600; }
 input[type="checkbox"], input[type="radio"] { width: 22px; height: 22px; }
 label.check, label.opcion, .opcion { min-height: 44px; }
 .demo-rol button { min-height: 36px; }
+
+/* ---------- Marco de la pantalla: la lista se desliza dentro de .desliza y la barra de abajo queda debajo ----------
+   (sin «position: fixed»: en el iPhone una barra fija se quedaba a mitad de pantalla después de cerrar el teclado) */
+html.marco-fijo, html.marco-fijo body { height: 100%; overflow: hidden; }
+html.marco-fijo #app { height: 100%; height: 100dvh; display: flex; flex-direction: column; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+html.marco-fijo .desliza { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; }
+html.marco-fijo .tabs { position: static; flex: none; }
+html.marco-fijo .desliza .contenido { padding-bottom: calc(28px + env(safe-area-inset-bottom)); }
+html.marco-fijo .desliza:has(~ .tabs) .contenido { padding-bottom: 28px; }
+.bloque-head > a, .bloque-head .ver-mas { white-space: nowrap; flex: none; }
