@@ -577,6 +577,13 @@
     return { patch: patch, match: { fase: 'idea' }, eventos: [{ tipo: 'iniciada', texto: null, datos: { tipo: tipo } }] };
   }
 
+  // Un video planificado que no se grabó (no dio tiempo): con el motivo, vuelve a Ideas para otra grabación
+  function accionNoSeGrabo(p, motivo) {
+    if (p.fase !== 'idea' || !p.grabacion_id) throw err('Este video no estaba planificado para grabar.');
+    if (!txt(motivo)) throw err('Cuenta brevemente por qué no se grabó.');
+    return { patch: { grabacion_id: null }, match: { fase: 'idea' },
+      eventos: [{ tipo: 'editada', texto: 'no se grabó: ' + String(motivo).trim().slice(0, 200), datos: { no_grabo: true, grabacion_id: p.grabacion_id } }] };
+  }
   function accionAGrabacion(p, grabacionId) {
     if (p.fase !== 'idea') throw err('Solo las ideas se planifican para grabar.');
     if ((p.grabacion_id || null) === (grabacionId || null)) throw err(grabacionId ? 'Ya está en esa grabación.' : 'No estaba en ninguna grabación.');
@@ -976,7 +983,7 @@
     plataformasDe: plataformasDe, fechaDe: fechaDe, publicadoEn: publicadoEn, pendientesDePublicar: pendientesDePublicar,
     etapasDe: etapasDe, etapaNorm: etapaNorm, esFinal: esFinal, gruposChips: gruposChips, COLUMNAS: COLUMNAS, columnaDe: columnaDe, leToca: leToca, pasosDe: pasosDe,
     entrega: entrega, proximaFecha: proximaFecha, fechaLimite: fechaLimite, accionAGrabacion: accionAGrabacion, puedeVolverARevision: puedeVolverARevision, accionVolverARevision: accionVolverARevision,
-    puedeDesmarcarPublicado: puedeDesmarcarPublicado, accionDesmarcarPublicado: accionDesmarcarPublicado, puedeVolverAIdea: puedeVolverAIdea, accionVolverAIdea: accionVolverAIdea, eventosEtapaActual: eventosEtapaActual, ocupa: ocupa, diaCfg: diaCfg, cron: cron, slotTipo: slotTipo, publicable: publicable, cabe: cabe, checklistDe: checklistDe, minimo: minimo, enBanco: enBanco, estadoDe: estadoDe, fueraDeTipo: fueraDeTipo, textoFueraDeTipo: textoFueraDeTipo, slotExtra: slotExtra, cabePrincipal: cabePrincipal,
+    puedeDesmarcarPublicado: puedeDesmarcarPublicado, accionDesmarcarPublicado: accionDesmarcarPublicado, puedeVolverAIdea: puedeVolverAIdea, accionVolverAIdea: accionVolverAIdea, eventosEtapaActual: eventosEtapaActual, ocupa: ocupa, diaCfg: diaCfg, cron: cron, slotTipo: slotTipo, publicable: publicable, cabe: cabe, checklistDe: checklistDe, minimo: minimo, enBanco: enBanco, estadoDe: estadoDe, fueraDeTipo: fueraDeTipo, accionNoSeGrabo: accionNoSeGrabo, textoFueraDeTipo: textoFueraDeTipo, slotExtra: slotExtra, cabePrincipal: cabePrincipal,
     ocupado: ocupado, slotLibre: slotLibre, sugerirFechas: sugerirFechas, validarFechas: validarFechas,
     huecos: huecos, candidatosHueco: candidatosHueco,
     nuevaPieza: nuevaPieza, accionEnviar: accionEnviar, accionAprobar: accionAprobar, accionCorregir: accionCorregir,

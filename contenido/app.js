@@ -619,7 +619,7 @@
     html += '<div class="acciones">' +
       '<button class="btn" data-act="grabado" data-id="' + p.id + '">' + (p.tipo === 'reel' ? '🎬 Ya se grabó → a edición' : '▶️ Empezar el texto') + '</button>' +
       (g && !enEsta && g.estado !== 'cancelada' && g.estado !== 'hecha' ? '<button class="btn sec" data-act="a-grabacion" data-id="' + p.id + '" data-grab="' + g.id + '">🎬 Grabar en la sesión de esta semana</button>' : '') +
-      (p.grabacion_id ? '<button class="btn fantasma" data-act="a-grabacion" data-id="' + p.id + '" data-grab="">Quitar de la grabación</button>' : '') +
+      (p.grabacion_id ? '<button class="btn sec" data-act="no-grabo-video" data-id="' + p.id + '">No se grabó</button><button class="btn fantasma" data-act="a-grabacion" data-id="' + p.id + '" data-grab="">Quitar de la grabación</button>' : '') +
       '</div></section>';
     return html;
   }
@@ -696,7 +696,8 @@
       case 'creada': ic = '🆕'; txt = quien + ' creó la pieza'; break;
       case 'idea': ic = '💡'; txt = quien + ' anotó la idea' + (d.grabacion_id ? ' para la grabación' : ''); break;
       case 'iniciada': ic = '🎬'; txt = quien + ' marcó que se grabó (pasó a edición)'; break;
-      case 'editada': ic = '📝'; txt = quien + ' ' + (e.texto === 'planificada para grabar' || e.texto === 'quitada de la grabación' ? 'la ' + esc(e.texto) : 'editó: ' + esc(e.texto || '')); break;
+      case 'editada': if (d.no_grabo) { ic = '❌'; txt = quien + ' marcó que no se grabó: ' + esc(String(e.texto || '').replace(/^no se grabó: /, '')); break; }
+        ic = '📝'; txt = quien + ' ' + (e.texto === 'planificada para grabar' || e.texto === 'quitada de la grabación' ? 'la ' + esc(e.texto) : 'editó: ' + esc(e.texto || '')); break;
       case 'envio':
         ic = '📤'; txt = quien + ' envió ' + esc(et) + ' a aprobar';
         if (e.texto) extra += '<p>' + nl2br(e.texto) + '</p>';
@@ -928,7 +929,7 @@
     html += '<section class="card"><h2>Qué vamos a grabar <span class="cuenta">' + planeadas.filter(function (p) { return p.fase === 'idea'; }).length + ' por grabar</span></h2>' +
       (planeadas.length ? '<div class="lista-tarjetas">' + planeadas.map(function (p) {
         var listo = p.fase !== 'idea';
-        return '<div class="fila-accion">' + tarjeta(p) + (listo ? '<span class="pill ok">Grabado</span>' : '<button class="btn ok" data-act="grabado" data-id="' + p.id + '">Grabado ✓</button>') + '</div>';
+        return '<div class="fila-accion">' + tarjeta(p) + (listo ? '<span class="pill ok">Grabado</span>' : '<div class="fila-btns"><button class="btn sec" data-act="no-grabo-video" data-id="' + p.id + '">No se grabó</button><button class="btn ok" data-act="grabado" data-id="' + p.id + '">Grabado ✓</button></div>') + '</div>';
       }).join('') + '</div>' : '<p class="muted">Todavía no hay videos planificados.</p>') +
       (abierta ? '<form data-form="titulo-grab" data-id="' + g.id + '" class="agregar-titulo"><input name="titulo" placeholder="Título del video" autocomplete="off" required>' +
         '<select name="tipo" aria-label="Tipo"><option value="reel">Reel</option><option value="carrusel">Carrusel</option></select>' +
@@ -1125,6 +1126,9 @@
         '<label class="campo">Hora<input type="time" name="hora" required value="' + esc(g.hora) + '"></label></div>' +
         '<label class="campo">Motivo <small>(opcional)</small><input name="motivo" autocomplete="off" placeholder="Ej. llega mercancía el miércoles"></label>' +
         '<button class="btn grande" type="submit">Proponer</button></form>';
+    } else if (m.tipo === 'no-grabo-video' && p) {
+      cuerpo = '<h2>No se grabó</h2><p class="muted">' + esc(p.titulo) + '</p><form data-form="no-grabo-video" data-id="' + p.id + '"><label class="campo">¿Qué pasó?<input name="motivo" required autocomplete="off" placeholder="Ej. no nos dio tiempo"></label>' +
+        '<p class="ayuda">Vuelve a «Ideas» y queda anotado en su historial. Lo puedes sumar a la próxima grabación.</p><button class="btn grande" type="submit">Guardar</button></form>';
     } else if (m.tipo === 'no-grabo') {
       cuerpo = '<h2>No se grabó</h2><form data-form="no-grabo" data-id="' + m.id + '"><label class="campo">¿Qué pasó?<input name="motivo" required autocomplete="off" placeholder="Ej. no llegó la mercancía"></label>' +
         '<p class="ayuda">Los videos planificados quedan en «Por grabar» para la próxima sesión.</p><button class="btn grande" type="submit">Guardar</button></form>';
@@ -1325,6 +1329,7 @@
     },
     'reagendar': function (el) { abrirModal({ tipo: 'reagendar', id: el.dataset.id }); },
     'no-grabo': function (el) { abrirModal({ tipo: 'no-grabo', id: el.dataset.id }); },
+    'no-grabo-video': function (el) { abrirModal({ tipo: 'no-grabo-video', id: el.dataset.id }); },
     'hecha-grab': function (el) {
       var g = grabacion(el.dataset.id), r;
       try { r = L.accionCerrarGrabacion(g, true); } catch (e) { return aviso(e.message); }
@@ -1547,6 +1552,11 @@
         S.flash = { titulo: '🔁 Nueva propuesta', texto: cuandoG(fila) + '. Queda en el historial.',
           wa: { href: L.waLink(o && o.telefono, L.msgGrabacion(fila, 'reagenda', base(), o && o.nombre)), label: 'Avisar a ' + (o ? o.nombre : 'la otra') + ' por WhatsApp' } };
       }, btn);
+    },
+    'no-grabo-video': function (f, btn) {
+      var p = pieza(f.dataset.id), r;
+      try { r = L.accionNoSeGrabo(p, val(f, 'motivo')); } catch (e) { return aviso(e.message); }
+      accion(function () { return ejecutar(p, r); }, function () { S.modal = null; S.flash = { titulo: 'Anotado', texto: 'Volvió a Ideas. Súmalo a la próxima grabación cuando quieras.' }; }, btn);
     },
     'no-grabo': function (f, btn) {
       var g = grabacion(f.dataset.id), r;
