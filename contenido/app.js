@@ -330,19 +330,20 @@
     html += bannerPush();
     var acc = [];  // [html de la fila]
     var conBoton = function (p, extra, boton) { return '<div class="fila-accion">' + tarjeta(p, extra) + boton + '</div>'; };
+    var botonReagendar = function (p) { return '<button class="btn sec" data-act="fechas" data-id="' + p.id + '">📅 Reagendar</button>'; };
     var botonPub = function (x, txt, sec) { return '<button class="btn' + (sec ? ' sec' : '') + '" data-act="publicar" data-id="' + x.pieza.id + '" data-plat="' + x.plataforma + '">' + txt + ' ' + L.PLAT_CORTO[x.plataforma] + '</button>'; };
     if (rol() === 'aprueba') {
       r.hoy.forEach(function (x) {
         var listo = x.pieza.fase === 'aprobada' && !L.publicadoEn(x.pieza, x.plataforma);
         acc.push(conBoton(x.pieza, '<b>Hoy se publica</b> · ' + L.PLATAFORMAS[x.plataforma], listo ? botonPub(x, 'Publicado en') : ''));
       });
-      r.atrasadas.forEach(function (x) { acc.push(conBoton(x.pieza, '<span class="rojo">No se publicó</span> · ' + L.PLATAFORMAS[x.plataforma] + ' · era ' + L.fmtFecha(x.fecha), botonPub(x, 'Ya se publicó en', true))); });
+      r.atrasadas.forEach(function (x) { acc.push(conBoton(x.pieza, '<span class="rojo">No se publicó</span> · ' + L.PLATAFORMAS[x.plataforma] + ' · era ' + L.fmtFecha(x.fecha), '<div class="fila-btns">' + botonReagendar(x.pieza) + botonPub(x, 'Ya se publicó en', true) + '</div>')); });
       // Cada fila con su botón grande: lo que hay que hacer, a un toque
       r.riesgo.forEach(function (x) { acc.push(conBoton(x.pieza, '<span class="rojo">Se publica pronto y no está aprobada</span>', '<a class="btn" href="#/p/' + x.pieza.id + '">Revisar</a>')); });
       r.revisar.forEach(function (p) { acc.push(conBoton(p, '<b>Por aprobar</b>', '<a class="btn" href="#/p/' + p.id + '">Revisar</a>')); });
       r.programar.forEach(function (p) { acc.push(conBoton(p, 'Lista sin fecha', '<button class="btn sec" data-act="fechas" data-id="' + p.id + '">📅 Ponerle fecha</button>')); });
     } else {
-      r.publicar.forEach(function (x) { acc.push(conBoton(x.pieza, '<b>' + L.PLATAFORMAS[x.plataforma] + '</b>' + (x.atrasada ? ' · era ' + L.fmtFecha(x.fecha) : ''), botonPub(x, 'Publicar en'))); });
+      r.publicar.forEach(function (x) { acc.push(conBoton(x.pieza, '<b>' + L.PLATAFORMAS[x.plataforma] + '</b>' + (x.atrasada ? ' · era ' + L.fmtFecha(x.fecha) : ''), x.atrasada ? '<div class="fila-btns">' + botonReagendar(x.pieza) + botonPub(x, 'Publicar en') + '</div>' : botonPub(x, 'Publicar en'))); });
       r.editar.forEach(function (p) { acc.push(conBoton(p, p.version > 0 ? resumenCorreccion(L.ultimaCorreccion(eventos(), p)) : 'Por editar', '<a class="btn" href="#/p/' + p.id + '">' + (p.version > 0 ? 'Corregir' : 'Subir versión') + '</a>')); });
       r.vistas.forEach(function (x) { acc.push(conBoton(x.pieza, 'Anotar vistas · ' + L.PLATAFORMAS[x.plataforma], '<button class="btn sec" data-act="vistas" data-id="' + x.pieza.id + '">Anotar</button>')); });
     }
@@ -627,7 +628,7 @@
     if (['idea', 'produccion', 'aprobada', 'publicada'].indexOf(p.fase) < 0) return '';
     var tiene = !!L.proximaFecha(p);
     var html = '<section class="card fechas-card"><div class="bloque-head"><h2>Publicación</h2>' +
-      (p.fase !== 'publicada' && !p.en_espera ? '<button class="btn ' + (tiene ? 'link' : 'chico') + '" data-act="fechas" data-id="' + p.id + '">' + (tiene ? 'Cambiar fechas' : 'Ponerle fecha') + '</button>' : '') + '</div>';
+      (p.fase !== 'publicada' && !p.en_espera ? '<button class="btn chico sec" data-act="fechas" data-id="' + p.id + '">📅 ' + (tiene ? 'Reagendar' : 'Ponerle fecha') + '</button>' : '') + '</div>';
     html += '<div class="pub-filas">' + L.plataformasDe(p).map(function (pl) {
       var pub = L.publicadoEn(p, pl), f = L.fechaDe(p, pl);
       var linea = '<div class="pub-fila"><span class="plat ' + pl + (pub ? ' pub' : '') + '">' + L.PLAT_CORTO[pl] + '</span><span class="pub-info">';
@@ -1096,7 +1097,7 @@
         (L.puedeCambiarTipo(p) ? '' : '<p class="ayuda">El tipo ya no se puede cambiar en esta etapa.</p>') + '<button class="btn grande" type="submit">Guardar</button></form>';
     } else if (m.tipo === 'fechas' && p) {
       var vals = L.proximaFecha(p) ? { fecha_ig: p.fecha_ig, fecha_tt: p.fecha_tt, primero: p.primero } : L.sugerirFechas(p, piezas(), ajustes(), p.fase === 'aprobada' ? S.hoy : L.addDias(S.hoy, Math.min(L.entrega(ajustes()), 2)), null);
-      cuerpo = '<h2>Fechas de publicación</h2><p class="muted">' + esc(p.titulo) + ' · ' + esc(L.estadoDe(p, S.hoy).texto) + '</p><form data-form="fechas" data-id="' + p.id + '">' + bloqueFechas(p, vals) +
+      cuerpo = '<h2>' + (L.proximaFecha(p) ? 'Reagendar' : 'Fechas de publicación') + '</h2><p class="muted">' + esc(p.titulo) + ' · ' + esc(L.estadoDe(p, S.hoy).texto) + '</p><form data-form="fechas" data-id="' + p.id + '">' + bloqueFechas(p, vals) +
         '<button class="btn grande" type="submit">Guardar fechas</button></form>';
     } else if (m.tipo === 'hueco') {
       var h = { fecha: m.fecha, plataforma: m.plat, tipo: m.tipoPieza };

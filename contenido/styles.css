@@ -631,3 +631,4 @@ html.marco-fijo .desliza:has(~ .tabs) .contenido { padding-bottom: 28px; }
 .cal-extra { border-color: var(--line); color: var(--muted); }
 .cron-extra .cron-fila { grid-template-columns: 84px 1fr; }
 .motivo-tipo span { font-weight: 600; }
+.fila-btns { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; align-self: flex-end; }
