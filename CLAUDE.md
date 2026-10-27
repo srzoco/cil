@@ -12,6 +12,7 @@ App web unificada **CIL** en GitHub Pages: https://srzoco.github.io/cil/
 - `index.html` + `comun/hub.js`: menú con un solo inicio de sesión. Cada persona ve solo los módulos de `personas.accesos`; rol `admin` (gerencia) ve todo.
 - `comun/tema.css` / `tema.js`: colores de marca (azul #001E54, gris #B7B6B5, Gloock en títulos solo peso 400, Montserrat en texto) y botón claro/oscuro (`barquero_tema`). El modo claro es para despachadores al sol. Amarillo y naranja son señales de venta: no se usan en la interfaz.
 - `tareas/`: módulo de tareas rotativas del personal de mantenimiento (vanilla JS, sin compilación).
+- `pendientes/`: Pendientes de gerencia (solo rol `admin`). Recordatorios propios y pedidos entre gerencia, con conversación y fotos (carpeta privada `pendientes` de Storage, achicadas a 1280 px; se borran 60 días después de cerrar, desde el teléfono de gerencia al abrir la página). Solo lo ven las dos personas; quien lo creó lo cierra; si se repite, al cerrar sale el siguiente. Avisos al momento o resumen 8 a. m. (`personas.pend_avisos`) y el día que vence. Todo por RPC `pend_*`; las tablas no se leen directo.
 - Contenido y Armador de mensajes todavía abren sus apps viejas (`srzoco/contenidoBF`, `srzoco/mensajesBF`) desde el menú.
 - Base de datos: el Supabase de Contenido (proyecto `xooofdppgnpibasambuc`, organización DEB, plan free). `config.js` lleva URL y clave publicable, más `vapidPublicKey`.
 
@@ -54,7 +55,7 @@ App web unificada **CIL** en GitHub Pages: https://srzoco.github.io/cil/
 - Gerencia evalúa: premio del mes, "cubre primero" y cuándo activar `usar_salidas`.
 
 ## Pruebas
-- `.github/workflows/pruebas.yml` corre en cada push: sintaxis, `cil.sql` dos veces sobre `pruebas/stub-supabase.sql` y `pruebas/humo.js` (Playwright, modo demo, 360 px).
+- `.github/workflows/pruebas.yml` corre en cada push: sintaxis, `cil.sql` dos veces sobre `pruebas/stub-supabase.sql` y `pruebas/humo.js` (Playwright, modo demo, 360 px), `recorrido.js` y `pendientes.js` (responde las llamadas de la página con psql, como la persona de la sesión).
 - Decisiones de gerencia: página de aprobación https://claude.ai/artifact/B3s85DdSYu8ucAxCsfFDiq (colección `decisiones`). Todo lo que necesite su OK va ahí.
 - No hay build ni dependencias. Sirve la carpeta con `python3 -m http.server`. El modo demo sale solo con `config.js` vacío (en pruebas, intercepta `config.js` con Playwright).
 - Para el SQL, Postgres local más PostgREST con un stub de `auth.uid()`. Verifica que `logic.js` y SQL den el mismo reparto.

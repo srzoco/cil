@@ -1730,6 +1730,15 @@ begin
       r := r || jsonb_build_object('contenido', n);
     end if;
   end if;
+  if yo.rol = 'admin' and to_regclass('public.pendientes') is not null then
+    execute $q$select count(*) from public.pendientes x where x.para = $1 and x.estado = 'abierto'
+      and ((x.vence is not null and x.vence <= public.hoy())
+           or (x.creado_por <> $1 and not exists (select 1 from public.pendientes_vistos v where v.pendiente_id = x.id and v.persona_id = $1))
+           or exists (select 1 from public.pendientes_mensajes m where m.pendiente_id = x.id and m.autor <> $1
+                        and m.creado_en > coalesce((select v.visto_en from public.pendientes_vistos v where v.pendiente_id = x.id and v.persona_id = $1), '-infinity')))$q$
+      into n using yo.id;
+    r := r || jsonb_build_object('pendientes', n);
+  end if;
   return r;
 end $$;
 
@@ -1918,6 +1927,26 @@ begin
          coalesce('«' || s.salida_motivo || '». ', '') || 'Lo que dejó pendiente ya se repartió entre los presentes.', './#/'
   from asistencia s join personas pe on pe.id = s.persona_id, personas ad
   where s.fecha = hoy and s.salida is not null and s.salida > hace and ad.activo and ad.rol = 'admin';
+
+  -- 6b) Pendientes de gerencia: el día que vence (a su hora, o a las 8 a. m. si no tiene), para quien lo tiene
+  insert into _avisos
+  select x.para, 'pend:' || x.id || ':' || hoy, 'Vence hoy: ' || x.titulo,
+         case when x.para <> x.creado_por then 'Te lo pidió ' || public._pend_nombre(x.creado_por) || '.' else 'Tu recordatorio.' end, 'pendientes/#/p/' || x.id
+  from pendientes x join personas pe on pe.id = x.para and pe.activo and pe.rol = 'admin'
+  where x.estado = 'abierto' and x.vence = hoy and public._ts_hoy(coalesce(x.hora, time '08:00')) <= ahora
+    and public._ts_hoy(coalesce(x.hora, time '08:00')) > hace;
+  -- 6c) Pendientes: resumen de las 8 a. m. para quien prefiere no recibirlos al momento
+  insert into _avisos
+  select pe.id, 'pendres:' || hoy || ':' || pe.id, 'Pendientes para ti: ' || r.n,
+         concat_ws(' · ', case when r.nuevos > 0 then r.nuevos || ' con novedades' end,
+                          case when r.vencidos > 0 then r.vencidos || case when r.vencidos = 1 then ' vencido' else ' vencidos' end end) || '.', 'pendientes/'
+  from personas pe cross join lateral (
+    select count(*) as n, count(*) filter (where x.vence < hoy) as vencidos,
+           count(*) filter (where exists (select 1 from pendientes_mensajes m where m.pendiente_id = x.id and m.autor <> pe.id
+                              and m.creado_en > coalesce((select v.visto_en from pendientes_vistos v where v.pendiente_id = x.id and v.persona_id = pe.id), '-infinity'))) as nuevos
+    from pendientes x where x.para = pe.id and x.creado_por <> pe.id and x.estado = 'abierto') r
+  where pe.activo and pe.rol = 'admin' and pe.pend_avisos = 'resumen' and r.n > 0
+    and public._ts_hoy(time '08:00') <= ahora and public._ts_hoy(time '08:00') > hace;
 
   -- 7) Avisos sueltos (prueba)
   insert into _avisos select c.persona_id, 'cola:' || c.id, c.titulo, c.cuerpo, c.url from avisos_cola c where c.creado_en > now() - interval '1 day';
@@ -2397,5 +2426,263 @@ end $$;
 
 grant execute on function public.consumo_datos(), public.pedir_consumible(uuid, text), public.cancelar_pedido(uuid),
   public.entregar_consumible(uuid, uuid, numeric, uuid), public.mover_consumible(uuid, text, numeric, text), public.marcar_consumo(uuid, numeric) to authenticated;
+
+-- =====================================================================
+--  Pendientes de gerencia: recordatorios propios y pedidos entre personas de gerencia
+--  - Cada pendiente lo ven solo quien lo creó y para quien es (si es para uno mismo, es un recordatorio: solo lo ve esa persona).
+--  - Conversación dentro del pendiente, con fotos (achicadas en el teléfono, se borran 60 días después de cerrado).
+--  - Quien lo creó lo cierra. Si se repite (cada día, semana o mes), al cerrarlo sale el siguiente.
+--  - Avisos: al momento (pedido nuevo, respuesta) o un resumen a las 8 a. m. (lo elige cada quien), y el día que vence.
+--  Todo pasa por las funciones de abajo: las tablas no se pueden leer directo desde la app.
+-- =====================================================================
+create table if not exists public.pendientes (
+  id           uuid primary key default gen_random_uuid(),
+  creado_por   uuid not null references public.personas (id) on delete cascade,
+  para         uuid not null references public.personas (id) on delete cascade,
+  titulo       text not null check (char_length(titulo) between 1 and 200),
+  vence        date,
+  hora         time,
+  repite       text not null default '' check (repite in ('', 'diaria', 'semanal', 'mensual')),
+  estado       text not null default 'abierto' check (estado in ('abierto', 'cerrado')),
+  cerrado_en   timestamptz,
+  creado_en    timestamptz not null default now(),
+  actividad_en timestamptz not null default now(),
+  constraint pendientes_repite_fecha check (repite = '' or vence is not null)
+);
+create index if not exists pendientes_para_idx on public.pendientes (para, estado);
+create index if not exists pendientes_creado_idx on public.pendientes (creado_por, estado);
+create table if not exists public.pendientes_mensajes (
+  id           uuid primary key default gen_random_uuid(),
+  pendiente_id uuid not null references public.pendientes (id) on delete cascade,
+  autor        uuid not null references public.personas (id) on delete cascade,
+  texto        text not null default '' check (char_length(texto) <= 4000),
+  foto         text,
+  foto_borrada boolean not null default false,
+  creado_en    timestamptz not null default now()
+);
+create index if not exists pendientes_mensajes_idx on public.pendientes_mensajes (pendiente_id, creado_en);
+create table if not exists public.pendientes_vistos (
+  pendiente_id uuid not null references public.pendientes (id) on delete cascade,
+  persona_id   uuid not null references public.personas (id) on delete cascade,
+  visto_en     timestamptz not null default now(),
+  primary key (pendiente_id, persona_id)
+);
+alter table public.personas add column if not exists pend_avisos text not null default 'momento';
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'personas_pend_avisos_chk') then
+    alter table public.personas add constraint personas_pend_avisos_chk check (pend_avisos in ('momento', 'resumen'));
+  end if;
+end $$;
+alter table public.pendientes enable row level security;
+alter table public.pendientes_mensajes enable row level security;
+alter table public.pendientes_vistos enable row level security;
+revoke all on public.pendientes, public.pendientes_mensajes, public.pendientes_vistos from anon, authenticated;
+
+-- Quien llama debe ser de gerencia; devuelve el pendiente si participa en él
+create or replace function public._pend_mio(p_id uuid) returns public.pendientes
+language plpgsql stable security definer set search_path = public as $$
+declare x public.pendientes;
+begin
+  if not public.es_admin() then raise exception 'Solo gerencia.'; end if;
+  select * into x from pendientes where id = p_id and auth.uid() in (creado_por, para);
+  if x.id is null then raise exception 'Ese pendiente no existe o no es tuyo.'; end if;
+  return x;
+end $$;
+
+-- Aviso al momento a la otra persona (si lo tiene así en su perfil)
+create or replace function public._pend_avisar(x public.pendientes, p_titulo text, p_cuerpo text) returns void
+language plpgsql security definer set search_path = public as $$
+declare otro uuid := case when auth.uid() = x.creado_por then x.para else x.creado_por end;
+begin
+  if otro = auth.uid() then return; end if;
+  if not exists (select 1 from personas where id = otro and activo and rol = 'admin' and pend_avisos = 'momento') then return; end if;
+  insert into avisos_cola (persona_id, titulo, cuerpo, url) values (otro, left(p_titulo, 120), left(coalesce(p_cuerpo, ''), 180), 'pendientes/#/p/' || x.id);
+end $$;
+
+create or replace function public._pend_nombre(p uuid) returns text
+language sql stable security definer set search_path = public as $$
+  select coalesce(nullif(split_part(trim(nombre), ' ', 1), ''), split_part(email, '@', 1), 'Alguien') from personas where id = p
+$$;
+
+-- Todo lo de la página: la gente de gerencia, lo abierto y lo cerrado en los últimos 60 días
+create or replace function public.pend_datos() returns json
+language plpgsql stable security definer set search_path = public as $$
+declare yo uuid := auth.uid();
+begin
+  if not public.es_admin() then raise exception 'Solo gerencia.'; end if;
+  return json_build_object(
+    'yo', yo,
+    'avisos', (select pend_avisos from personas where id = yo),
+    'hoy', public.hoy(),
+    'gerencia', (select coalesce(json_agg(json_build_object('id', p.id, 'nombre', coalesce(nullif(trim(p.nombre), ''), p.email)) order by p.nombre), '[]'::json)
+                 from personas p where p.activo and p.rol = 'admin'),
+    'pendientes', (select coalesce(json_agg(json_build_object(
+        'id', x.id, 'creado_por', x.creado_por, 'para', x.para, 'titulo', x.titulo, 'vence', x.vence, 'hora', to_char(x.hora, 'HH24:MI'),
+        'repite', x.repite, 'estado', x.estado, 'cerrado_en', x.cerrado_en, 'creado_en', x.creado_en, 'actividad_en', x.actividad_en,
+        'mensajes', (select count(*) from pendientes_mensajes m where m.pendiente_id = x.id),
+        'ultimo', (select json_build_object('autor', m.autor, 'texto', m.texto, 'foto', m.foto is not null, 'creado_en', m.creado_en)
+                   from pendientes_mensajes m where m.pendiente_id = x.id order by m.creado_en desc limit 1),
+        'nuevo', exists (select 1 from pendientes_mensajes m where m.pendiente_id = x.id and m.autor <> yo
+                          and m.creado_en > coalesce((select v.visto_en from pendientes_vistos v where v.pendiente_id = x.id and v.persona_id = yo), '-infinity'))
+                 or (x.para = yo and x.creado_por <> yo and not exists (select 1 from pendientes_vistos v where v.pendiente_id = x.id and v.persona_id = yo))
+      ) order by x.estado, x.vence nulls last, x.actividad_en desc), '[]'::json)
+      from pendientes x where yo in (x.creado_por, x.para) and (x.estado = 'abierto' or x.cerrado_en > now() - interval '60 days'))
+  );
+end $$;
+
+-- La conversación de un pendiente (y queda como leído)
+create or replace function public.pend_hilo(p_id uuid) returns json
+language plpgsql security definer set search_path = public as $$
+declare x public.pendientes := public._pend_mio(p_id);
+begin
+  insert into pendientes_vistos (pendiente_id, persona_id) values (x.id, auth.uid())
+  on conflict (pendiente_id, persona_id) do update set visto_en = now();
+  return (select coalesce(json_agg(json_build_object('id', m.id, 'autor', m.autor, 'texto', m.texto,
+            'foto', case when m.foto_borrada then null else m.foto end, 'foto_borrada', m.foto_borrada, 'creado_en', m.creado_en) order by m.creado_en), '[]'::json)
+          from pendientes_mensajes m where m.pendiente_id = x.id);
+end $$;
+
+create or replace function public.pend_crear(p_titulo text, p_para uuid default null, p_vence date default null, p_hora time default null,
+                                             p_repite text default '', p_texto text default null) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare x public.pendientes; t text := trim(coalesce(p_titulo, '')); quien uuid := coalesce(p_para, auth.uid());
+begin
+  if not public.es_admin() then raise exception 'Solo gerencia.'; end if;
+  if t = '' then raise exception 'Escribe qué es.'; end if;
+  if char_length(t) > 200 then raise exception 'El título es muy largo (máximo 200 letras).'; end if;
+  if not exists (select 1 from personas where id = quien and activo and rol = 'admin') then raise exception 'Esa persona no es de gerencia.'; end if;
+  if coalesce(p_repite, '') not in ('', 'diaria', 'semanal', 'mensual') then raise exception 'Repetición no válida.'; end if;
+  if coalesce(p_repite, '') <> '' and p_vence is null then raise exception 'Para que se repita, ponle una fecha.'; end if;
+  if p_hora is not null and p_vence is null then raise exception 'Para ponerle hora, ponle también una fecha.'; end if;
+  insert into pendientes (creado_por, para, titulo, vence, hora, repite) values (auth.uid(), quien, t, p_vence, p_hora, coalesce(p_repite, ''))
+  returning * into x;
+  if nullif(trim(coalesce(p_texto, '')), '') is not null then
+    insert into pendientes_mensajes (pendiente_id, autor, texto) values (x.id, auth.uid(), left(trim(p_texto), 4000));
+  end if;
+  insert into pendientes_vistos (pendiente_id, persona_id) values (x.id, auth.uid()) on conflict do nothing;
+  perform public._pend_avisar(x, public._pend_nombre(auth.uid()) || ' te pidió: ' || t, coalesce(nullif(trim(coalesce(p_texto, '')), ''), 'Toca para verlo.'));
+  return x.id;
+end $$;
+
+create or replace function public.pend_editar(p_id uuid, p_titulo text, p_vence date, p_hora time, p_repite text) returns void
+language plpgsql security definer set search_path = public as $$
+declare x public.pendientes := public._pend_mio(p_id); t text := trim(coalesce(p_titulo, ''));
+begin
+  if x.creado_por <> auth.uid() then raise exception 'Solo quien lo creó lo puede cambiar.'; end if;
+  if t = '' then raise exception 'Escribe qué es.'; end if;
+  if char_length(t) > 200 then raise exception 'El título es muy largo (máximo 200 letras).'; end if;
+  if coalesce(p_repite, '') not in ('', 'diaria', 'semanal', 'mensual') then raise exception 'Repetición no válida.'; end if;
+  if coalesce(p_repite, '') <> '' and p_vence is null then raise exception 'Para que se repita, ponle una fecha.'; end if;
+  if p_hora is not null and p_vence is null then raise exception 'Para ponerle hora, ponle también una fecha.'; end if;
+  update pendientes set titulo = t, vence = p_vence, hora = p_hora, repite = coalesce(p_repite, ''), actividad_en = now() where id = x.id;
+end $$;
+
+-- Escribir en la conversación (texto y/o foto ya subida a la carpeta del pendiente)
+create or replace function public.pend_mensaje(p_id uuid, p_texto text, p_foto text default null) returns void
+language plpgsql security definer set search_path = public as $$
+declare x public.pendientes := public._pend_mio(p_id); t text := trim(coalesce(p_texto, ''));
+begin
+  if t = '' and p_foto is null then raise exception 'Escribe algo o agrega una foto.'; end if;
+  if char_length(t) > 4000 then raise exception 'El mensaje es muy largo.'; end if;
+  if p_foto is not null and (p_foto !~ ('^' || x.id::text || '/[A-Za-z0-9_-]+\.jpg$')) then raise exception 'Esa foto no es válida.'; end if;
+  insert into pendientes_mensajes (pendiente_id, autor, texto, foto) values (x.id, auth.uid(), t, p_foto);
+  update pendientes set actividad_en = now() where id = x.id;
+  insert into pendientes_vistos (pendiente_id, persona_id) values (x.id, auth.uid())
+  on conflict (pendiente_id, persona_id) do update set visto_en = now();
+  perform public._pend_avisar(x, public._pend_nombre(auth.uid()) || ': ' || x.titulo, case when t = '' then '📷 Foto' else t end);
+end $$;
+
+create or replace function public._pend_siguiente(d date, r text) returns date
+language sql immutable as $$
+  select case r when 'diaria' then d + 1 when 'semanal' then d + 7 when 'mensual' then (d + interval '1 month')::date else d end
+$$;
+
+-- Cerrar (solo quien lo creó). Si se repite, sale el siguiente con la próxima fecha que no haya pasado.
+create or replace function public.pend_cerrar(p_id uuid) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare x public.pendientes := public._pend_mio(p_id); d date; nuevo uuid;
+begin
+  if x.creado_por <> auth.uid() then raise exception 'Solo quien lo creó lo puede cerrar.'; end if;
+  if x.estado = 'cerrado' then return null; end if;
+  update pendientes set estado = 'cerrado', cerrado_en = now(), actividad_en = now() where id = x.id;
+  if x.repite <> '' then
+    d := public._pend_siguiente(x.vence, x.repite);
+    while d <= public.hoy() loop d := public._pend_siguiente(d, x.repite); end loop;
+    insert into pendientes (creado_por, para, titulo, vence, hora, repite) values (x.creado_por, x.para, x.titulo, d, x.hora, x.repite) returning id into nuevo;
+    insert into pendientes_vistos (pendiente_id, persona_id) values (nuevo, auth.uid()) on conflict do nothing;
+  end if;
+  perform public._pend_avisar(x, public._pend_nombre(auth.uid()) || ' cerró: ' || x.titulo, 'Ya quedó resuelto.');
+  return nuevo;
+end $$;
+
+create or replace function public.pend_reabrir(p_id uuid) returns void
+language plpgsql security definer set search_path = public as $$
+declare x public.pendientes := public._pend_mio(p_id);
+begin
+  if x.creado_por <> auth.uid() then raise exception 'Solo quien lo creó lo puede reabrir.'; end if;
+  update pendientes set estado = 'abierto', cerrado_en = null, actividad_en = now() where id = x.id;
+end $$;
+
+-- Borrar (solo quien lo creó). Devuelve las fotos para que el teléfono las borre del almacenamiento.
+create or replace function public.pend_borrar(p_id uuid) returns json
+language plpgsql security definer set search_path = public as $$
+declare x public.pendientes := public._pend_mio(p_id); fotos json;
+begin
+  if x.creado_por <> auth.uid() then raise exception 'Solo quien lo creó lo puede borrar.'; end if;
+  select coalesce(json_agg(foto), '[]'::json) into fotos from pendientes_mensajes where pendiente_id = x.id and foto is not null and not foto_borrada;
+  delete from pendientes where id = x.id;
+  return fotos;
+end $$;
+
+create or replace function public.pend_avisos(p_modo text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.es_admin() then raise exception 'Solo gerencia.'; end if;
+  if p_modo not in ('momento', 'resumen') then raise exception 'Opción no válida.'; end if;
+  update personas set pend_avisos = p_modo where id = auth.uid();
+end $$;
+
+-- Fotos de pendientes cerrados hace más de 60 días: el teléfono de gerencia las borra al abrir la página
+create or replace function public.pend_fotos_vencidas() returns json
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.es_admin() then return '[]'::json; end if;
+  return (select coalesce(json_agg(m.foto), '[]'::json) from (
+    select m.foto from pendientes_mensajes m join pendientes x on x.id = m.pendiente_id
+    where m.foto is not null and not m.foto_borrada and x.estado = 'cerrado' and x.cerrado_en < now() - interval '60 days'
+      and auth.uid() in (x.creado_por, x.para) limit 50) m);
+end $$;
+create or replace function public.pend_fotos_borradas(p_fotos text[]) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.es_admin() then raise exception 'Solo gerencia.'; end if;
+  update pendientes_mensajes m set foto_borrada = true
+  from pendientes x where x.id = m.pendiente_id and m.foto = any (p_fotos) and auth.uid() in (x.creado_por, x.para)
+    and x.estado = 'cerrado' and x.cerrado_en < now() - interval '60 days';
+end $$;
+
+-- Fotos: carpeta privada «pendientes» (máximo 1 MB por foto, solo JPG). Solo las dos personas del pendiente.
+create or replace function public._pend_foto_ok(p_nombre text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select public.es_admin() and exists (select 1 from pendientes x where x.id::text = split_part(p_nombre, '/', 1) and auth.uid() in (x.creado_por, x.para))
+$$;
+do $$ begin
+  if to_regclass('storage.buckets') is null then raise notice 'Sin almacenamiento de archivos: se salta la carpeta de fotos.'; return; end if;
+  insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+  values ('pendientes', 'pendientes', false, 1048576, array['image/jpeg']) on conflict (id) do nothing;
+  execute 'drop policy if exists pend_fotos_ver on storage.objects';
+  execute 'drop policy if exists pend_fotos_subir on storage.objects';
+  execute 'drop policy if exists pend_fotos_borrar on storage.objects';
+  execute $p$create policy pend_fotos_ver on storage.objects for select to authenticated using (bucket_id = 'pendientes' and public._pend_foto_ok(name))$p$;
+  execute $p$create policy pend_fotos_subir on storage.objects for insert to authenticated with check (bucket_id = 'pendientes' and public._pend_foto_ok(name))$p$;
+  execute $p$create policy pend_fotos_borrar on storage.objects for delete to authenticated using (bucket_id = 'pendientes' and public._pend_foto_ok(name))$p$;
+exception when insufficient_privilege then raise warning 'No se pudo preparar la carpeta de fotos (permisos): %', sqlerrm;
+end $$;
+
+grant execute on function public.pend_datos(), public.pend_hilo(uuid), public.pend_crear(text, uuid, date, time, text, text),
+  public.pend_editar(uuid, text, date, time, text), public.pend_mensaje(uuid, text, text), public.pend_cerrar(uuid), public.pend_reabrir(uuid),
+  public.pend_borrar(uuid), public.pend_avisos(text), public.pend_fotos_vencidas(), public.pend_fotos_borradas(text[]),
+  -- la usan las reglas de la carpeta de fotos
+  public._pend_foto_ok(text) to authenticated;
 
 -- Listo. Siguiente paso de la guía: poner tu correo (y los de gerencia) como admin.

@@ -106,3 +106,7 @@ select public.prueba('LEER movimientos (0)', 'select * from consumibles_mov', :E
 select public.prueba('LEER pedidos (0)', 'select * from consumibles_pedidos', :E1);
 select public.prueba('C (contenido) pedir consumible', format($q$select public.pedir_consumible(%L, null)$q$, :'cons'), 'c0000000-0000-0000-0000-000000000001');
 select public.prueba('E1 manda aviso de prueba a E2', $q$select public.aviso_prueba('e0000000-0000-0000-0000-000000000002')$q$, 'e0000000-0000-0000-0000-000000000001');
+select public.prueba('E1 ve pendientes de gerencia', $q$select public.pend_datos()$q$, 'e0000000-0000-0000-0000-000000000001');
+select public.prueba('E1 crea un pendiente', $q$select public.pend_crear('x', null)$q$, 'e0000000-0000-0000-0000-000000000001');
+select public.prueba('E1 lee la tabla de pendientes', $q$select * from public.pendientes$q$, 'e0000000-0000-0000-0000-000000000001');
+select public.prueba('X (desactivado) ve pendientes', $q$select public.pend_datos()$q$, 'd0000000-0000-0000-0000-000000000001');

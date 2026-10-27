@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Sintaxis
-        run: for f in tareas/*.js comun/*.js sw.js config.js; do node -e "new Function(require('fs').readFileSync('$f','utf8'))" || exit 1; done
+        run: for f in tareas/*.js comun/*.js pendientes/*.js sw.js config.js; do node -e "new Function(require('fs').readFileSync('$f','utf8'))" || exit 1; done
       - name: Base de datos (dos veces seguidas)
         env: { PGPASSWORD: prueba }
         run: |
@@ -38,6 +38,7 @@ jobs:
           sleep 1
           node pruebas/humo.js
           node pruebas/recorrido.js
+          PGPASSWORD=prueba PSQL="psql -h localhost -U postgres -d cil" node pruebas/pendientes.js
 
   # Si las pruebas pasan y es la rama principal, instala cil.sql en Supabase (no borra datos).
   # Necesita el secreto SUPABASE_DB_URL (Session pooler). Sin el secreto, este paso no hace nada.
