@@ -9,7 +9,7 @@
   var MODULOS = [
     { id: 'tareas', nombre: 'Tareas', desc: 'Llegada, tareas del día, reporte y temperaturas', href: 'tareas/',
       ic: '<svg viewBox="0 0 24 24"><path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/></svg>' },
-    { id: 'contenido', nombre: 'Contenido', desc: 'Reels, carruseles y grabaciones', href: 'https://srzoco.github.io/contenidoBF/',
+    { id: 'contenido', nombre: 'Contenido', desc: 'Reels, carruseles y grabaciones', href: 'contenido/',
       ic: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10 9.5v5l4-2.5z"/></svg>' },
     { id: 'pendientes', nombre: 'Pendientes', desc: 'Recordatorios y pedidos entre gerencia', href: 'pendientes/', soloGerencia: true,
       ic: '<svg viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2.5"/><path d="M9 4V3h6v1"/><path d="M8.5 10.5l1.5 1.5 3-3M8.5 16h7"/></svg>' },

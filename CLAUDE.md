@@ -13,7 +13,8 @@ App web unificada **CIL** en GitHub Pages: https://srzoco.github.io/cil/
 - `comun/tema.css` / `tema.js`: colores de marca (azul #001E54, gris #B7B6B5, Gloock en títulos solo peso 400, Montserrat en texto) y botón claro/oscuro (`barquero_tema`). El modo claro es para despachadores al sol. Amarillo y naranja son señales de venta: no se usan en la interfaz.
 - `tareas/`: módulo de tareas rotativas del personal de mantenimiento (vanilla JS, sin compilación).
 - `pendientes/`: Pendientes de gerencia (solo rol `admin`). Recordatorios propios y pedidos entre gerencia, con conversación y fotos (carpeta privada `pendientes` de Storage, achicadas a 1280 px; se borran 60 días después de cerrar, desde el teléfono de gerencia al abrir la página). Solo lo ven las dos personas; quien lo creó lo cierra; si se repite, al cerrar sale el siguiente. Avisos al momento o resumen 8 a. m. (`personas.pend_avisos`) y el día que vence. Todo por RPC `pend_*`; las tablas no se leen directo.
-- Contenido y Armador de mensajes todavía abren sus apps viejas (`srzoco/contenidoBF`, `srzoco/mensajesBF`) desde el menú.
+- `contenido/`: Contenido (reels, carruseles, grabación), movido dentro de CIL el 27/10/2026. Lee `../config.js` como `BF_CONFIG` y usa el `sw.js` de CIL. `srzoco/contenidoBF` quedó solo como redirección (su index.html lleva a `/cil/contenido/` con el mismo `#`, para íconos y avisos viejos); el código se edita aquí. Prueba: `pruebas/contenido.js`.
+- El Armador de mensajes todavía abre su app (`srzoco/mensajesBF`) desde el menú.
 - Base de datos: el Supabase de Contenido (proyecto `xooofdppgnpibasambuc`, organización DEB, plan free). `config.js` lleva URL y clave publicable, más `vapidPublicKey`.
 
 ## Archivos clave
@@ -51,7 +52,7 @@ App web unificada **CIL** en GitHub Pages: https://srzoco.github.io/cil/
 - Claves: gerencia las cambia en Equipo → Personas (`cambiar_clave`) y las dice en persona. "Olvidé mi clave" por correo quedó para después (necesita SMTP propio; faltan 2 correos de empleados).
 - Sesión compartida con Contenido: CIL escribe y lee `barquero_sesion` y `bfcontenido_sesion` (gana la de `expires_at` mayor) para no pedir la clave dos veces.
 - Armador: `supabase/tasas-armador.sql` dispara el workflow de mensajesBF de 8:15 a 8:35 (el cron de GitHub llega tarde). Workflow publicado (fija el descuento del día; `forzar` solo desde gerencia; en equipos sin acceso de administradora el número queda bloqueado). Falta que ella cree el token y corra el SQL (pasos 2 y 3).
-- Avisos unificados: la función `notificar` de Contenido ya no manda push; deja los mensajes en `avisos_cola` (url `../contenidoBF/#…`) y los entrega el reloj de avisos de CIL. Se activan una vez en el menú de CIL (`comun/hub.js`, `?avisos` evita la redirección). Contenido usa el tema de CIL (`../cil/comun/tema.*`). Pendiente: mover Contenido a `/cil/contenido/`.
+- Avisos unificados: la función `notificar` de Contenido ya no manda push; deja los mensajes en `avisos_cola` (url `../contenidoBF/#…`) y los entrega el reloj de avisos de CIL. Se activan una vez en el menú de CIL (`comun/hub.js`, `?avisos` evita la redirección). Contenido usa el tema de CIL (`../cil/comun/tema.*`). Contenido ya está en `/cil/contenido/` (los avisos viejos con `../contenidoBF/#…` pasan por la redirección).
 - Fase 3: Armador de mensajes. Se le recomendó pasar productos y precios de `data.json` en GitHub a la base de datos (hoy se editan con un token de GitHub guardado en el teléfono). Ella aún no decide.
 - Falta: la lista de quién usa Contenido y quién usa Mensajes, el ícono (hoy dice "CIL" provisional) y cargar su lista real de tareas.
 - Gerencia evalúa: premio del mes, "cubre primero" y cuándo activar `usar_salidas`.

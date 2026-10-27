@@ -626,3 +626,5 @@ html.marco-fijo .desliza { flex: 1 1 auto; min-height: 0; overflow-y: auto; -web
 html.marco-fijo .tabs { position: static; flex: none; }
 html.marco-fijo .desliza .contenido { padding-bottom: calc(28px + env(safe-area-inset-bottom)); }
 html.marco-fijo .desliza:has(~ .tabs) .contenido { padding-bottom: 28px; }
+
+.cta-revisar { margin: 0 0 12px; }

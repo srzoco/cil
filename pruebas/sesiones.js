@@ -38,11 +38,12 @@ const ses = (id, exp) => JSON.stringify({ access_token: 'tok-' + id, refresh_tok
   const k2 = await claves();
   if (k2[0] !== 'yure' || k2[1] !== 'yure') fallas.push('Una pantalla vieja escribió otra sesión encima de la de Yure (' + k2.join(', ') + ')');
   // Salir no deja ninguna sesión
-  await p.goto(BASE + '/'); await p.waitForTimeout(500);
+  await p.goto(BASE + '/').catch(() => {}); await p.waitForTimeout(500);
   await intentar(() => p.evaluate((s) => { localStorage.clear(); sessionStorage.setItem('barquero_en_menu', '1'); localStorage.setItem('barquero_sesion', s); localStorage.setItem('bfcontenido_sesion', s); }, ses('yure')));
-  await p.goto(BASE + '/'); await p.waitForTimeout(300);
+  await p.goto(BASE + '/').catch(() => {}); await p.waitForTimeout(600);
   await p.reload(); await p.waitForTimeout(700);
-  const salir = p.locator('#salir'); if (await salir.count()) { await salir.click(); await p.waitForTimeout(400); }
+  const salir = await p.waitForSelector('#salir', { timeout: 6000 }).catch(() => null);
+  if (!salir) fallas.push('No apareció el botón «Salir» del menú'); else { await salir.click(); await p.waitForTimeout(400); }
   const k3 = await claves(); if (k3[0] || k3[1]) fallas.push('Al salir quedó una sesión guardada (' + k3.join(', ') + ')');
   await b.close();
   if (fallas.length) { console.error('FALLAS (' + fallas.length + '):\n- ' + fallas.join('\n- ')); process.exit(1); }

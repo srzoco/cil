@@ -321,9 +321,7 @@
   function vistaInicio() {
     var r = L.pendientes(piezas(), eventos(), rol(), S.hoy, ajustes());
     var html = '<h1 class="saludo">' + saludo() + ', ' + esc(yo().nombre) + '</h1><p class="fecha-hoy">' + L.fmtFechaLarga(S.hoy) + ' · ' + esc(hoyToca()) + '</p>';
-    html += '<input type="search" class="buscar" placeholder="Buscar pieza o producto" data-ir-buscar aria-label="Buscar pieza o producto">';
     html += bannerPush();
-    html += tarjetaGrabacion(grabSemana(), true);
     var acc = [];  // [html de la fila]
     var conBoton = function (p, extra, boton) { return '<div class="fila-accion">' + tarjeta(p, extra) + boton + '</div>'; };
     var botonPub = function (x, txt, sec) { return '<button class="btn' + (sec ? ' sec' : '') + '" data-act="publicar" data-id="' + x.pieza.id + '" data-plat="' + x.plataforma + '">' + txt + ' ' + L.PLAT_CORTO[x.plataforma] + '</button>'; };
@@ -333,20 +331,24 @@
         acc.push(conBoton(x.pieza, '<b>Hoy se publica</b> · ' + L.PLATAFORMAS[x.plataforma], listo ? botonPub(x, 'Publicado en') : ''));
       });
       r.atrasadas.forEach(function (x) { acc.push(conBoton(x.pieza, '<span class="rojo">No se publicó</span> · ' + L.PLATAFORMAS[x.plataforma] + ' · era ' + L.fmtFecha(x.fecha), botonPub(x, 'Ya se publicó en', true))); });
-      r.riesgo.forEach(function (x) { acc.push(tarjeta(x.pieza, '<span class="rojo">Se publica pronto y no está aprobada</span>')); });
-      r.revisar.forEach(function (p) { acc.push(tarjeta(p, '<b>Por aprobar</b>')); });
-      r.programar.forEach(function (p) { acc.push(tarjeta(p, 'Lista sin fecha · ponle día')); });
+      // Cada fila con su botón grande: lo que hay que hacer, a un toque
+      r.riesgo.forEach(function (x) { acc.push(conBoton(x.pieza, '<span class="rojo">Se publica pronto y no está aprobada</span>', '<a class="btn" href="#/p/' + x.pieza.id + '">Revisar</a>')); });
+      r.revisar.forEach(function (p) { acc.push(conBoton(p, '<b>Por aprobar</b>', '<a class="btn" href="#/p/' + p.id + '">Revisar</a>')); });
+      r.programar.forEach(function (p) { acc.push(conBoton(p, 'Lista sin fecha', '<button class="btn sec" data-act="fechas" data-id="' + p.id + '">📅 Ponerle fecha</button>')); });
     } else {
       r.publicar.forEach(function (x) { acc.push(conBoton(x.pieza, '<b>' + L.PLATAFORMAS[x.plataforma] + '</b>' + (x.atrasada ? ' · era ' + L.fmtFecha(x.fecha) : ''), botonPub(x, 'Publicar en'))); });
-      r.editar.forEach(function (p) { acc.push(tarjeta(p, p.version > 0 ? resumenCorreccion(L.ultimaCorreccion(eventos(), p)) : 'Por editar')); });
+      r.editar.forEach(function (p) { acc.push(conBoton(p, p.version > 0 ? resumenCorreccion(L.ultimaCorreccion(eventos(), p)) : 'Por editar', '<a class="btn" href="#/p/' + p.id + '">' + (p.version > 0 ? 'Corregir' : 'Subir versión') + '</a>')); });
       r.vistas.forEach(function (x) { acc.push(conBoton(x.pieza, 'Anotar vistas · ' + L.PLATAFORMAS[x.plataforma], '<button class="btn sec" data-act="vistas" data-id="' + x.pieza.id + '">Anotar</button>')); });
     }
     var cab = '<div class="bloque-head"><h2>Te toca hoy' + (acc.length ? ' <span class="cuenta">' + acc.length + '</span>' : '') + '</h2>' +
-      (rol() === 'aprueba' && r.revisar.length ? '<a class="btn chico" href="#/revisar">Revisar ' + r.revisar.length + ' seguidas</a>' : '') + '</div>';
+      '</div>' + (rol() === 'aprueba' && r.revisar.length > 1 ? '<a class="btn grande cta-revisar" href="#/revisar">👀 Revisar ' + r.revisar.length + ' en fila</a>' : '');
     if (!acc.length) html += '<section class="hero tranquilo"><p class="hero-t">Todo al día</p><p class="muted">' + (rol() === 'aprueba' ? 'Nada por aprobar ni por publicar.' : 'Cuando grabes algo nuevo, créalo con el botón +.') + '</p></section>';
     else html += '<section class="bloque">' + cab + '<div class="lista-tarjetas">' + acc.slice(0, 5).join('') + '</div>' +
       (acc.length > 5 ? '<details class="mas"><summary>Ver ' + (acc.length - 5) + ' más</summary><div class="lista-tarjetas">' + acc.slice(5).join('') + '</div></details>' : '') + '</section>';
     if (rol() !== 'aprueba' && r.revisar.length) html += '<p class="nota-suave">Le toca a ' + esc(nombreRol('aprueba')) + ' aprobar ' + plural(r.revisar.length, 'pieza', 'piezas') + '.</p>';
+    // La grabación y el buscador, después de lo que te toca
+    html += tarjetaGrabacion(grabSemana(), true);
+    html += '<input type="search" class="buscar" placeholder="Buscar pieza o producto" data-ir-buscar aria-label="Buscar pieza o producto">';
     // Planificación plegada
     var esperas = L.esperasPorProducto(piezas());
     if (r.huecos.length || esperas.length) {
@@ -529,7 +531,8 @@
           '<ul class="lista-simple">' + hechos.map(function (x) { return '<li>' + (x.accion === 'aprobada' ? '✅ ' : '✏️ ') + esc(x.titulo) + '</li>'; }).join('') + '</ul>' +
           '<a class="btn wa grande" target="_blank" rel="noopener" href="' + esc(L.waLink(ed && ed.telefono, L.msgResumenLote(hechos, base()))) + '">' + ICON.wa + ' Avisar a ' + esc(ed ? ed.nombre : 'edición') + ' por WhatsApp</a>';
         var sinFecha = hechos.filter(function (x) { var p = pieza(x.id); return x.accion === 'aprobada' && p && L.enBanco(p); });
-        if (sinFecha.length) html += '<p class="ayuda">' + plural(sinFecha.length, 'pieza aprobada quedó', 'piezas aprobadas quedaron') + ' sin fecha: búscalas en Inicio › «Listas sin fecha».</p>';
+        if (sinFecha.length) html += '<p class="ayuda">' + plural(sinFecha.length, 'pieza aprobada quedó', 'piezas aprobadas quedaron') + ' sin fecha:</p><div class="lista">' +
+          sinFecha.map(function (x) { return '<div class="item"><span class="item-cuerpo"><span class="item-titulo">' + esc(x.titulo) + '</span></span><button class="btn chico" data-act="fechas" data-id="' + x.id + '">📅 Ponerle fecha</button></div>'; }).join('') + '</div>';
       }
       var saltadas = lote.hechos.filter(function (x) { return x.accion === 'saltada'; }).length;
       if (saltadas) html += '<p class="muted">Saltaste ' + plural(saltadas, 'pieza', 'piezas') + '; siguen pendientes.</p>';
@@ -791,7 +794,7 @@
         return '<label class="op-' + t + '"><input type="radio" name="tipo" value="' + t + '"' + (tipo === t ? ' checked' : '') + '> ' + ICON[t] + ' ' + L.TIPOS[t] + '</label>';
       }).join('') + '</div></div>') +
       '<div class="campo"><span class="label">Plataformas</span><div class="seg grande">' + ['ig', 'tt'].map(function (pl) {
-        var marcado = p.id ? !!p[pl] : false;
+        var marcado = p.id ? !!p[pl] : true;  // pieza nueva: las dos marcadas (un paso menos)
         return '<label><input type="checkbox" name="' + pl + '"' + (marcado ? ' checked' : '') + '> ' + L.PLATAFORMAS[pl] + '</label>';
       }).join('') + '</div></div>' +
       '<details class="mas-detalles"' + (p.producto || p.gancho || p.objetivo ? ' open' : '') + '><summary>Más detalles (opcional)</summary>' +
