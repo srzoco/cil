@@ -2144,10 +2144,10 @@ begin
   execute 'drop trigger if exists equipo_rol on public.equipo';
   execute 'create trigger equipo_rol before insert or update of rol on public.equipo for each row execute function public._equipo_rol()';
   -- Avisos de Contenido: antes cualquier usuario podía reasignarse los teléfonos suscritos de otros
-  -- (update «using (true)»). Ahora solo el equipo de Contenido toca esa tabla.
+  -- (update «using (true)»). Ahora cada quien solo toca los suyos.
   if to_regclass('public.push_subs') is not null then
     execute $p$drop policy if exists push_editar on public.push_subs$p$;
-    execute $p$create policy push_editar on public.push_subs for update to authenticated using (public.tiene_acceso('contenido')) with check (user_id = auth.uid() and public.tiene_acceso('contenido'))$p$;
+    execute $p$create policy push_editar on public.push_subs for update to authenticated using (user_id = auth.uid() and public.tiene_acceso('contenido')) with check (user_id = auth.uid() and public.tiene_acceso('contenido'))$p$;
     execute $p$drop policy if exists push_crear on public.push_subs$p$;
     execute $p$create policy push_crear on public.push_subs for insert to authenticated with check (user_id = auth.uid() and public.tiene_acceso('contenido'))$p$;
   end if;
