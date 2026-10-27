@@ -114,7 +114,7 @@ sql(`insert into auth.users (id, email) values ('${JAVIER}', 'javier@x.com') on 
   }
   // Cambiar y borrar
   donde = 'Sara borra'; await p.locator('a.item', { hasText: 'Pagar alquiler' }).click(); await p.waitForTimeout(600);
-  await p.click('[data-acc="editar"]'); await p.click('[data-acc="borrar"]'); await p.waitForTimeout(200); await p.click('[data-acc="borrar-si"]'); await p.waitForTimeout(800);
+  await p.click('[data-acc="borrar"]'); await p.waitForTimeout(200); await p.click('[data-acc="borrar-si"]'); await p.waitForTimeout(800);
   await debe('Borrado');
   donde = 'Sara avisos'; await p.selectOption('select[data-cambio="pref"]', 'resumen'); await p.waitForTimeout(500);
   if (sql(`select pend_avisos from personas where id = '${SARA}'`).trim() !== 'resumen') fallas.push('No se guardó la preferencia de avisos');

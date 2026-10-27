@@ -195,11 +195,11 @@
     }
     if (mio) {
       h += '<div class="acciones-detalle">' + (x.estado === 'abierto' ? (x.hecho_en && !propio(x) ? '' : '<button class="btn ok" data-acc="cerrar" data-id="' + esc(id) + '">Cerrar: ya está resuelto</button>') : '<button class="btn sec" data-acc="reabrir" data-id="' + esc(id) + '">Reabrir</button>') +
-        '<button class="btn sec" data-acc="editar">Cambiar</button>' + (!propio(x) && x.estado === 'abierto' ? botonWA(x) : '') + '</div>';
+        '<button class="btn sec" data-acc="editar">Cambiar</button>' + (!propio(x) && x.estado === 'abierto' ? botonWA(x) : '') +
+        '<button class="btn fantasma rojo" type="button" data-acc="borrar">Borrar</button></div>' +
+        (S.borrando ? '<div class="confirmar-borrar">¿Borrar este pendiente con toda su conversación? No se puede deshacer.<div class="acciones-detalle"><button class="btn warn" type="button" data-acc="borrar-si" data-id="' + esc(id) + '">Sí, borrar</button><button class="btn sec" type="button" data-acc="borrar-no">No</button></div></div>' : '');
       h += '<form class="pendientes-form card" data-form="editar" data-id="' + esc(id) + '" hidden><label class="campo">¿Qué es?<input name="titulo" maxlength="200" required value="' + esc(x.titulo) + '"></label>' + camposFecha(x) +
-        '<div class="acciones"><button class="btn" type="submit">Guardar</button></div>' +
-        (S.borrando ? '<div class="confirmar-borrar">¿Borrar este pendiente con toda su conversación? No se puede deshacer.<div class="acciones-detalle"><button class="btn warn" type="button" data-acc="borrar-si" data-id="' + esc(id) + '">Sí, borrar</button><button class="btn sec" type="button" data-acc="borrar-no">No</button></div></div>'
-          : '<button class="btn fantasma rojo" type="button" data-acc="borrar">Borrar pendiente</button>') + '</form>';
+        '<div class="acciones"><button class="btn" type="submit">Guardar</button></div></form>';
     } else if (x.estado === 'abierto') {
       h += x.hecho_en
         ? '<div class="card"><p>Marcaste que ya lo hiciste. ' + esc(nombre(x.creado_por)) + ' lo confirma y lo cierra.</p><button class="btn sec chico" data-acc="no-hecho" data-id="' + esc(id) + '">Deshacer</button></div>'
@@ -312,7 +312,7 @@
     var acc = b.getAttribute('data-acc'), id = b.getAttribute('data-id');
     if (acc === 'recargar') { cargar(); return; }
     if (acc === 'editar') { var f = document.querySelector('form[data-form="editar"]'); if (f) f.hidden = !f.hidden; return; }
-    if (acc === 'borrar') { S.borrando = true; pintar(); document.querySelector('form[data-form="editar"]').hidden = false; return; }
+    if (acc === 'borrar') { S.borrando = true; pintar(); return; }
     if (acc === 'borrar-no') { S.borrando = false; pintar(); return; }
     if (acc === 'quitar-foto') { S.foto = null; pintar(); return; }
     if (acc === 'ya-visto') { S.nuevoId = null; pintar(); return; }

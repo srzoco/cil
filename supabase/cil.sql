@@ -2797,4 +2797,24 @@ do $$ begin
   insert into public.cil_migraciones (nombre) values ('cerrar-sesiones-2026-10-27');
 end $$;
 
+-- 27/10/2026: empezar de cero la semana de práctica (la limpieza programada no llegó a correr: seguían saliendo
+-- tareas del lunes). Borra lo anterior al martes 27: asistencia, tareas sin hacer (de todo tipo), salidas, repartos y
+-- redes por aprobar. NO borra personas, tareas configuradas, locales, ajustes ni lo ya hecho.
+do $$ begin
+  if exists (select 1 from public.cil_migraciones where nombre = 'limpieza-inicio-2026-10-27') then return; end if;
+  if public.hoy() <> date '2026-10-27' then
+    insert into public.cil_migraciones (nombre) values ('limpieza-inicio-2026-10-27'); return;  -- solo vale el mismo día
+  end if;
+  delete from public.asistencia    where fecha < date '2026-10-27';
+  delete from public.asignaciones  where fecha < date '2026-10-27' and estado = 'pendiente';
+  delete from public.salidas_rato  where fecha < date '2026-10-27';
+  delete from public.repartos_auto where fecha < date '2026-10-27';
+  delete from public.redes_nuevas  where fecha < date '2026-10-27';
+  -- la limpieza programada a mano (si se llegó a correr) no debe repetirse el año que viene
+  if to_regclass('cron.job') is not null then
+    perform cron.unschedule(jobid) from cron.job where jobname = 'limpieza-inicio';
+  end if;
+  insert into public.cil_migraciones (nombre) values ('limpieza-inicio-2026-10-27');
+end $$;
+
 -- Listo. Siguiente paso de la guía: poner tu correo (y los de gerencia) como admin.
