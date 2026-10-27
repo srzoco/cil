@@ -1,0 +1,1455 @@
+<!doctype html><html lang="es"><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><link rel="manifest" href="../manifest.webmanifest"><link rel="icon" href="../icon-192.png"><link rel="apple-touch-icon" href="../icon-192.png"><meta name="theme-color" content="#001E54"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="CIL"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}.fila-cil { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+.boton-tema { width: 36px; height: 36px; border-radius: 12px; border: 1.5px solid var(--line, #D9DFEA); background: var(--surface, #fff); color: var(--ink, #0E1A33); display: inline-grid; place-items: center; cursor: pointer; padding: 0; }
+.boton-tema svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.volver-cil { display: inline-block; margin-bottom: 6px; font-size: .85rem; font-weight: 600; text-decoration: none; color: inherit; opacity: .8; }
+</style>
+<!-- Botón claro/oscuro compartido con CIL (se recuerda en el teléfono para las tres herramientas) -->
+<link rel="preconnect" href="https://xooofdppgnpibasambuc.supabase.co" crossorigin>
+<script src="../comun/tema.js?v=1"></script>
+</head><body>
+<title>Armador de mensajes Barquero</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gloock&family=Montserrat:wght@400;500;600;700&display=swap">
+<style id="css">
+/* Layout: mostrador de dos paneles. Lista de productos a la izquierda, el mensaje como burbuja de chat a la derecha; en teléfono, un panel a la vez con barra inferior. */
+:root{
+  /* Colores de Barquero Food (los mismos de CIL): azul #001E54 y grises; el dorado se queda solo en el descuento (señal de venta) */
+  --bg:#F4F6FA;
+  --surface:#FFFFFF;
+  --surface-2:#EDF0F5;
+  --ink:#0E1A33;
+  --muted:#4D5870;
+  --line:#D9DFEA;
+  --accent:#001E54;
+  --accent-ink:#FFFFFF;
+  --accent-soft:#E5EBF5;
+  --gold-bg:#F4E3B5;
+  --gold-ink:#5E4005;
+  --gold-line:#DDBF72;
+  --bubble:#E4EDF9;
+  --danger:#A3263A;
+  --danger-soft:#FBE9EC;
+  --shadow:rgb(0 30 84 / .08);
+  --display:"Gloock", Georgia, "Times New Roman", serif;
+  --body:"Montserrat", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --radius:12px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="claro"]){
+    --bg:#0A1328; --surface:#111E3A; --surface-2:#1A2747; --ink:#EEF2F9; --muted:#A9B4CA; --line:#22325A;
+    --accent:#A9C2F5; --accent-ink:#001E54; --accent-soft:#1A2A50;
+    --gold-bg:#382C0E; --gold-ink:#F1D48C; --gold-line:#6A5420;
+    --bubble:#18294A; --danger:#F29AA7; --danger-soft:#3A1D29; --shadow:rgb(0 0 0 / .4);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="oscuro"]{
+  --bg:#0A1328; --surface:#111E3A; --surface-2:#1A2747; --ink:#EEF2F9; --muted:#A9B4CA; --line:#22325A;
+  --accent:#A9C2F5; --accent-ink:#001E54; --accent-soft:#1A2A50;
+  --gold-bg:#382C0E; --gold-ink:#F1D48C; --gold-line:#6A5420;
+  --bubble:#18294A; --danger:#F29AA7; --danger-soft:#3A1D29; --shadow:rgb(0 0 0 / .4);
+  color-scheme:dark;
+}
+html{background:var(--bg)}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45;padding-inline:16px;padding-block:0 40px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1120px;margin-inline:auto}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button{font-family:inherit}
+
+/* Cabecera */
+.head{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px 24px;padding-block:20px 16px}
+.eyebrow{margin:0;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+h1{margin:2px 0 0;font-family:var(--display);font-weight:400;font-size:clamp(26px,5vw,34px);line-height:1.1;text-wrap:balance}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:2px 16px;background:var(--gold-bg);color:var(--gold-ink);border:1px solid var(--gold-line);border-radius:var(--radius);padding:10px 12px 10px 14px}
+.disc-label{grid-column:1;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.disc-meta{grid-column:1;margin:0;font-size:12.5px;opacity:.85}
+.disc-ctl{grid-column:2;grid-row:1 / span 2;display:flex;align-items:center;gap:6px}
+.disc-ctl input{width:2.4em;text-align:right;font:400 30px/1 var(--display);color:var(--gold-ink);background:transparent;border:0;border-bottom:2px dashed var(--gold-line);padding:2px 0;font-variant-numeric:tabular-nums}
+.disc-ctl input:disabled{border-bottom-color:transparent}
+.pct{font:400 22px/1 var(--display)}
+.step{width:32px;height:32px;border-radius:50%;border:1px solid var(--gold-line);background:var(--surface);color:var(--gold-ink);font-size:18px;line-height:1;cursor:pointer}
+.step:disabled{opacity:.4;cursor:not-allowed}
+
+/* Pestañas */
+.tabs{display:inline-flex;gap:4px;padding:4px;background:var(--surface-2);border-radius:999px;margin-block:0 16px}
+.tabs button{border:0;background:transparent;font-weight:600;font-size:14px;color:var(--muted);padding:8px 16px;border-radius:999px;cursor:pointer}
+.tabs button[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px var(--shadow)}
+
+.note,.warn{margin:0 0 16px;background:var(--gold-bg);color:var(--gold-ink);border-radius:10px;padding:10px 12px;font-size:14px}
+.warn{margin:0}
+.err{color:var(--danger);font-weight:600;margin:8px 0 0}
+
+/* Campos */
+.field{width:100%;box-sizing:border-box;font:15px/1.4 var(--body);color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+textarea.field{resize:vertical}
+.flabel{display:block;font-size:13px;font-weight:700;margin:14px 0 6px}
+.hint{margin:4px 0 0;font-size:12.5px;color:var(--muted)}
+.lbl{margin:0;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+
+/* Botones */
+.btn{font-weight:700;font-size:14px;border-radius:10px;padding:11px 16px;border:1px solid transparent;cursor:pointer}
+.btn.primary{background:var(--accent);color:var(--accent-ink)}
+.btn.ghost{background:transparent;border-color:var(--line);color:var(--ink)}
+.btn.small{padding:7px 12px;font-size:13px}
+.btn.danger{background:var(--danger);color:var(--bg)}
+.btn.danger-ghost{background:transparent;color:var(--danger)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.spacer{flex:1}
+.back{border:0;background:transparent;color:var(--accent);font-weight:700;font-size:14px;padding:4px 0;cursor:pointer;justify-self:start}
+
+/* Armar */
+.armar{display:grid;gap:24px;grid-template-columns:minmax(0,1fr)}
+.picker{min-width:0}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-block:12px}
+.chip{border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:999px;padding:6px 12px;font-size:13px;font-weight:600;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.plist{display:grid;gap:8px}
+.prod{display:grid;grid-template-columns:22px minmax(0,1fr);gap:12px;width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;cursor:pointer;color:inherit;font-size:15px}
+.prod:hover{border-color:var(--accent)}
+.prod[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
+.tick{width:22px;height:22px;box-sizing:border-box;border-radius:6px;border:1.5px solid var(--muted);margin-top:1px;display:grid;place-items:center;font-size:14px;font-weight:700;color:var(--accent-ink)}
+.prod[aria-pressed="true"] .tick{background:var(--accent);border-color:var(--accent)}
+.prod[aria-pressed="true"] .tick::after{content:"✓"}
+.prod-main{min-width:0}
+.prod-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.prod-name{font-weight:700;min-width:0}
+.prod-cat{font-size:12px;color:var(--muted);white-space:nowrap}
+.prod-lines{display:grid;gap:2px;margin-top:4px;font-size:13.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.price{color:var(--ink);font-weight:700}
+.empty{color:var(--muted);text-align:center;padding:28px 12px;margin:0;background:var(--surface);border:1px dashed var(--line);border-radius:var(--radius);display:grid;gap:12px;justify-items:center}
+.empty.small{padding:16px 12px;font-size:14px}
+
+.composer{min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px;display:grid;gap:12px;box-shadow:0 1px 3px var(--shadow)}
+.comp-head{display:flex;align-items:baseline;gap:8px}
+h2{margin:0;font-family:var(--display);font-weight:400;font-size:22px;line-height:1.2}
+.count{margin-left:auto;font-size:13px;color:var(--muted)}
+.selected{display:grid;gap:8px}
+.sitem{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--bg)}
+.sitem-top{display:flex;gap:8px;align-items:flex-start}
+.sname{font-weight:600;font-size:14px;flex:1;min-width:0}
+.x{border:0;background:transparent;color:var(--muted);font-size:20px;line-height:1;cursor:pointer;padding:0 6px;border-radius:6px}
+.vchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.vchip{font-size:12.5px;font-weight:500;border:1px dashed var(--line);background:transparent;color:var(--muted);border-radius:8px;padding:5px 8px;cursor:pointer;text-align:left;font-variant-numeric:tabular-nums}
+.vchip[aria-pressed="true"]{border-style:solid;border-color:var(--accent);color:var(--ink);background:var(--accent-soft)}
+.bubble{width:100%;box-sizing:border-box;background:var(--bubble);color:var(--ink);border:0;border-radius:16px 16px 4px 16px;padding:14px 16px;font:15px/1.5 var(--body);resize:none;min-height:150px;white-space:pre-wrap;overflow:hidden;font-variant-numeric:tabular-nums}
+.bubble::placeholder{color:var(--muted)}
+.bubble.static{min-height:0;margin:0;overflow-wrap:anywhere}
+#copy{flex:1}
+
+.msgbar{position:fixed;left:0;right:0;bottom:0;display:none;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px calc(12px + env(safe-area-inset-bottom, 0px));background:var(--surface);border-top:1px solid var(--line);box-shadow:0 -4px 16px var(--shadow);font-weight:700}
+.msgbar.show{display:flex}
+
+@media (min-width:880px){
+  .armar{grid-template-columns:minmax(0,1fr) minmax(0,400px);align-items:start}
+  .composer{position:sticky;top:16px}
+  .back.mobile{display:none}
+  .msgbar.show{display:none}
+}
+@media (max-width:879px){
+  .armar[data-mode="list"] .composer{display:none}
+  .armar[data-mode="msg"] .picker{display:none}
+  body.has-bar{padding-bottom:96px}
+}
+
+/* Catálogo */
+.cat-top{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:12px;margin-bottom:12px}
+.sub{margin:4px 0 0;color:var(--muted);max-width:62ch;font-size:14px}
+.clist{display:grid;gap:8px;margin-top:4px}
+.cgroup{margin:16px 0 0;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.crow{display:flex;gap:12px;align-items:flex-start;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px}
+.crow-main{flex:1;min-width:0}
+.cname{margin:0;font-weight:700}
+.cmeta{margin:2px 0 0;font-size:12.5px;color:var(--muted)}
+.cvars{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:3px;font-size:13.5px;font-variant-numeric:tabular-nums}
+.web{color:var(--muted)}
+.hoy{font-weight:700}
+.ajustes{margin-top:28px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px}
+.ajustes summary{font-weight:700;cursor:pointer}
+.aj-body{padding-bottom:4px}
+.aj-body .btn{margin-top:14px}
+
+.editor{display:grid;gap:12px}
+.ed-grid{display:grid;gap:24px;grid-template-columns:minmax(0,1fr)}
+.ed-form,.ed-prev{min-width:0}
+.ed-prev{display:grid;gap:8px;align-content:start}
+.row2{display:grid;gap:0 16px;grid-template-columns:minmax(0,1fr)}
+fieldset{border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px 14px;margin:16px 0 0;display:grid;gap:10px;min-width:0}
+legend{font-weight:700;font-size:13px;padding:0 6px}
+.vrow{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center}
+.vrow .v-texto{grid-column:1 / -1}
+.v-price{display:flex;align-items:center;gap:4px;border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:0 10px;color:var(--muted);font-weight:700}
+.v-price input{border:0;background:transparent;width:100%;min-width:0;font:700 15px var(--body);padding:10px 0;color:var(--ink);font-variant-numeric:tabular-nums}
+.v-price input:focus{outline:none}
+.v-price:focus-within{outline:2px solid var(--accent);outline-offset:1px}
+.v-kilo{display:flex;gap:6px;align-items:center;font-size:13.5px;white-space:nowrap;cursor:pointer}
+.v-del{border:0;background:transparent;color:var(--muted);font-size:22px;line-height:1;cursor:pointer;padding:4px 8px;border-radius:6px}
+.emojis{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.emojis button{font-size:18px;border:1px solid var(--line);background:var(--surface);border-radius:8px;width:36px;height:36px;cursor:pointer;padding:0}
+.confirm{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--danger-soft);color:var(--ink);border-radius:10px;padding:10px 12px;margin-top:10px}
+.confirm span{flex:1 1 200px}
+.ed-form .actions{margin-top:16px}
+
+@media (min-width:560px){
+  .row2{grid-template-columns:1fr 1fr}
+  .vrow{grid-template-columns:minmax(0,1fr) 120px auto auto}
+  .vrow .v-texto{grid-column:auto}
+}
+@media (min-width:880px){
+  .ed-grid{grid-template-columns:minmax(0,1fr) minmax(0,360px);align-items:start}
+  .ed-prev{position:sticky;top:16px}
+}
+
+body:not(.owner) .owner-only{display:none!important}
+
+.toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom, 0px));transform:translate(-50%,8px);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-weight:700;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s, transform .2s;max-width:calc(100% - 32px);box-sizing:border-box;text-align:center}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+@media (prefers-reduced-motion: reduce){.toast{transition:none}}
+
+/* Descuento por confirmar */
+.disc-meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.disc.pending{background:var(--surface);border-style:dashed}
+.mini{border:1px solid var(--gold-line);background:var(--gold-bg);color:var(--gold-ink);font-weight:700;font-size:12.5px;border-radius:999px;padding:3px 10px;cursor:pointer}
+.warn{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+.warn span{flex:1 1 180px}
+.stamp{margin:0 0 12px;font-size:13px;color:var(--muted)}
+/* Herramientas de la dueña */
+.tools{display:flex;flex-wrap:wrap;gap:8px}
+.filebtn{position:relative;overflow:hidden;display:inline-flex;align-items:center}
+.filebtn input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
+.filebtn:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+.report{background:var(--surface);border:1px solid var(--accent);border-radius:var(--radius);padding:14px 16px;margin:4px 0 16px;display:grid;gap:10px}
+.report h3{margin:0;font-family:var(--display);font-weight:400;font-size:19px}
+.report ul{margin:0;padding-left:18px;display:grid;gap:3px;font-size:14px;font-variant-numeric:tabular-nums}
+.report .tally{display:flex;flex-wrap:wrap;gap:6px}
+.pill{font-size:12.5px;font-weight:700;border-radius:999px;padding:3px 10px;background:var(--surface-2);color:var(--ink)}
+.pill.up{background:var(--accent-soft)}
+.pill.alert{background:var(--danger-soft);color:var(--danger)}
+.report details summary{cursor:pointer;font-weight:600;font-size:14px}
+.report .scroll{max-height:260px;overflow:auto;margin-top:6px}
+.busy{position:fixed;inset:0;display:grid;place-items:center;background:rgb(0 0 0 / .25);z-index:10}
+.busy p{background:var(--surface);color:var(--ink);padding:14px 18px;border-radius:12px;font-weight:700;margin:0;box-shadow:0 4px 20px var(--shadow)}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;background:var(--surface-2);border-radius:12px}
+.seg button{border:0;background:transparent;color:var(--muted);font-weight:700;font-size:14px;padding:9px 8px;border-radius:9px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px var(--shadow)}
+.head-ctl{display:flex;flex-wrap:wrap;gap:10px;align-items:stretch}
+.sw{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:10px 14px;cursor:pointer;min-width:0}
+.sw input{position:absolute;opacity:0;width:1px;height:1px}
+.sw .track{flex:none;width:44px;height:26px;border-radius:999px;background:var(--surface-2);border:1px solid var(--line);position:relative;transition:background .15s}
+.sw .track::after{content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:var(--muted);transition:transform .15s,background .15s}
+.sw input:checked + .track{background:var(--accent);border-color:var(--accent)}
+.sw input:checked + .track::after{transform:translateX(18px);background:var(--accent-ink)}
+.sw input:focus-visible + .track{outline:2px solid var(--accent);outline-offset:2px}
+.sw-text{display:grid;gap:1px;min-width:0}
+.sw-text b{font-size:14px}
+.sw-text small{font-size:12px;color:var(--muted)}
+body.usd .sw{border-color:var(--accent);background:var(--accent-soft)}
+body.usd .disc{opacity:.45}
+#usd-badge{display:none;margin-left:4px}
+body.usd #usd-badge{display:inline-block}
+@media (max-width:559px){.head-ctl{width:100%}.head-ctl > *{flex:1 1 100%}}
+@media (prefers-reduced-motion: reduce){.sw .track,.sw .track::after{transition:none}}
+.disc-rates{grid-column:1;margin:0;font-size:12px;opacity:.85;font-variant-numeric:tabular-nums}
+.disc-rates:empty{display:none}
+.disc .auto-val{display:none}
+.disc.auto .auto-val{display:flex;align-items:baseline;gap:4px}
+.disc.auto .manual{display:none}
+#disc-auto{font:400 34px/1 var(--display);font-variant-numeric:tabular-nums}
+.disc.auto .disc-ctl{grid-row:1 / span 3}
+.disc-meta .sub-line{flex-basis:100%;font-size:12px;opacity:.85}
+.disc-meta .alert-line{font-weight:700}
+.disc.pending .alert-line{color:var(--danger)}
+.disc-actions{grid-column:1 / -1;display:flex;gap:8px;margin-top:4px}
+.mini:disabled{opacity:.5;cursor:wait}
+.disc .disc-ctl input::placeholder{color:var(--gold-line)}
+.disc-rates{white-space:pre-line}
+</style>
+<script>window.ARMADOR_HOST="github";</script>
+<script src="../config.js"></script>
+<div id="root"></div>
+<script type="application/json" id="data">{"productos":[],"ajustes":{},"importacion":null}</script>
+<script id="app">var BarqueroImport = (function(){
+  function norm(s){ return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+  function clean(s){ return String(s || '').replace(/\s+/g, ' ').trim(); }
+
+  function parseCSV(text){
+    text = String(text || '').replace(/^﻿/, '');
+    var rows = [], row = [], f = '', q = false;
+    for (var i = 0; i < text.length; i++){
+      var c = text[i];
+      if (q){
+        if (c === '"'){ if (text[i + 1] === '"'){ f += '"'; i++; } else q = false; }
+        else f += c;
+      } else if (c === '"') q = true;
+      else if (c === ',' || c === ';'){ row.push(f); f = ''; }
+      else if (c === '\n' || c === '\r'){
+        if (c === '\r' && text[i + 1] === '\n') i++;
+        row.push(f); f = '';
+        if (row.some(function(x){ return x.trim() !== ''; })) rows.push(row);
+        row = [];
+      } else f += c;
+    }
+    if (f !== '' || row.length){ row.push(f); if (row.some(function(x){ return x.trim() !== ''; })) rows.push(row); }
+    return rows;
+  }
+
+  function records(text){
+    var rows = parseCSV(text);
+    if (!rows.length) return { error: 'El archivo está vacío.' };
+    var head = rows[0].map(function(h){ return norm(clean(h)); });
+    if (head.indexOf('producto') < 0 || head.indexOf('precio') < 0)
+      return { error: 'Este archivo no parece la exportación del catálogo: faltan las columnas Producto y Precio.' };
+    return { recs: rows.slice(1).map(function(r){
+      var o = {};
+      head.forEach(function(k, i){ o[k] = clean(r[i]); });
+      return o;
+    }) };
+  }
+
+  function refOf(r){ return [r.producto, r.talla, r.presentacion, r.sabor, r.modelo, r.peso].map(clean).join('|'); }
+  function textoOf(r){
+    var p = [];
+    if (r.presentacion) p.push(r.presentacion);
+    if (r.sabor) p.push(r.sabor);
+    if (r.modelo) p.push(r.modelo);
+    if (r.talla) p.push('talla ' + r.talla);
+    if (r.peso) p.push(r.peso);
+    return p.join(' · ');
+  }
+  function price(s){
+    var t = clean(s).replace(/[$\s]/g, '');
+    if (/,\d{1,2}$/.test(t) && t.indexOf('.') < 0) t = t.replace(',', '.');
+    else t = t.replace(/,/g, '');
+    return t === '' ? NaN : Number(t);
+  }
+
+  var EMOJI_RULES = [
+    [/langosta/, '🦞'], [/camar[o]n/, '🦐'], [/pulpo/, '🐙'], [/calamar/, '🦑'],
+    [/cangrejo|chupetica/, '🦀'], [/mejillon|guacuco|chipi/, '🦪'],
+    [/bacalao|salmon|atun|mero|pargo|curvina|robalo|dorado|dormilona|carite|claritas|espada|raya|cazon|sardina|anchoa|bonito|camaiguana|sashimi/, '🐟'],
+    [/queso|mantequilla/, '🧀'], [/tocineta/, '🥓'],
+    [/jamon|prosciutto|guanciale|lomo|lomito|coppa|chorizo|salami|salchich|fuet|pepperoni|loncheado/, '🍖'],
+    [/hamburguesa/, '🍔'], [/punta|asado|entrana|carne|pernil/, '🥩'],
+    [/aceite|aceituna/, '🫒'], [/nutella/, '🍫'], [/miel|mermelada|pistacho|berryumy|marquesa/, '🍯'],
+    [/trufa/, '🍄'], [/empanada|tequeno|hojaldre/, '🥟'], [/papas/, '🍟'],
+    [/sazonador|colorante|pimienta|pimenton/, '🧂']
+  ];
+  var CAT_EMOJI = { 'pescados': '🐟', 'mariscos': '🦐', 'quesos': '🧀', 'carnes': '🥩', 'charcuteria': '🍖', 'grasas': '🫒', 'condimentos': '🧂', 'sazonadores': '🧂', 'dulces': '🍯', 'pasapalos': '🥟', 'enlatados': '🥫', 'enlatados y conservas': '🥫', 'vegetales y frutas': '🥫', 'frutas': '🫒' };
+  function emojiFor(name, cat){
+    var n = norm(name);
+    for (var i = 0; i < EMOJI_RULES.length; i++) if (EMOJI_RULES[i][0].test(n)) return EMOJI_RULES[i][1];
+    return CAT_EMOJI[norm(cat)] || '🔹';
+  }
+  function preguntaFor(group){
+    if (group.length < 2) return '';
+    var distinct = function(k){ var s = {}; group.forEach(function(v){ s[v.r[k]] = 1; }); return Object.keys(s).length; };
+    if (distinct('sabor') === group.length) return '¿Qué sabor prefiere?';
+    if (distinct('talla') === group.length) return '¿Qué talla le interesa?';
+    return '¿Qué presentación le interesa?';
+  }
+  function slug(s){ return norm(s).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'producto'; }
+
+  /* Actualiza los productos existentes con los precios del CSV y agrega los nuevos.
+     Las presentaciones sin "ref" (agregadas a mano) no se tocan. */
+  function importCSV(text, productos, ahora){
+    var R = records(text);
+    if (R.error) return { error: R.error };
+    ahora = ahora || new Date().toISOString();
+    var validas = [], piezas = 0, raros = [], inactivas = 0;
+    R.recs.forEach(function(r){
+      if (!r.producto) return;
+      if (r.estado && norm(r.estado) !== 'activa'){ inactivas++; return; }
+      if (/^V[A-ZÁÉÍÓÚÑ]/.test(r.producto)){ piezas++; return; }
+      var p = price(r.precio);
+      var item = { ref: refOf(r), r: r, precio: p, kilo: norm(r.unidad) === 'kg', texto: textoOf(r) };
+      if (!(p > 1)){ raros.push({ producto: r.producto, texto: item.texto, precio: r.precio }); return; }
+      validas.push(item);
+    });
+    var porRef = {};
+    validas.forEach(function(v){ porRef[v.ref] = v; });
+
+    var usadas = {}, cambios = [], eliminadas = [], out = [];
+    (productos || []).forEach(function(p){
+      var pres = [], toco = false;
+      p.presentaciones.forEach(function(v){
+        if (!v.ref){ pres.push(v); return; }
+        var n = porRef[v.ref];
+        if (!n){ eliminadas.push({ nombre: p.nombre, texto: v.texto }); toco = true; return; }
+        usadas[v.ref] = 1;
+        if (n.precio !== v.precio || n.kilo !== !!v.kilo){
+          cambios.push({ nombre: p.nombre, texto: v.texto, antes: v.precio, despues: n.precio, kilo: n.kilo });
+          toco = true;
+        }
+        pres.push(Object.assign({}, v, { precio: n.precio, kilo: n.kilo }));
+      });
+      if (pres.length) out.push(Object.assign({}, p, { presentaciones: pres, actualizado: toco ? ahora : p.actualizado }));
+    });
+
+    var grupos = [], porNombre = {};
+    validas.forEach(function(v){
+      if (usadas[v.ref]) return;
+      usadas[v.ref] = 1;
+      var k = v.r.producto;
+      if (!porNombre[k]){ porNombre[k] = []; grupos.push(porNombre[k]); }
+      porNombre[k].push(v);
+    });
+    var ids = {};
+    out.forEach(function(p){ ids[p.id] = 1; });
+    var nuevos = [];
+    grupos.forEach(function(g){
+      var r0 = g[0].r, id = slug(r0.producto), n = 2;
+      while (ids[id]) id = slug(r0.producto) + '-' + (n++);
+      ids[id] = 1;
+      out.push({
+        id: id, nombre: r0.producto, categoria: r0.categoria || '', emoji: emojiFor(r0.producto, r0.categoria),
+        pregunta: preguntaFor(g),
+        presentaciones: g.map(function(v){ return { texto: v.texto, precio: v.precio, kilo: v.kilo, ref: v.ref }; }),
+        actualizado: ahora
+      });
+      nuevos.push(r0.producto);
+    });
+    return { productos: out, informe: { cambios: cambios, nuevos: nuevos, eliminadas: eliminadas, piezas: piezas, raros: raros, inactivas: inactivas, filas: R.recs.length } };
+  }
+
+  return { parseCSV: parseCSV, importCSV: importCSV, emojiFor: emojiFor };
+})();
+if (typeof module !== 'undefined') module.exports = BarqueroImport;
+
+(function(){
+  const HOST = window.ARMADOR_HOST === 'github' ? 'github' : 'claude';
+  let DATA = JSON.parse(document.getElementById('data').textContent);
+  const IMP = window.BarqueroImport;
+
+  const HEAD = '<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>';
+  const TOP = '<title>Armador de mensajes Barquero</title>\n<link rel="preconnect" href="https://fonts.googleapis.com">\n<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gloock&family=Montserrat:wght@400;500;600;700&display=swap">\n';
+  function pageHTML(data){
+    const css = document.getElementById('css').textContent;
+    const code = document.getElementById('app').textContent;
+    const json = JSON.stringify(data).replace(/</g, '\\u003c');
+    const content = TOP + '<style id="css">' + css + '</style>\n<div id="root"></div>\n<script type="application/json" id="data">' + json + '<\/script>\n<script id="app">' + code + '<\/script>\n';
+    return HEAD + '\n' + content + '\n</body></html>';
+  }
+
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const num = n => String(Number((Math.round(n * 100) / 100).toFixed(2)));
+  const money = n => '$' + num(n);
+  const parseNum = s => { const t = String(s == null ? '' : s).trim().replace(/\s/g, '').replace(',', '.'); return t === '' ? NaN : Number(t); };
+  const validPct = v => typeof v === 'number' && isFinite(v) && v >= 0 && v < 100;
+  const DEF = {
+    pie: '🚀 ¡Aproveche hoy el {descuento}% de descuento por pagos a BCV!\n*(los precios ya incluyen el descuento)*',
+    preguntaVarios: '¿Cuál de estos productos le interesa?',
+    pieDivisas: 'Precios exclusivamente para pagos en: Zelle, Banesco Panamá, USDT o cash',
+    descuentoDivisas: 50
+  };
+  // Botones rápidos del editor (también se puede escribir cualquier emoji con el teclado del teléfono).
+  // No existe emoji de vainilla: se usa 🌼 (su flor), 🫛 (una vaina) o 🍦.
+  const EMOJIS = ['🧀','🥩','🍖','🥓','🐟','🦐','🦑','🐙','🦪','🦀','🦞','🫒','🍯','🧂','🥫','🥟','🍄','🌶️','🌿','🌼','🫛','🍦','🍫','🍪','🥜','☕','🍷','🍾','🥖','🧈','🥚','🍝','🍋','🍅','🍇','🍟','🍔','🔹'];
+  function today(){ const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  function sortProds(a){ return a.slice().sort((x, y) => (x.categoria || 'zzz').localeCompare(y.categoria || 'zzz', 'es') || x.nombre.localeCompare(y.nombre, 'es')); }
+
+  const LS_DISC = 'barquero-armador-descuento';
+  const SS_UI = 'barquero-armador-ui';
+  const SS_TOAST = 'barquero-armador-toast';
+  function loadDisc(){
+    try { const o = JSON.parse(localStorage.getItem(LS_DISC)); if (o && validPct(o.v)) return o; } catch (_){}
+    return { v: null, date: null, manual: false };
+  }
+  function saveDisc(){ try { localStorage.setItem(LS_DISC, JSON.stringify(S.disc)); } catch (_){} }
+
+  const S = {
+    products: sortProds(DATA.productos || []), ajustes: DATA.ajustes || {}, imp: DATA.importacion || null,
+    owner: false, art: null, view: 'armar', mode: 'list', q: '', cat: '', cq: '',
+    sel: new Map(), disc: loadDisc(), lastGen: '', moneda: 'bcv', tasas: null, edit: null, pending: null, busy: false, loading: HOST === 'github'
+  };
+  function applyData(d){ DATA = d; S.products = sortProds(d.productos || []); S.ajustes = d.ajustes || {}; S.imp = d.importacion || null; pruneSel(); }
+  function pruneSel(){
+    for (const [id, set] of [...S.sel]){
+      const p = S.products.find(x => x.id === id);
+      if (!p){ S.sel.delete(id); continue; }
+      for (const i of [...set]) if (i >= p.presentaciones.length) set.delete(i);
+      if (!set.size) p.presentaciones.forEach((_, i) => set.add(i));
+    }
+  }
+
+  /* ---------- Estado de la pestaña (sobrevive a la recarga tras publicar) ---------- */
+  function stashUI(){
+    try { sessionStorage.setItem(SS_UI, JSON.stringify({ sel: [...S.sel].map(([k, s]) => [k, [...s]]), view: S.view, cat: S.cat, q: S.q })); } catch (_){}
+  }
+  function restoreUI(){
+    try {
+      const o = JSON.parse(sessionStorage.getItem(SS_UI));
+      if (!o) return;
+      for (const [id, idxs] of o.sel || []){
+        const p = S.products.find(x => x.id === id);
+        if (!p) continue;
+        const set = new Set(idxs.filter(i => i < p.presentaciones.length));
+        if (!set.size) p.presentaciones.forEach((_, i) => set.add(i));
+        S.sel.set(id, set);
+      }
+      if (o.view === 'catalogo') S.view = 'catalogo';
+      S.cat = o.cat || ''; S.q = o.q || '';
+    } catch (_){}
+  }
+
+  /* ---------- Precios y mensaje ---------- */
+  const hasTasas = () => !!(S.tasas && validPct(S.tasas.descuento) && S.tasas.actualizado);
+  const sameDay = (iso) => { const d = new Date(iso); return !isNaN(d) && d.toDateString() === new Date().toDateString(); };
+  const autoToday = () => hasTasas() && sameDay(S.tasas.actualizado);
+  const overrideToday = () => !!(S.disc.manual && S.disc.date === today() && validPct(S.disc.v));
+  // Una vez fijado el descuento del día, solo gerencia (con acceso de administradora) lo puede cambiar.
+  // Sin descuento automático hoy (falló la consulta), cualquiera puede escribirlo a mano en su equipo.
+  const fijadoHoy = () => autoToday() && !S.owner;
+  const discBcv = () => overrideToday() && !fijadoHoy() ? S.disc.v : autoToday() ? S.tasas.descuento : overrideToday() ? S.disc.v : null;
+  const confirmedBcv = () => discBcv() != null;
+  const discUsd = () => validPct(S.ajustes.descuentoDivisas) ? S.ajustes.descuentoDivisas : DEF.descuentoDivisas;
+  const disc = () => S.moneda === 'usd' ? discUsd() : discBcv();
+  const confirmed = () => S.moneda === 'usd' ? true : confirmedBcv();
+  const priceToday = (v, d) => d == null ? v.precio : v.precio * (1 - d / 100);
+  function lineFor(p, v, d){
+    return (p.emoji || '🔹') + ' ' + money(priceToday(v, d)) + (v.kilo ? ' el kilo' : '') + (v.texto ? ' ' + v.texto.trim() : '');
+  }
+  function selEntries(){
+    const out = [];
+    for (const [id, set] of S.sel){
+      const p = S.products.find(x => x.id === id);
+      if (!p) continue;
+      const idxs = [...set].filter(i => i < p.presentaciones.length).sort((a, b) => a - b);
+      if (idxs.length) out.push({ p, idxs });
+    }
+    return out;
+  }
+  function build(){
+    const d = disc();
+    const e = selEntries();
+    if (!e.length || d == null) return '';
+    const st = S.ajustes;
+    const parts = e.map(({ p, idxs }) => [p.nombre.trim(), idxs.map(i => lineFor(p, p.presentaciones[i], d)).join('\n')].filter(Boolean).join('\n'));
+    let q = '';
+    if (e.length > 1) q = st.preguntaVarios != null ? st.preguntaVarios : DEF.preguntaVarios;
+    else {
+      const { p, idxs } = e[0];
+      if (p.pregunta && !(idxs.length === 1 && p.presentaciones.length > 1)) q = p.pregunta;
+    }
+    if (q && q.trim()) parts.push(q.trim());
+    const pie = String(S.moneda === 'usd' ? (st.pieDivisas != null ? st.pieDivisas : DEF.pieDivisas) : (st.pie != null ? st.pie : DEF.pie)).split('{descuento}').join(num(d));
+    if (pie.trim()) parts.push(pie.trim());
+    return parts.join('\n\n');
+  }
+
+  /* ---------- Utilidades ---------- */
+  let toastT;
+  function toast(msg){
+    const t = $('#toast');
+    t.textContent = msg;
+    t.classList.add('on');
+    clearTimeout(toastT);
+    toastT = setTimeout(() => t.classList.remove('on'), 2600);
+  }
+  function autosize(ta){ ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; }
+  function shortDate(iso){
+    const d = new Date(iso);
+    if (isNaN(d)) return '';
+    const now = new Date();
+    if (d.toDateString() === now.toDateString()) return 'hoy';
+    const y = new Date(now); y.setDate(now.getDate() - 1);
+    if (d.toDateString() === y.toDateString()) return 'ayer';
+    return 'el ' + d.toLocaleDateString('es-VE', { day: 'numeric', month: 'short' });
+  }
+  function categories(){ return [...new Set(S.products.map(p => p.categoria || 'Sin categoría'))].sort((a, b) => a.localeCompare(b, 'es')); }
+  function matches(p, q){
+    if (!q) return true;
+    const hay = norm(p.nombre + ' ' + p.categoria + ' ' + p.presentaciones.map(v => v.texto).join(' '));
+    return norm(q).split(/\s+/).filter(Boolean).every(w => hay.includes(w));
+  }
+
+  /* ---------- Publicar (solo la dueña) ---------- */
+  /* ---------- Guardar en GitHub (versión alojada en GitHub Pages) ---------- */
+  // Dentro de CIL ya no se usa la clave de GitHub: gerencia edita con su sesión de CIL. Si quedó una guardada en
+  // este teléfono, se borra (con ella, cualquiera con el teléfono podía cambiar precios).
+  const LS_TOK = 'barquero-armador-gh-token';
+  try { localStorage.removeItem(LS_TOK); } catch (_){}
+  function ghToken(){ return ''; }
+  // Las tasas del día y el catálogo de respaldo siguen publicándose en el sitio del Armador (los actualiza su workflow)
+  const DATOS = '/mensajesBF/';
+  function ghRepo(){
+    if (window.ARMADOR_REPO) return window.ARMADOR_REPO;
+    const owner = location.hostname.split('.')[0];
+    const seg = location.pathname.split('/').filter(Boolean)[0];
+    return { owner, repo: seg && !seg.includes('.') ? seg : owner + '.github.io' };
+  }
+  function ghHeaders(tok){ return { Authorization: 'Bearer ' + tok, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' }; }
+  function b64(str){
+    const bytes = new TextEncoder().encode(str);
+    let out = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) out += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(out);
+  }
+  async function ghSave(next, okMsg){
+    const tok = ghToken();
+    if (!tok){ toast('Para editar, entra con tu sesión de gerencia en el menú de CIL.'); return false; }
+    const { owner, repo } = ghRepo();
+    const api = `https://api.github.com/repos/${owner}/${repo}/contents/data.json`;
+    S.busy = true; renderBusy();
+    try {
+      let sha;
+      const g = await fetch(api + '?t=' + Date.now(), { headers: ghHeaders(tok), cache: 'no-store' });
+      if (g.status === 401 || g.status === 403) throw { msg: 'La clave de acceso no es válida o venció. Vuelve a activarla en Catálogo.' };
+      if (g.ok) sha = (await g.json()).sha;
+      else if (g.status !== 404) throw { msg: 'GitHub respondió con un error (' + g.status + '). Intenta de nuevo.' };
+      const body = { message: okMsg + ' (armador)', content: b64(JSON.stringify(next, null, 1)) };
+      if (sha) body.sha = sha;
+      const p = await fetch(api, { method: 'PUT', headers: Object.assign({ 'Content-Type': 'application/json' }, ghHeaders(tok)), body: JSON.stringify(body) });
+      if (!p.ok){
+        if (p.status === 409) throw { msg: 'Hubo otro cambio al mismo tiempo. Recarga la página e intenta de nuevo.' };
+        if (p.status === 401 || p.status === 403 || p.status === 404) throw { msg: 'La clave no tiene permiso de escritura en el repositorio ' + repo + '.' };
+        throw { msg: 'GitHub no aceptó el cambio (' + p.status + ').' };
+      }
+      applyData(next);
+      S.pending = null; S.edit = null;
+      renderReport(); renderAll();
+      toast(okMsg + '. Tu equipo lo verá en 1 o 2 minutos.');
+      return true;
+    } catch (e){
+      toast(e && e.msg ? e.msg : 'No se pudo conectar con GitHub. Revisa la conexión.');
+      return false;
+    } finally { S.busy = false; renderBusy(); }
+  }
+
+  /* ---------- Gerencia con su sesión de CIL: guarda en la base de datos, sin clave de GitHub ---------- */
+  const CFG = window.BARQUERO_CONFIG || {};
+  const SB = CFG.supabaseUrl || '', SBK = CFG.supabaseKey || '';
+  const CLAVES_SES = ['barquero_sesion', 'bfcontenido_sesion'];  // la misma sesión del menú de CIL y de Contenido
+  // Seguridad: si quedaron sesiones de personas DISTINTAS en este teléfono, no se usa ninguna
+  function sesionCil(){
+    let m = null; const us = new Set();
+    for (const k of CLAVES_SES){
+      let x = null; try { x = JSON.parse(localStorage.getItem(k) || 'null'); } catch (_){}
+      if (x && x.refresh_token && x.user){ us.add(x.user.id); if (!m || (x.expires_at || 0) > (m.expires_at || 0)) m = x; }
+    }
+    if (us.size > 1){ for (const k of CLAVES_SES) try { localStorage.removeItem(k); } catch (_){} return null; }
+    return m;
+  }
+  async function tokenCil(){
+    const s = sesionCil(); if (!s || !SB) return null;
+    if ((s.expires_at || 0) - 60 > Date.now() / 1000) return s.access_token;
+    const r = await fetch(SB + '/auth/v1/token?grant_type=refresh_token', { method: 'POST', headers: { apikey: SBK, 'Content-Type': 'application/json' }, body: JSON.stringify({ refresh_token: s.refresh_token }) });
+    if (!r.ok) return null;
+    const d = await r.json();
+    const ses = { access_token: d.access_token, refresh_token: d.refresh_token, expires_at: d.expires_at || Math.floor(Date.now() / 1000) + (d.expires_in || 3600), user: { id: d.user.id, email: d.user.email } };
+    // si mientras tanto entró otra persona en este teléfono, no se escribe encima de su sesión
+    const ahora = sesionCil(); if (ahora && ahora.user.id !== ses.user.id) return null;
+    for (const k of CLAVES_SES) try { localStorage.setItem(k, JSON.stringify(ses)); } catch (_){}
+    return ses.access_token;
+  }
+  async function rpcCil(fn, args){
+    const t = await tokenCil();
+    if (!t) throw { msg: 'Tu sesión de CIL venció. Entra al menú de CIL y vuelve.' };
+    const r = await fetch(SB + '/rest/v1/rpc/' + fn, { method: 'POST', headers: { apikey: SBK, Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' }, body: JSON.stringify(args || {}) });
+    const txt = await r.text(); let j = null; try { j = txt ? JSON.parse(txt) : null; } catch (_){}
+    if (!r.ok) throw { msg: (j && j.message) || 'No se pudo guardar (' + r.status + '). Intenta de nuevo.' };
+    return j;
+  }
+  // Catálogo y descuento fijado a mano, desde la base de datos (lectura pública)
+  async function leerDb(){
+    if (!SB) return null;
+    try {
+      const r = await fetch(SB + '/rest/v1/armador_datos?id=eq.1&select=datos,actualizado_en,descuento_manual,descuento_fecha,descuento_en', { headers: { apikey: SBK }, cache: 'no-store' });
+      if (!r.ok) return null;
+      return (await r.json())[0] || null;
+    } catch (_){ return null; }
+  }
+  // Descuento fijado a mano por gerencia hoy: gana sobre el automático todo el día
+  function aplicarManual(db){
+    if (db && db.descuento_fecha === hoyCaracas() && validPct(Number(db.descuento_manual)))
+      S.tasas = Object.assign({}, S.tasas || {}, { descuento: Number(db.descuento_manual), actualizado: db.descuento_en, revisado: db.descuento_en, manual: true });
+  }
+  async function dbSave(next, okMsg){
+    S.busy = true; renderBusy();
+    try {
+      S.dbVer = await rpcCil('guardar_armador', { p_datos: next, p_antes: S.dbVer || null });
+      applyData(next);
+      S.pending = null; S.edit = null;
+      renderReport(); renderAll();
+      toast(okMsg + '. Tu equipo lo verá al abrir el armador.');
+      return true;
+    } catch (e){
+      toast(e && e.msg ? e.msg : 'No se pudo conectar. Revisa la conexión.');
+      return false;
+    } finally { S.busy = false; renderBusy(); }
+  }
+
+  async function publishData(next, okMsg){
+    if (HOST === 'github') return S.cil ? dbSave(next, okMsg) : ghSave(next, okMsg);
+    if (!S.art || !S.owner){ toast('Solo la dueña del armador puede guardar cambios.'); return false; }
+    S.busy = true; renderBusy(); stashUI();
+    try { sessionStorage.setItem(SS_TOAST, okMsg); } catch (_){}
+    try {
+      await S.art.publish(pageHTML(next));
+      return true;
+    } catch (e){
+      try { sessionStorage.removeItem(SS_TOAST); } catch (_){}
+      S.busy = false; renderBusy();
+      const c = e && e.code;
+      if (c === 'conflict') toast('Había una versión más nueva; la página se está recargando con ella.');
+      else if (c === 'not_writer' || c === 'not_granted'){ S.owner = false; renderOwner(); toast('Desde esta vista no se pueden guardar cambios.'); }
+      else if (c === 'rate_limited') toast('Muchos guardados seguidos. Espera un minuto e intenta de nuevo.');
+      else if (c === 'too_large') toast('El catálogo es demasiado grande para guardarlo.');
+      else toast('No se pudo guardar. Revisa la conexión e intenta de nuevo.');
+      return false;
+    }
+  }
+  function nextData(patch){ return Object.assign({}, DATA, { productos: S.products, ajustes: S.ajustes, importacion: S.imp }, patch); }
+
+  /* ---------- Marcado ---------- */
+  $('#root').innerHTML = `
+<div class="wrap">
+  <header class="head">
+    <div>
+      <span class="fila-cil"><a class="volver-cil" href="../">‹ Menú de CIL</a>${window.BarqueroTema ? window.BarqueroTema.boton() : ''}</span>
+      <p class="eyebrow">Barquero Food</p>
+      <h1>Armador de mensajes</h1>
+    </div>
+    <div class="head-ctl">
+    <div class="disc" id="disc-box" role="group" aria-labelledby="disc-label">
+      <label id="disc-label" class="disc-label" for="disc">Descuento BCV de hoy</label>
+      <p id="disc-meta" class="disc-meta"></p>
+      <p id="disc-rates" class="disc-rates"></p>
+      <div class="disc-ctl">
+        <button type="button" class="step" id="disc-minus" aria-label="Bajar el descuento un punto">−</button>
+        <input id="disc" type="text" inputmode="decimal" autocomplete="off" aria-describedby="disc-meta" placeholder="—">
+        <span class="pct" aria-hidden="true">%</span>
+        <button type="button" class="step" id="disc-plus" aria-label="Subir el descuento un punto">+</button>
+      </div>
+      <div class="disc-actions owner-only"><button type="button" class="mini" id="force">Actualizar tasas ahora</button></div>
+    </div>
+    <label class="sw" for="usd-sw">
+      <input id="usd-sw" type="checkbox" role="switch">
+      <span class="track" aria-hidden="true"></span>
+      <span class="sw-text"><b>Precios en divisas</b><small id="usd-note"></small></span>
+    </label>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="Secciones">
+    <button type="button" role="tab" id="tab-armar" aria-selected="true" aria-controls="view-armar" data-view="armar">Armar mensaje</button>
+    <button type="button" role="tab" id="tab-catalogo" aria-selected="false" aria-controls="view-catalogo" data-view="catalogo">Catálogo</button>
+  </nav>
+
+  <main>
+    <section id="view-armar" class="armar" data-mode="list" role="tabpanel" aria-labelledby="tab-armar">
+      <div class="picker">
+        <input id="q" class="field" type="search" placeholder="Buscar producto…" autocomplete="off" aria-label="Buscar producto">
+        <div id="chips" class="chips" aria-label="Categorías"></div>
+        <div id="plist" class="plist"></div>
+      </div>
+      <aside class="composer" aria-labelledby="comp-title">
+        <button type="button" class="back mobile" id="back">← Seguir eligiendo</button>
+        <div class="comp-head">
+          <h2 id="comp-title">Mensaje</h2>
+          <span id="usd-badge" class="pill up">Divisas</span>
+          <span id="comp-count" class="count"></span>
+        </div>
+        <div id="selected" class="selected"></div>
+        <div id="disc-warn" class="warn" hidden></div>
+        <label for="msg" class="lbl">Vista previa · puedes editarla antes de copiar</label>
+        <textarea id="msg" class="bubble" rows="6" placeholder="Toca los productos de la lista y aquí aparece el mensaje listo, con el descuento aplicado."></textarea>
+        <div class="actions">
+          <button type="button" class="btn primary" id="copy" disabled>Copiar mensaje</button>
+          <button type="button" class="btn ghost" id="clear" disabled>Limpiar</button>
+        </div>
+      </aside>
+    </section>
+
+    <section id="view-catalogo" role="tabpanel" aria-labelledby="tab-catalogo" hidden>
+      <div id="cat-list-wrap">
+        <div class="cat-top">
+          <div>
+            <h2>Catálogo</h2>
+            <p class="sub" id="cat-sub"></p>
+          </div>
+          <div class="tools owner-only">
+            <label class="btn ghost filebtn" for="csv">Actualizar precios con CSV<input id="csv" type="file" accept=".csv,text/csv"></label>
+            <button type="button" class="btn primary" id="add">Agregar producto</button>
+          </div>
+        </div>
+        <p id="csv-err" class="err" role="alert" hidden></p>
+        <div id="report" class="report" hidden></div>
+        <input id="cq" class="field" type="search" placeholder="Buscar en el catálogo…" autocomplete="off" aria-label="Buscar en el catálogo">
+        <div id="clist" class="clist"></div>
+
+        <details class="ajustes" id="gh-admin" hidden>
+          <summary>Acceso de administradora</summary>
+          <div class="aj-body">
+            <p class="hint" id="gh-status"></p>
+            <label class="flabel" for="gh-tok">Clave de acceso de GitHub</label>
+            <input id="gh-tok" class="field" type="password" autocomplete="off" placeholder="github_pat_…">
+            <p class="hint">Se guarda solo en este equipo. Con ella aparecen los botones para actualizar precios y editar productos.</p>
+            <div class="actions" style="margin-top:12px">
+              <button type="button" class="btn primary" id="gh-save">Activar en este equipo</button>
+              <button type="button" class="btn ghost" id="gh-out">Desactivar</button>
+            </div>
+          </div>
+        </details>
+
+        <details class="ajustes owner-only" id="ajustes">
+          <summary>Ajustes del mensaje</summary>
+          <div class="aj-body">
+            <label class="flabel" for="pie">Cierre de todos los mensajes</label>
+            <textarea id="pie" class="field" rows="3"></textarea>
+            <p class="hint">Escribe {descuento} donde va el porcentaje del día.</p>
+            <label class="flabel" for="pv">Pregunta cuando el mensaje lleva varios productos</label>
+            <input id="pv" class="field" type="text">
+            <label class="flabel" for="dbase">Descuento sugerido en equipos nuevos (%)</label>
+            <input id="dbase" class="field" type="text" inputmode="decimal" style="max-width:8em">
+            <label class="flabel" for="pie-usd">Cierre de los mensajes en divisas</label>
+            <textarea id="pie-usd" class="field" rows="2"></textarea>
+            <label class="flabel" for="dusd">Descuento para pagos en divisas (%)</label>
+            <input id="dusd" class="field" type="text" inputmode="decimal" style="max-width:8em">
+            <button type="button" class="btn primary" id="save-ajustes">Guardar ajustes</button>
+          </div>
+        </details>
+      </div>
+
+      <div id="editor" class="editor" hidden>
+        <button type="button" class="back" id="ed-back">← Volver al catálogo</button>
+        <h2 id="ed-title">Nuevo producto</h2>
+        <div class="ed-grid">
+          <div class="ed-form">
+            <label class="flabel" for="f-nombre">Título en el mensaje</label>
+            <input id="f-nombre" class="field" type="text" placeholder="Queso gouda Holandés Victoria Gallo Negro">
+            <div class="row2">
+              <div>
+                <label class="flabel" for="f-cat">Categoría</label>
+                <input id="f-cat" class="field" type="text" list="cats" placeholder="Quesos">
+                <datalist id="cats"></datalist>
+              </div>
+              <div>
+                <label class="flabel" for="f-emoji">Emoji delante del precio</label>
+                <input id="f-emoji" class="field" type="text" maxlength="8" placeholder="🔹">
+                <div class="emojis" id="emojis"></div>
+              </div>
+            </div>
+            <fieldset>
+              <legend>Presentaciones</legend>
+              <p class="hint" style="margin:0">Precio de la web, sin descuento. Marca «por kilo» para que salga «$x el kilo».</p>
+              <div id="vrows" style="display:grid;gap:12px"></div>
+              <div><button type="button" class="btn ghost small" id="add-v">Agregar presentación</button></div>
+            </fieldset>
+            <label class="flabel" for="f-preg">Pregunta de cierre (opcional)</label>
+            <input id="f-preg" class="field" type="text" placeholder="¿Prefiere la barra completa o la media barra?">
+            <p class="hint">Se usa cuando el mensaje lleva solo este producto.</p>
+            <p id="ed-err" class="err" role="alert" hidden></p>
+            <div class="actions">
+              <button type="button" class="btn primary" id="ed-save">Guardar producto</button>
+              <button type="button" class="btn ghost" id="ed-cancel">Cancelar</button>
+              <span class="spacer"></span>
+              <button type="button" class="btn danger-ghost" id="ed-del">Eliminar</button>
+            </div>
+            <div id="del-confirm" class="confirm" hidden>
+              <span>¿Eliminar este producto del armador? No se borra de la web.</span>
+              <button type="button" class="btn danger small" id="del-yes">Sí, eliminar</button>
+              <button type="button" class="btn ghost small" id="del-no">No</button>
+            </div>
+          </div>
+          <div class="ed-prev">
+            <p class="lbl">Así sale en el mensaje</p>
+            <p id="ed-preview" class="bubble static"></p>
+            <p id="ed-prev-note" class="hint"></p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+<div id="msgbar" class="msgbar"><span id="bar-count"></span><button type="button" class="btn primary" id="bar-open">Ver mensaje</button></div>
+<div id="busy" class="busy" hidden><p>Guardando y actualizando…</p></div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>`;
+
+  /* ---------- Render ---------- */
+  function renderAll(){ renderTabs(); renderDisc(); renderPicker(); renderComposer(); renderBar(); renderCatalog(); renderOwner(); }
+
+  function renderTabs(){
+    for (const b of document.querySelectorAll('.tabs button')) b.setAttribute('aria-selected', String(b.dataset.view === S.view));
+    $('#view-armar').hidden = S.view !== 'armar';
+    $('#view-catalogo').hidden = S.view !== 'catalogo';
+    $('#view-armar').dataset.mode = S.mode;
+  }
+  function renderOwner(){ document.body.classList.toggle('owner', S.owner); }
+  function renderBusy(){ $('#busy').hidden = !S.busy; }
+
+  function fmtWhen(iso){
+    const d = new Date(iso);
+    if (isNaN(d)) return '';
+    const hora = d.toLocaleTimeString('es-VE', { hour: 'numeric', minute: '2-digit' });
+    const now = new Date(), y = new Date(now); y.setDate(now.getDate() - 1);
+    const dia = d.toDateString() === now.toDateString() ? 'hoy' : d.toDateString() === y.toDateString() ? 'ayer' : d.toLocaleDateString('es-VE', { weekday: 'short', day: 'numeric', month: 'short' });
+    return dia + ' ' + hora;
+  }
+  const fmtRate = n => Number(n).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  function setHTML(el, h){ if (el._h !== h){ el._h = h; el.innerHTML = h; } }
+  function renderDisc(){
+    document.body.classList.toggle('usd', S.moneda === 'usd');
+    $('#usd-sw').checked = S.moneda === 'usd';
+    $('#usd-note').textContent = num(discUsd()) + '% de descuento · cambia el cierre del mensaje';
+    const di = $('#disc');
+    const bloq = fijadoHoy(); di.readOnly = bloq; $('#disc-minus').disabled = bloq; $('#disc-plus').disabled = bloq;
+    if (document.activeElement !== di) di.value = discBcv() != null ? num(discBcv()) : '';
+    const ok = confirmedBcv();
+    $('#disc-box').classList.toggle('pending', !ok);
+    $('#disc-label').textContent = 'Descuento BCV de hoy';
+    const meta = $('#disc-meta'), rates = $('#disc-rates');
+    const ultima = hasTasas() ? 'Última actualización: ' + fmtWhen(S.tasas.actualizado) + (S.tasas.manual ? ' (a mano)' : '') : 'Sin actualizaciones automáticas todavía';
+    const T = S.tasas || {};
+    const bAt = T.binanceActualizado || (T.binance ? T.actualizado : null);
+    const cAt = T.bcvActualizado || (T.bcv ? T.actualizado : null);
+    const linea = [
+      T.bcv ? `BCV ${fmtRate(T.bcv)}${cAt ? ' · ' + fmtWhen(cAt) : ''}` : '',
+      bAt ? `Binance · ${fmtWhen(bAt)}` : ''
+    ].filter(Boolean).join('\n');
+    rates.textContent = S.owner && T.binance && T.bcv
+      ? `Binance ${fmtRate(T.binance)} ÷ BCV ${fmtRate(T.bcv)} ÷ 2, menos 2 puntos\n` + linea
+      : linea;
+    if (overrideToday() && !fijadoHoy()){
+      setHTML(meta, `<span>Cambiado a mano en este equipo${autoToday() ? ' · automático: ' + num(S.tasas.descuento) + '%' : ''}</span>` + (autoToday() ? ' <button type="button" class="mini" data-auto>Volver al automático</button>' : '') + `<span class="sub-line">${esc(ultima)}</span>`);
+    } else if (autoToday()){
+      setHTML(meta, '<span>Fijado para todo el día' + (S.owner ? '' : ' · solo gerencia lo cambia') + '</span><span class="sub-line">' + esc(ultima) + '</span>');
+    } else {
+      setHTML(meta, `<span class="alert-line">⚠️ No se actualizó hoy. Escribe el descuento a mano.</span><span class="sub-line">${esc(ultima)}</span>`);
+    }
+    if (S.forcing) $('#force').textContent = 'Actualizando…';
+    $('#force').disabled = !!S.forcing;
+  }
+
+  function renderPicker(){
+    const list = $('#plist'), chips = $('#chips');
+    if (!S.products.length){
+      chips.innerHTML = '';
+      list.innerHTML = S.loading ? '<p class="empty">Cargando catálogo…</p>' : '<p class="empty">No se pudo cargar el catálogo. Revisa la conexión y recarga la página.</p>';
+      return;
+    }
+    const cats = categories();
+    if (S.cat && !cats.includes(S.cat)) S.cat = '';
+    chips.innerHTML = ['', ...cats].map(c => `<button type="button" class="chip" data-cat="${esc(c)}" aria-pressed="${S.cat === c}">${c ? esc(c) : 'Todos'}</button>`).join('');
+    const d = disc();
+    const items = S.products.filter(p => (!S.cat || (p.categoria || 'Sin categoría') === S.cat) && matches(p, S.q));
+    if (!items.length){ list.innerHTML = `<p class="empty">Ningún producto coincide con «${esc(S.q)}».</p>`; return; }
+    list.innerHTML = items.map(p => {
+      const on = S.sel.has(p.id);
+      const lines = p.presentaciones.map(v => `<span><span class="price">${money(priceToday(v, d))}${v.kilo ? ' el kilo' : ''}</span> ${esc(v.texto)}</span>`).join('');
+      return `<button type="button" class="prod" data-id="${esc(p.id)}" aria-pressed="${on}">
+        <span class="tick" aria-hidden="true"></span>
+        <span class="prod-main">
+          <span class="prod-top"><span class="prod-name">${esc(p.nombre)}</span><span class="prod-cat">${esc(p.categoria)}</span></span>
+          <span class="prod-lines">${lines}${d == null ? '<span>Precio de la web, sin descuento</span>' : ''}</span>
+        </span>
+      </button>`;
+    }).join('');
+  }
+
+  function renderComposer(){
+    const d = disc();
+    const e = selEntries();
+    $('#comp-count').textContent = e.length ? (e.length === 1 ? '1 producto' : e.length + ' productos') : '';
+    $('#selected').innerHTML = e.length ? e.map(({ p }) => {
+      const set = S.sel.get(p.id);
+      const chips = p.presentaciones.length > 1
+        ? `<div class="vchips">${p.presentaciones.map((v, i) => `<button type="button" class="vchip" data-act="v" data-i="${i}" aria-pressed="${set.has(i)}">${money(priceToday(v, d))}${v.kilo ? ' el kilo' : ''} ${esc(v.texto)}</button>`).join('')}</div>`
+        : '';
+      return `<div class="sitem" data-id="${esc(p.id)}"><div class="sitem-top"><span class="sname">${esc(p.nombre)}</span><button type="button" class="x" data-act="rm" aria-label="Quitar ${esc(p.nombre)}">×</button></div>${chips}</div>`;
+    }).join('') : '<p class="empty small">Aún no has elegido productos.</p>';
+    const warn = $('#disc-warn');
+    if (e.length && d == null && S.tasasListas !== false){ warn.innerHTML = '<span>Las tasas no se actualizaron hoy. Escribe arriba el descuento de hoy para calcular los precios.</span>'; warn.hidden = false; }
+    else warn.hidden = true;
+    const ta = $('#msg');
+    const msg = build();
+    if (msg !== S.lastGen){ ta.value = msg; S.lastGen = msg; }
+    autosize(ta);
+    renderCopy();
+    $('#clear').disabled = !S.sel.size;
+  }
+  function renderCopy(){
+    const has = !!$('#msg').value.trim();
+    const b = $('#copy');
+    b.disabled = !has || !confirmed();
+    b.textContent = has && !confirmed() ? 'Confirma el descuento primero' : 'Copiar mensaje';
+  }
+
+  function renderBar(){
+    const n = selEntries().length;
+    const show = n > 0 && S.view === 'armar' && S.mode === 'list';
+    $('#msgbar').classList.toggle('show', show);
+    document.body.classList.toggle('has-bar', show);
+    $('#bar-count').textContent = n === 1 ? '1 producto elegido' : n + ' productos elegidos';
+  }
+
+  function renderCatalog(){
+    $('#editor').hidden = !S.edit;
+    $('#cat-list-wrap').hidden = !!S.edit;
+    if (S.edit) return;
+    $('#cat-sub').textContent = `${S.products.length} productos. Precios base de barquerofood.com, sin descuento` + (S.imp && S.imp.fecha ? `, cargados ${shortDate(S.imp.fecha)}.` : '.');
+    const list = $('#clist');
+    if (!S.products.length) list.innerHTML = '<p class="empty">Todavía no hay productos.</p>';
+    else {
+      const d = disc();
+      const items = S.products.filter(p => matches(p, S.cq));
+      let html = '', last = null;
+      for (const p of items){
+        const c = p.categoria || 'Sin categoría';
+        if (c !== last){ html += `<h3 class="cgroup">${esc(c)}</h3>`; last = c; }
+        const vars = p.presentaciones.map(v => `<li><span class="web">${money(v.precio)}${v.kilo ? '/kg' : ''} web</span>${d != null ? ` → <span class="hoy">${money(priceToday(v, d))}${v.kilo ? ' el kilo' : ''}</span>` : ''} ${esc(v.texto)}</li>`).join('');
+        html += `<article class="crow"><div class="crow-main"><p class="cname">${esc(p.emoji)} ${esc(p.nombre)}</p><p class="cmeta">${p.actualizado ? 'Precio actualizado ' + esc(shortDate(p.actualizado)) : 'Sin fecha de actualización'}</p><ul class="cvars">${vars}</ul></div><button type="button" class="btn ghost small owner-only" data-edit="${esc(p.id)}">Editar</button></article>`;
+      }
+      list.innerHTML = items.length ? html : `<p class="empty">Ningún producto coincide con «${esc(S.cq)}».</p>`;
+    }
+    const st = S.ajustes;
+    if (document.activeElement !== $('#pie')) $('#pie').value = st.pie != null ? st.pie : DEF.pie;
+    if (document.activeElement !== $('#pv')) $('#pv').value = st.preguntaVarios != null ? st.preguntaVarios : DEF.preguntaVarios;
+    if (document.activeElement !== $('#pie-usd')) $('#pie-usd').value = st.pieDivisas != null ? st.pieDivisas : DEF.pieDivisas;
+    if (document.activeElement !== $('#dusd')) $('#dusd').value = num(discUsd());
+    if (document.activeElement !== $('#dbase')) $('#dbase').value = validPct(st.descuentoBase) ? num(st.descuentoBase) : '';
+  }
+
+  /* ---------- Importar CSV ---------- */
+  function renderReport(){
+    const box = $('#report');
+    if (!S.pending){ box.hidden = true; box.innerHTML = ''; return; }
+    const inf = S.pending.res.informe;
+    const li = a => a.map(x => `<li>${x}</li>`).join('');
+    const sec = (title, items, open) => items.length ? `<details ${open ? 'open' : ''}><summary>${title} (${items.length})</summary><ul class="scroll">${li(items)}</ul></details>` : '';
+    const nothing = !inf.cambios.length && !inf.nuevos.length && !inf.eliminadas.length;
+    box.innerHTML = `
+      <h3>Revisa antes de publicar</h3>
+      <p class="hint" style="margin:0">${esc(S.pending.archivo)} · ${inf.filas} filas leídas</p>
+      <div class="tally">
+        <span class="pill up">${inf.cambios.length === 1 ? '1 precio cambia' : inf.cambios.length + ' precios cambian'}</span>
+        <span class="pill">${inf.nuevos.length === 1 ? '1 producto nuevo' : inf.nuevos.length + ' productos nuevos'}</span>
+        <span class="pill">${inf.eliminadas.length === 1 ? '1 ya no está en la web' : inf.eliminadas.length + ' ya no están en la web'}</span>
+        ${inf.raros.length ? `<span class="pill alert">${inf.raros.length === 1 ? '1 con precio sospechoso' : inf.raros.length + ' con precio sospechoso'}</span>` : ''}
+      </div>
+      ${sec('Precios que cambian', inf.cambios.map(c => `${esc(c.nombre)}${c.texto ? ' · ' + esc(c.texto) : ''}: ${money(c.antes)} → <strong>${money(c.despues)}</strong>${c.kilo ? ' el kilo' : ''}`), true)}
+      ${sec('Productos nuevos', inf.nuevos.map(esc))}
+      ${sec('Se quitan del armador', inf.eliminadas.map(x => esc(x.nombre) + (x.texto ? ' · ' + esc(x.texto) : '')))}
+      ${sec('No se cargaron por precio sospechoso (revísalos en la web)', inf.raros.map(x => esc(x.producto) + (x.texto ? ' · ' + esc(x.texto) : '') + ': $' + esc(x.precio)), true)}
+      ${inf.piezas ? `<p class="hint" style="margin:0">${inf.piezas} productos descontinuados (con «V» delante del nombre) no se cargan.</p>` : ''}
+      <div class="actions">
+        <button type="button" class="btn primary" id="imp-ok" ${nothing ? 'disabled' : ''}>${nothing ? 'No hay cambios' : 'Publicar cambios'}</button>
+        <button type="button" class="btn ghost" id="imp-cancel">Cancelar</button>
+      </div>`;
+    box.hidden = false;
+  }
+
+  /* ---------- Editor de producto ---------- */
+  function openEditor(id){
+    const p = id ? S.products.find(x => x.id === id) : null;
+    const draft = p
+      ? { presentaciones: p.presentaciones.map(v => ({ texto: v.texto, precio: num(v.precio), kilo: !!v.kilo, ref: v.ref || null })) }
+      : { presentaciones: [{ texto: '', precio: '', kilo: false, ref: null }] };
+    S.edit = { id: p ? p.id : null, draft };
+    $('#ed-title').textContent = p ? 'Editar producto' : 'Nuevo producto';
+    $('#f-nombre').value = p ? p.nombre : '';
+    $('#f-cat').value = p ? p.categoria : (S.cat || '');
+    $('#f-emoji').value = p ? p.emoji : '🔹';
+    $('#f-preg').value = p ? p.pregunta : '';
+    $('#ed-del').hidden = !p;
+    $('#del-confirm').hidden = true;
+    $('#ed-err').hidden = true;
+    $('#cats').innerHTML = categories().filter(c => c !== 'Sin categoría').map(c => `<option value="${esc(c)}"></option>`).join('');
+    renderVrows(); renderEdPreview(); renderCatalog();
+    window.scrollTo(0, 0);
+    $('#f-nombre').focus();
+  }
+  function closeEditor(){ S.edit = null; renderCatalog(); }
+  function renderVrows(){
+    const rows = S.edit.draft.presentaciones;
+    $('#vrows').innerHTML = rows.map((v, i) => `<div class="vrow" data-i="${i}">
+      <input id="v-texto-${i}" class="field v-texto" data-k="texto" type="text" value="${esc(v.texto)}" placeholder="${i === 0 ? 'de la barra completa (aprox. 3kg)' : 'de la media barra (aprox. 1.5kg)'}" aria-label="Descripción de la presentación ${i + 1}">
+      <span class="v-price"><span aria-hidden="true">$</span><input id="v-precio-${i}" data-k="precio" type="text" inputmode="decimal" value="${esc(v.precio)}" placeholder="0" aria-label="Precio en la web, presentación ${i + 1}"></span>
+      <label class="v-kilo" for="v-kilo-${i}"><input id="v-kilo-${i}" data-k="kilo" type="checkbox" ${v.kilo ? 'checked' : ''}> por kilo</label>
+      <button type="button" class="v-del" data-del="${i}" aria-label="Quitar presentación ${i + 1}" ${rows.length < 2 ? 'disabled' : ''}>×</button>
+    </div>`).join('');
+  }
+  function draftProduct(){
+    return {
+      nombre: $('#f-nombre').value.trim(),
+      categoria: $('#f-cat').value.trim(),
+      emoji: $('#f-emoji').value.trim(),
+      pregunta: $('#f-preg').value.trim(),
+      presentaciones: S.edit.draft.presentaciones
+        .map(v => { const o = { texto: String(v.texto || '').trim(), precio: parseNum(v.precio), kilo: !!v.kilo }; if (v.ref) o.ref = v.ref; return o; })
+        .filter(v => v.texto || isFinite(v.precio))
+    };
+  }
+  function renderEdPreview(){
+    const p = draftProduct();
+    const d = disc();
+    const lines = p.presentaciones.filter(v => isFinite(v.precio) && v.precio > 0).map(v => lineFor(p, v, d)).join('\n');
+    $('#ed-preview').textContent = [p.nombre || 'Título del producto', lines || (p.emoji || '🔹') + ' $0'].join('\n') + (p.pregunta ? '\n\n' + p.pregunta : '');
+    $('#ed-prev-note').textContent = d == null ? 'Sin descuento: se muestran los precios de la web.' : `Con el ${num(d)}% de descuento. El cierre se agrega al armar el mensaje.`;
+  }
+  async function saveEdit(){
+    const p = draftProduct();
+    let msg = '';
+    if (!p.nombre) msg = 'Escribe el título del producto.';
+    else if (!p.presentaciones.length) msg = 'Agrega al menos una presentación con su precio.';
+    else if (p.presentaciones.some(v => !(isFinite(v.precio) && v.precio > 0))) msg = 'Revisa los precios: cada presentación necesita un precio mayor que cero.';
+    const err = $('#ed-err'); err.textContent = msg; err.hidden = !msg;
+    if (msg || S.busy) return;
+    const now = new Date().toISOString();
+    let list;
+    if (S.edit.id) list = S.products.map(x => x.id === S.edit.id ? Object.assign({}, x, p, { actualizado: now }) : x);
+    else {
+      let id = norm(p.nombre).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'producto', n = 2;
+      const base = id;
+      while (S.products.some(x => x.id === id)) id = base + '-' + (n++);
+      list = S.products.concat([Object.assign({ id }, p, { actualizado: now })]);
+    }
+    await publishData(nextData({ productos: list }), S.edit.id ? 'Producto actualizado' : 'Producto agregado');
+  }
+
+  /* ---------- Acciones ---------- */
+  function toggleProduct(id){
+    if (S.sel.has(id)) S.sel.delete(id);
+    else {
+      const p = S.products.find(x => x.id === id);
+      if (!p) return;
+      S.sel.set(id, new Set(p.presentaciones.map((_, i) => i)));
+    }
+    stashUI();
+    renderPicker(); renderComposer(); renderBar();
+  }
+  function setMode(m){
+    S.mode = m;
+    $('#view-armar').dataset.mode = m;
+    renderBar();
+    if (m === 'msg') window.scrollTo(0, 0);
+  }
+  async function copyMsg(){
+    const ta = $('#msg');
+    const text = ta.value;
+    if (!text.trim() || !confirmed()) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      toast('Mensaje copiado');
+    } catch (e){
+      ta.focus(); ta.select();
+      let ok = false;
+      try { ok = document.execCommand('copy'); } catch (_){}
+      toast(ok ? 'Mensaje copiado' : 'Texto seleccionado: cópialo con el menú del teléfono');
+    }
+  }
+  let shareT;
+  function rerenderPrices(){ renderDisc(); renderPicker(); renderComposer(); renderBar(); renderCatalog(); if (S.edit) renderEdPreview(); }
+  function setDisc(v){
+    S.disc = { v, date: today(), manual: true };
+    saveDisc();
+    rerenderPrices();
+    if (HOST === 'github' && S.owner && (S.cil || ghToken())){
+      clearTimeout(shareT);
+      shareT = setTimeout(() => shareDisc(v), 1500);
+    }
+  }
+  function backToAuto(){
+    S.disc = { v: null, date: null, manual: false };
+    saveDisc();
+    rerenderPrices();
+    toast('Usando el descuento automático');
+  }
+
+  /* ---------- Tasas en GitHub (solo la dueña) ---------- */
+  async function ghGetJson(path, tok){
+    const { owner, repo } = ghRepo();
+    const r = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}?t=${Date.now()}`, { headers: ghHeaders(tok), cache: 'no-store' });
+    if (r.status === 404) return { sha: null, json: null };
+    if (!r.ok) throw { status: r.status };
+    const j = await r.json();
+    const bin = atob(j.content.replace(/\n/g, ''));
+    const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
+    return { sha: j.sha, json: JSON.parse(new TextDecoder().decode(bytes)) };
+  }
+  // Fecha de hoy en Caracas (UTC-4): con ella el descuento queda fijado para todo el día
+  const hoyCaracas = () => new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10);
+  async function shareDisc(v){
+    if (!validPct(v) || S.disc.v !== v) return;
+    if (S.cil){
+      try {
+        await rpcCil('fijar_descuento', { p_valor: v });
+        const now = new Date().toISOString();
+        S.tasas = Object.assign({}, S.tasas || {}, { descuento: v, actualizado: now, revisado: now, manual: true, fecha: hoyCaracas() });
+        S.disc = { v: null, date: null, manual: false }; saveDisc();
+        rerenderPrices();
+        toast(`${num(v)}% guardado para todo el equipo`);
+      } catch (e){ toast(e && e.msg ? e.msg : 'Se cambió solo en este equipo: no se pudo guardar para todos.'); }
+      return;
+    }
+    const tok = ghToken(); if (!tok) return;
+    const { owner, repo } = ghRepo();
+    try {
+      const cur = await ghGetJson('tasas.json', tok);
+      const now = new Date().toISOString();
+      const next = Object.assign({}, cur.json || {}, { descuento: v, actualizado: now, revisado: now, manual: true, fecha: hoyCaracas() });
+      const body = { message: `Descuento a mano: ${num(v)}% (armador)`, content: b64(JSON.stringify(next, null, 1)) };
+      if (cur.sha) body.sha = cur.sha;
+      const p = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/tasas.json`, { method: 'PUT', headers: Object.assign({ 'Content-Type': 'application/json' }, ghHeaders(tok)), body: JSON.stringify(body) });
+      if (!p.ok) throw { status: p.status };
+      S.tasas = next;
+      S.disc = { v: null, date: null, manual: false }; saveDisc();
+      rerenderPrices();
+      toast(`${num(v)}% guardado para todo el equipo (lo verán en 1 o 2 minutos)`);
+    } catch (e){
+      toast('Se cambió solo en este equipo: no se pudo guardar para todos.');
+    }
+  }
+  async function forceUpdate(){
+    if (S.cil){
+      S.forcing = true; renderDisc();
+      try {
+        const prevRev = S.tasas && S.tasas.revisado;
+        await rpcCil('forzar_tasas');
+        // el cálculo tarda 1 o 2 minutos en GitHub; se revisa el archivo público cada 10 segundos
+        for (let i = 0; i < 24; i++){
+          await new Promise(res => setTimeout(res, 10000));
+          await loadTasas();
+          if (S.tasas && S.tasas.revisado && S.tasas.revisado !== prevRev && !S.tasas.manual){
+            if (overrideToday() && autoToday()) { S.disc = { v: null, date: null, manual: false }; saveDisc(); }
+            rerenderPrices();
+            toast(S.tasas.error ? 'Actualizado con avisos: ' + S.tasas.error : `Tasas actualizadas: ${num(S.tasas.descuento)}%`);
+            return;
+          }
+        }
+        throw { msg: 'Tardó demasiado. Intenta de nuevo en unos minutos.' };
+      } catch (e){ toast(e && e.msg ? e.msg : 'No se pudo conectar.'); }
+      finally { S.forcing = false; $('#force').textContent = 'Actualizar tasas ahora'; renderDisc(); }
+      return;
+    }
+    const tok = ghToken();
+    if (!tok){ toast('Para usar este botón, entra con tu sesión de gerencia en el menú de CIL.'); return; }
+    const { owner, repo } = ghRepo();
+    S.forcing = true; renderDisc();
+    try {
+      const before = (await ghGetJson('tasas.json', tok)).json;
+      const r = await fetch(`https://api.github.com/repos/${owner}/${repo}/actions/workflows/tasas.yml/dispatches`, { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, ghHeaders(tok)), body: JSON.stringify({ ref: 'main', inputs: { forzar: 'true' } }) });
+      if (r.status === 403 || r.status === 404) throw { msg: 'Tu clave necesita el permiso Actions: Read and write (o falta el archivo tasas.yml).' };
+      if (!r.ok) throw { msg: 'GitHub no aceptó la solicitud (' + r.status + ').' };
+      const prevRev = before && before.revisado;
+      for (let i = 0; i < 24; i++){
+        await new Promise(res => setTimeout(res, 10000));
+        const now = (await ghGetJson('tasas.json', tok)).json;
+        if (now && now.revisado && now.revisado !== prevRev){
+          if (now.error && !sameDay(now.actualizado)) throw { msg: 'No se pudieron leer las tasas: ' + now.error };
+          S.tasas = now;
+          if (overrideToday() && autoToday()) { S.disc = { v: null, date: null, manual: false }; saveDisc(); }
+          rerenderPrices();
+          toast(now.error ? 'Actualizado con avisos: ' + now.error : `Tasas actualizadas: ${num(now.descuento)}%`);
+          return;
+        }
+      }
+      throw { msg: 'Tardó demasiado. Revisa la pestaña Actions en GitHub.' };
+    } catch (e){
+      toast(e && e.msg ? e.msg : 'No se pudo conectar con GitHub.');
+    } finally { S.forcing = false; $('#force').textContent = 'Actualizar tasas ahora'; renderDisc(); }
+  }
+
+  /* ---------- Eventos ---------- */
+  document.querySelector('.tabs').addEventListener('click', e => {
+    const b = e.target.closest('button[data-view]');
+    if (!b) return;
+    S.view = b.dataset.view; stashUI();
+    renderTabs(); renderBar(); renderCatalog();
+  });
+  document.addEventListener('click', e => { if (e.target.closest('[data-auto]')) backToAuto(); });
+  $('#force').addEventListener('click', forceUpdate);
+  $('#q').addEventListener('input', e => { S.q = e.target.value; stashUI(); renderPicker(); });
+  $('#cq').addEventListener('input', e => { S.cq = e.target.value; renderCatalog(); });
+  $('#chips').addEventListener('click', e => {
+    const b = e.target.closest('.chip');
+    if (!b) return;
+    S.cat = b.dataset.cat; stashUI();
+    renderPicker();
+  });
+  $('#plist').addEventListener('click', e => { const b = e.target.closest('.prod'); if (b) toggleProduct(b.dataset.id); });
+  $('#selected').addEventListener('click', e => {
+    const b = e.target.closest('[data-act]');
+    if (!b) return;
+    const id = b.closest('.sitem').dataset.id;
+    if (b.dataset.act === 'rm'){
+      S.sel.delete(id);
+      if (!S.sel.size) setMode('list');
+    } else {
+      const set = S.sel.get(id), i = Number(b.dataset.i);
+      if (set.has(i)){ if (set.size > 1) set.delete(i); } else set.add(i);
+    }
+    stashUI();
+    renderPicker(); renderComposer(); renderBar();
+  });
+  $('#msg').addEventListener('input', e => { autosize(e.target); renderCopy(); });
+  $('#copy').addEventListener('click', copyMsg);
+  $('#clear').addEventListener('click', () => { S.sel.clear(); stashUI(); setMode('list'); renderPicker(); renderComposer(); renderBar(); });
+  $('#bar-open').addEventListener('click', () => setMode('msg'));
+  $('#usd-sw').addEventListener('change', e => {
+    S.moneda = e.target.checked ? 'usd' : 'bcv';
+    renderDisc(); renderPicker(); renderComposer(); renderCatalog();
+  });
+  $('#back').addEventListener('click', () => setMode('list'));
+
+  $('#disc').addEventListener('input', e => {
+    const v = parseNum(e.target.value);
+    if (validPct(v)) setDisc(v);
+  });
+  $('#disc').addEventListener('blur', () => renderDisc());
+  $('#disc').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
+  const step = delta => { const cur = discBcv() != null ? discBcv() : (hasTasas() ? S.tasas.descuento : null); setDisc(Math.min(95, Math.max(0, Math.round((cur == null ? 40 : cur) + delta)))); };
+  $('#disc-minus').addEventListener('click', () => step(-1));
+  $('#disc-plus').addEventListener('click', () => step(1));
+
+  $('#csv').addEventListener('change', async e => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    const err = $('#csv-err');
+    err.hidden = true;
+    if (!f) return;
+    let text;
+    try { text = await f.text(); } catch (_){ err.textContent = 'No se pudo leer el archivo.'; err.hidden = false; return; }
+    const res = IMP.importCSV(text, S.products);
+    if (res.error){ err.textContent = res.error; err.hidden = false; S.pending = null; renderReport(); return; }
+    S.pending = { res, archivo: f.name };
+    renderReport();
+    $('#report').scrollIntoView({ block: 'start' });
+  });
+  $('#report').addEventListener('click', e => {
+    if (e.target.closest('#imp-cancel')){ S.pending = null; renderReport(); return; }
+    if (e.target.closest('#imp-ok') && S.pending){
+      const p = S.pending;
+      publishData(nextData({ productos: p.res.productos, importacion: { fecha: new Date().toISOString(), archivo: p.archivo, productos: p.res.productos.length } }), (n => `Precios actualizados: ${n} ${n === 1 ? 'cambio' : 'cambios'}`)(p.res.informe.cambios.length));
+    }
+  });
+  $('#add').addEventListener('click', () => openEditor(null));
+  $('#clist').addEventListener('click', e => { const b = e.target.closest('[data-edit]'); if (b) openEditor(b.dataset.edit); });
+  $('#save-ajustes').addEventListener('click', () => {
+    const b = parseNum($('#dbase').value);
+    const aj = Object.assign({}, S.ajustes, { pie: $('#pie').value, preguntaVarios: $('#pv').value.trim(), descuentoBase: validPct(b) ? b : null, pieDivisas: $('#pie-usd').value, descuentoDivisas: validPct(parseNum($('#dusd').value)) ? parseNum($('#dusd').value) : DEF.descuentoDivisas });
+    publishData(nextData({ ajustes: aj }), 'Ajustes guardados');
+  });
+
+  $('#emojis').innerHTML = EMOJIS.map(em => `<button type="button" data-em="${em}" aria-label="Usar ${em}">${em}</button>`).join('');
+  $('#emojis').addEventListener('click', e => { const b = e.target.closest('[data-em]'); if (!b) return; $('#f-emoji').value = b.dataset.em; renderEdPreview(); });
+  for (const id of ['#f-nombre', '#f-cat', '#f-emoji', '#f-preg']) $(id).addEventListener('input', renderEdPreview);
+  function onVrow(e){
+    const row = e.target.closest('.vrow'); if (!row || !S.edit) return;
+    const v = S.edit.draft.presentaciones[Number(row.dataset.i)], k = e.target.dataset.k;
+    if (k === 'kilo') v.kilo = e.target.checked; else if (k) v[k] = e.target.value;
+    renderEdPreview();
+  }
+  $('#vrows').addEventListener('input', onVrow);
+  $('#vrows').addEventListener('change', onVrow);
+  $('#vrows').addEventListener('click', e => {
+    const b = e.target.closest('[data-del]'); if (!b) return;
+    const rows = S.edit.draft.presentaciones;
+    if (rows.length < 2) return;
+    rows.splice(Number(b.dataset.del), 1);
+    renderVrows(); renderEdPreview();
+  });
+  $('#add-v').addEventListener('click', () => {
+    const rows = S.edit.draft.presentaciones;
+    const prev = rows[rows.length - 1];
+    rows.push({ texto: '', precio: '', kilo: prev ? prev.kilo : false, ref: null });
+    renderVrows(); renderEdPreview();
+    $('#v-texto-' + (rows.length - 1)).focus();
+  });
+  $('#ed-save').addEventListener('click', saveEdit);
+  $('#ed-cancel').addEventListener('click', closeEditor);
+  $('#ed-back').addEventListener('click', closeEditor);
+  $('#ed-del').addEventListener('click', () => { $('#del-confirm').hidden = false; });
+  $('#del-no').addEventListener('click', () => { $('#del-confirm').hidden = true; });
+  $('#del-yes').addEventListener('click', () => {
+    if (!S.edit || !S.edit.id) return;
+    const id = S.edit.id;
+    S.sel.delete(id);
+    publishData(nextData({ productos: S.products.filter(x => x.id !== id) }), 'Producto eliminado');
+  });
+
+  function renderGh(){
+    if (HOST !== 'github') return;
+    // Gerencia entra con su sesión de CIL: no necesita la clave de GitHub
+    $('#gh-admin').hidden = true;
+    return;
+    $('#gh-status').textContent = ghToken() ? 'Activo en este equipo: puedes actualizar precios y editar productos.' : 'Solo para la dueña. Tu equipo no necesita esto para armar mensajes.';
+    $('#gh-out').hidden = !ghToken();
+  }
+  $('#gh-save').addEventListener('click', async () => {
+    const tok = $('#gh-tok').value.trim();
+    if (!tok) return;
+    const { owner, repo } = ghRepo();
+    try {
+      const r = await fetch(`https://api.github.com/repos/${owner}/${repo}`, { headers: ghHeaders(tok) });
+      const j = r.ok ? await r.json() : null;
+      if (!j || !(j.permissions && j.permissions.push)){ toast('Esa clave no tiene permiso de escritura en ' + owner + '/' + repo + '.'); return; }
+      try { localStorage.setItem(LS_TOK, tok); } catch (_){ toast('Este navegador no permite guardar la clave.'); return; }
+      $('#gh-tok').value = '';
+      S.owner = true; renderOwner(); renderGh();
+      toast('Acceso activado en este equipo');
+    } catch (_){ toast('No se pudo conectar con GitHub. Revisa la conexión.'); }
+  });
+  $('#gh-out').addEventListener('click', () => {
+    try { localStorage.removeItem(LS_TOK); } catch (_){}
+    S.owner = false; renderOwner(); renderGh();
+    toast('Acceso desactivado en este equipo');
+  });
+
+  async function loadTasas(){
+    try {
+      const r = await fetch(DATOS + 'tasas.json?v=' + Date.now(), { cache: 'no-store' });
+      if (!r.ok) return;
+      const t = await r.json();
+      if (t && validPct(t.descuento)) S.tasas = t;
+    } catch (_){}
+  }
+
+  /* ---------- Arranque ---------- */
+  restoreUI();
+  renderAll();
+  renderGh();
+  if (HOST === 'github'){
+    S.owner = !!ghToken(); renderOwner();
+    // El catálogo de la última vez abre al instante; el descuento siempre llega fresco (no se guarda: debe ser el de hoy)
+    const LS_CAT = 'barquero-armador-catalogo';
+    try { const c = JSON.parse(localStorage.getItem(LS_CAT) || 'null'); if (c && c.datos && c.datos.productos){ applyData(c.datos); S.dbVer = c.ver || null; restoreUI(); S.loading = false; renderAll(); } } catch (_){}
+    S.tasasListas = false;  // mientras llegan, no se avisa «las tasas no se actualizaron hoy»
+    (async () => {
+      const [db] = await Promise.all([leerDb(), loadTasas()]);
+      if (db && db.datos){ applyData(db.datos); S.dbVer = db.actualizado_en; restoreUI(); try { localStorage.setItem(LS_CAT, JSON.stringify({ datos: db.datos, ver: db.actualizado_en })); } catch (_){} }
+      else try {
+        // mientras nadie haya guardado en la base de datos, se lee el data.json de siempre
+        const r = await fetch(DATOS + 'data.json?v=' + Date.now(), { cache: 'no-store' });
+        if (!r.ok) throw 0;
+        applyData(await r.json());
+        restoreUI();
+      } catch (_){}
+      aplicarManual(db); S.tasasListas = true;
+      S.loading = false;
+      renderAll();
+      // ¿Es alguien de gerencia con sesión de CIL en este teléfono? Entonces puede editar sin clave.
+      try { if (await tokenCil() && (await rpcCil('es_admin')) === true){ S.cil = true; S.owner = true; renderOwner(); renderGh(); renderAll(); } } catch (_){}
+      setInterval(async () => { const before = S.tasas && S.tasas.actualizado; await loadTasas(); aplicarManual(await leerDb()); if ((S.tasas && S.tasas.actualizado) !== before){ renderDisc(); renderPicker(); renderComposer(); renderCatalog(); } else renderDisc(); }, 5 * 60 * 1000);
+    })();
+    return;
+  }
+  try { const t = sessionStorage.getItem(SS_TOAST); if (t){ sessionStorage.removeItem(SS_TOAST); toast(t); } } catch (_){}
+  (async () => {
+    let cl = null;
+    for (let i = 0; i < 50 && !cl; i++){
+      if (window.claude && typeof window.claude.use === 'function') cl = window.claude;
+      else await new Promise(r => setTimeout(r, 100));
+    }
+    if (!cl) return;
+    const [art, user] = await Promise.all([cl.use('artifact'), cl.use('user')]);
+    S.art = art;
+    S.owner = !!(art && user && await user.canEdit());
+    renderOwner();
+  })();
+})();
+</script>
+<script>if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('../sw.js', { scope: '../' }).catch(function () {});</script>
+</body></html>

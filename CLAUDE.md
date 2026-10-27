@@ -14,7 +14,7 @@ App web unificada **CIL** en GitHub Pages: https://srzoco.github.io/cil/
 - `tareas/`: módulo de tareas rotativas del personal de mantenimiento (vanilla JS, sin compilación).
 - `pendientes/`: Pendientes de gerencia (solo rol `admin`). Recordatorios propios y pedidos entre gerencia, con conversación y fotos (carpeta privada `pendientes` de Storage, achicadas a 1280 px; se borran 60 días después de cerrar, desde el teléfono de gerencia al abrir la página). Solo lo ven las dos personas; quien lo creó lo cierra; si se repite, al cerrar sale el siguiente. Avisos al momento o resumen 8 a. m. (`personas.pend_avisos`) y el día que vence. Todo por RPC `pend_*`; las tablas no se leen directo.
 - `contenido/`: Contenido (reels, carruseles, grabación), movido dentro de CIL el 27/10/2026. Lee `../config.js` como `BF_CONFIG` y usa el `sw.js` de CIL. `srzoco/contenidoBF` quedó solo como redirección (su index.html lleva a `/cil/contenido/` con el mismo `#`, para íconos y avisos viejos); el código se edita aquí. Prueba: `pruebas/contenido.js`.
-- El Armador de mensajes todavía abre su app (`srzoco/mensajesBF`) desde el menú.
+- `mensajes/`: Armador de mensajes, movido dentro de CIL el 27/10/2026 (un solo `index.html`). Sin clave de GitHub: solo gerencia con su sesión de CIL edita catálogo y descuento (RPC `guardar_armador`, `fijar_descuento`, `forzar_tasas`); al abrir borra la clave vieja del teléfono. Lee `tasas.json` y `data.json` de `/mensajesBF/` (el workflow de tasas sigue allí). `srzoco/mensajesBF/index.html` quedó como redirección. Prueba: `pruebas/armador.js`.
 - Base de datos: el Supabase de Contenido (proyecto `xooofdppgnpibasambuc`, organización DEB, plan free). `config.js` lleva URL y clave publicable, más `vapidPublicKey`.
 
 ## Archivos clave
@@ -53,8 +53,8 @@ App web unificada **CIL** en GitHub Pages: https://srzoco.github.io/cil/
 - Sesión compartida con Contenido: CIL escribe y lee `barquero_sesion` y `bfcontenido_sesion` (gana la de `expires_at` mayor) para no pedir la clave dos veces.
 - Armador: `supabase/tasas-armador.sql` dispara el workflow de mensajesBF de 8:15 a 8:35 (el cron de GitHub llega tarde). Workflow publicado (fija el descuento del día; `forzar` solo desde gerencia; en equipos sin acceso de administradora el número queda bloqueado). Falta que ella cree el token y corra el SQL (pasos 2 y 3).
 - Avisos unificados: la función `notificar` de Contenido ya no manda push; deja los mensajes en `avisos_cola` (url `../contenidoBF/#…`) y los entrega el reloj de avisos de CIL. Se activan una vez en el menú de CIL (`comun/hub.js`, `?avisos` evita la redirección). Contenido usa el tema de CIL (`../cil/comun/tema.*`). Contenido ya está en `/cil/contenido/` (los avisos viejos con `../contenidoBF/#…` pasan por la redirección).
-- Fase 3: Armador de mensajes. Se le recomendó pasar productos y precios de `data.json` en GitHub a la base de datos (hoy se editan con un token de GitHub guardado en el teléfono). Ella aún no decide.
-- Falta: la lista de quién usa Contenido y quién usa Mensajes, el ícono (hoy dice "CIL" provisional) y cargar su lista real de tareas.
+- Armador: productos y precios en la base de datos (`armador_datos`); la clave de GitHub en el teléfono ya no se usa.
+- Falta: la lista de quién usa Contenido y quién usa Mensajes. (Lista de tareas ya cargada; el ícono se queda como «CIL».)
 - Gerencia evalúa: premio del mes, "cubre primero" y cuándo activar `usar_salidas`.
 
 ## Pruebas
