@@ -59,7 +59,7 @@ App web unificada **CIL** en GitHub Pages: https://srzoco.github.io/cil/
 - Gerencia evalúa: premio del mes, "cubre primero" y cuándo activar `usar_salidas`.
 
 ## Pruebas
-- `.github/workflows/pruebas.yml` corre en cada push: sintaxis, `cil.sql` dos veces sobre `pruebas/stub-supabase.sql` y `pruebas/humo.js` (Playwright, modo demo, 360 px), `recorrido.js` y `pendientes.js` (responde las llamadas de la página con psql, como la persona de la sesión).
+- `.github/workflows/pruebas.yml` corre en cada push: sintaxis, `cil.sql` dos veces sobre `pruebas/stub-supabase.sql`, `pruebas/robot.sql` (frenos del robot de Yobel) y `pruebas/humo.js` (Playwright, modo demo, 360 px), `recorrido.js` y `pendientes.js` (responde las llamadas de la página con psql, como la persona de la sesión).
 - Decisiones de gerencia: página de aprobación https://claude.ai/artifact/B3s85DdSYu8ucAxCsfFDiq (colección `decisiones`). Todo lo que necesite su OK va ahí.
 - No hay build ni dependencias. Sirve la carpeta con `python3 -m http.server`. El modo demo sale solo con `config.js` vacío (en pruebas, intercepta `config.js` con Playwright).
 - Para el SQL, Postgres local más PostgREST con un stub de `auth.uid()`. Verifica que `logic.js` y SQL den el mismo reparto.

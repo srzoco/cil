@@ -28,6 +28,9 @@ jobs:
       - name: Seguridad (lo que un empleado no puede hacer)
         env: { PGPASSWORD: prueba }
         run: pruebas/seguridad.sh "psql -h localhost -U postgres -d cil"
+      - name: Pruebas del robot de Yobel
+        env: { PGPASSWORD: prueba }
+        run: psql -h localhost -U postgres -d cil -v ON_ERROR_STOP=1 -q -f pruebas/robot.sql
       - name: Prueba de humo
         run: |
           # Usa el Chrome que ya trae la máquina de GitHub (bajar el navegador se quedaba pegado).
