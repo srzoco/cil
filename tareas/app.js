@@ -699,7 +699,9 @@
     var bal = L.balance(d, loc, S.hoy, 28), sobre = L.sobrecargados(bal), sug = L.sugerenciasBalance(d, loc, S.hoy, 28);
     var h = '<a class="volver" href="#/tareas">‹ Tareas</a><h1>Balance de carga</h1>' + tabsLocales('/balance', loc);
     h += '<p class="ayuda sin-margen">Minutos de tareas fijas de cada día frente al tiempo que se quiere dedicar a ellas (se ajusta por día de la semana en <a href="#/equipo/ajustes">Equipo → Ajustes</a>). Las tareas de una vez y las de quien falte no cuentan aquí.</p>';
-    h += sobre.length ? '<p class="nota alerta-nota">' + plural(sobre.length, 'día pasa', 'días pasan') + ' del 100 % en las próximas 4 semanas.</p>' : '<p class="nota">Ningún día pasa del 100 % en las próximas 4 semanas.</p>';
+    var sinGente = bal.filter(function (x) { return !x.disp; }).length;
+    if (sinGente) h += '<p class="nota alerta-nota">' + (sinGente === bal.length ? 'Este local no tiene' : plural(sinGente, 'día no tiene', 'días no tienen')) + ' personal asignado que trabaje esos días: revisa en <a href="#/equipo/personas">Equipo → Personas</a> el local, los días de trabajo y la capacidad de cada uno.</p>';
+    else h += sobre.length ? '<p class="nota alerta-nota">' + plural(sobre.length, 'día pasa', 'días pasan') + ' del 100 % en las próximas 4 semanas.</p>' : '<p class="nota">Ningún día pasa del 100 % en las próximas 4 semanas.</p>';
     if (sug.length) {
       h += '<h2 class="titulo-sec">Sugerencias</h2><div class="lista">' + sug.map(function (x, i) {
         return '<div class="item"><span class="item-cuerpo"><span class="item-titulo">' + esc(x.texto) + '</span><span class="item-meta"><span class="extra">' + esc(x.motivo) + '</span></span></span>' +
@@ -714,8 +716,8 @@
       h += '<h3 class="local-titulo">Semana del ' + esc(L.fmtFecha(k)) + '</h3><div class="balance-semana">' + semanas[k].map(function (x) {
         var cls = x.pct > 100 ? 'alto' : x.pct > 85 ? 'medio' : '';
         return '<details class="balance-dia ' + cls + '"><summary><span class="bd-dia">' + esc(L.DIAS_CORTOS[L.dow(x.fecha)]) + ' ' + Number(x.fecha.slice(8)) + '</span>' +
-          '<span class="bd-barra"><span style="width:' + Math.min(100, x.pct) + '%"></span></span><span class="bd-pct">' + x.pct + ' %</span></summary>' +
-          '<p class="ayuda">' + esc(L.minutosTxt(x.prog)) + ' de ' + esc(L.minutosTxt(x.disp)) + ' disponibles</p><ul class="bd-lista">' +
+          '<span class="bd-barra"><span style="width:' + Math.min(100, x.pct) + '%"></span></span><span class="bd-pct">' + (x.disp ? x.pct + ' %' : 'sin personal') + '</span></summary>' +
+          '<p class="ayuda">' + esc(L.minutosTxt(x.prog)) + (x.disp ? ' de ' + esc(L.minutosTxt(x.disp)) + ' disponibles' : ' y nadie asignado a este local ese día') + '</p><ul class="bd-lista">' +
           x.tareas.slice().sort(function (a, b) { return b.min - a.min; }).map(function (t) { return '<li><a href="#/tarea/' + esc(t.id) + '">' + esc(t.titulo) + '</a> <small class="muted">' + t.min + ' min</small></li>'; }).join('') + '</ul></details>';
       }).join('') + '</div>';
     });
