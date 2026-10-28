@@ -109,5 +109,61 @@ do $$ begin
   if (select count(*) from bot_avisos where tipo like 'robot_error:%') <> 5 then raise exception 'FALLO: tope de avisos del robot'; end if;
 end $$;
 
+-- 10. Producto con ficha que desaparece de Yobel: aviso para pasar la ficha
+do $$ begin
+  if not exists (select 1 from bot_avisos where tipo = 'robot_ficha' and texto like '%Producto 11%') then
+    raise exception 'FALLO: no avisó del producto con ficha que desapareció';
+  end if;
+  if exists (select 1 from bot_avisos where tipo = 'robot_ficha' and texto like '%Producto 12%') then
+    raise exception 'FALLO: avisó del producto bajo pedido';
+  end if;
+end $$;
+
+-- 11. Guardar en el armador después de una subida del robot: no choca y no devuelve stock ni precios viejos
+insert into auth.users (id) values ('00000000-0000-0000-0000-0000000000a1') on conflict do nothing;
+insert into personas (id, nombre, rol) values ('00000000-0000-0000-0000-0000000000a1', 'Gerencia prueba', 'admin') on conflict (id) do update set rol = 'admin', activo = true;
+create temp table t_abierto as select datos, coalesce(editado_en, actualizado_en) as ver from armador_datos where id = 1;
+grant select on t_abierto to authenticated;
+-- el robot sube mientras el armador está abierto (precio 77 y stock 3 en el producto 1)
+update armador_datos set datos = jsonb_set(jsonb_set(jsonb_set(datos, '{productos,0,presentaciones,0,precio}', '77'),
+  '{productos,0,presentaciones,0,stock}', '3'), '{robot,fecha}', to_jsonb(now())), editado_en = coalesce(editado_en, actualizado_en), actualizado_en = clock_timestamp() where id = 1;
+set role authenticated;
+do $$ begin perform set_config('test.uid', '00000000-0000-0000-0000-0000000000a1', false); end $$;
+do $$ declare d jsonb; v timestamptz; begin
+  -- gerencia cambia la ficha del producto 1 con los datos que tenía al abrir
+  select jsonb_set(datos, '{productos,0,ficha}', '"ficha nueva"'), ver into d, v from t_abierto;
+  perform guardar_armador(d, v);
+  select datos into d from armador_datos where id = 1;
+  if d->'productos'->0->>'ficha' <> 'ficha nueva' then raise exception 'FALLO: no guardó la ficha'; end if;
+  if (d->'productos'->0->'presentaciones'->0->>'precio')::numeric <> 77 then raise exception 'FALLO: devolvió un precio viejo'; end if;
+  if (d->'productos'->0->'presentaciones'->0->>'stock')::numeric <> 3 then raise exception 'FALLO: devolvió un stock viejo'; end if;
+  if (d->'robot'->>'fecha') is null then raise exception 'FALLO: borró la fecha del robot'; end if;
+  -- un segundo guardado con la versión vieja sí choca (otra persona de gerencia)
+  begin
+    perform guardar_armador(d, v);
+    raise exception 'FALLO: no avisó del guardado al mismo tiempo';
+  exception when others then if sqlerrm not like '%al mismo tiempo%' then raise; end if;
+  end;
+end $$;
+do $$ begin perform set_config('test.uid', '', false); end $$;
+reset role;
+
+-- 12. Contador de uso: suma una vez cada 10 s, ignora ids que no existen, y el bot ofrece primero el más usado
+set role anon;
+do $$ begin
+  perform armador_usado(array['p3', 'p3', 'no-existe', 'Mal Id']);
+  perform armador_usado(array['p3']);
+end $$;
+do $$ begin
+  perform 1 from armador_usos;
+  raise exception 'FALLO: anon leyó armador_usos';
+exception when insufficient_privilege then null;
+end $$;
+reset role;
+do $$ begin
+  if (select veces from armador_usos where id = 'p3') <> 1 then raise exception 'FALLO contador: %', (select veces from armador_usos where id = 'p3'); end if;
+  if exists (select 1 from armador_usos where id <> 'p3') then raise exception 'FALLO: contó un id que no existe'; end if;
+end $$;
+
 rollback;
 \echo 'OK: pruebas del robot'

@@ -225,6 +225,9 @@ body:not(.owner) .owner-only{display:none!important}
 .report .tally{display:flex;flex-wrap:wrap;gap:6px}
 .pill{font-size:12.5px;font-weight:700;border-radius:999px;padding:3px 10px;background:var(--surface-2);color:var(--ink)}
 .pill.up{background:var(--accent-soft)}
+.tag{display:inline-block;font-size:11.5px;font-weight:700;border-radius:999px;padding:1px 8px;margin-left:6px;background:var(--surface-2);color:var(--ink);vertical-align:1px}
+.tag.off{background:var(--danger-soft);color:var(--danger)}
+.prod-lines .sin{opacity:.55}
 .pill.alert{background:var(--danger-soft);color:var(--danger)}
 .report details summary{cursor:pointer;font-weight:600;font-size:14px}
 .report .scroll{max-height:260px;overflow:auto;margin-top:6px}
@@ -362,7 +365,8 @@ body.usd #usd-badge{display:inline-block}
       if (r.estado && norm(r.estado) !== 'activa'){ inactivas++; return; }
       if (/^V[A-ZÁÉÍÓÚÑ]/.test(r.producto)){ piezas++; return; }
       var p = price(r.precio);
-      var item = { ref: refOf(r), r: r, precio: p, kilo: norm(r.unidad) === 'kg', texto: textoOf(r) };
+      var st = r.stock != null && r.stock !== '' ? price(r.stock) : NaN;
+      var item = { ref: refOf(r), r: r, precio: p, kilo: norm(r.unidad) === 'kg', texto: textoOf(r), stock: st };
       if (!(p > 1)){ raros.push({ producto: r.producto, texto: item.texto, precio: r.precio }); return; }
       validas.push(item);
     });
@@ -375,13 +379,21 @@ body.usd #usd-badge{display:inline-block}
       p.presentaciones.forEach(function(v){
         if (!v.ref){ pres.push(v); return; }
         var n = porRef[v.ref];
-        if (!n){ eliminadas.push({ nombre: p.nombre, texto: v.texto }); toco = true; return; }
+        if (!n){
+          // no vino en el archivo: no se borra ni se cambia su stock (puede ser un error); queda marcado «stock sin actualizar»
+          eliminadas.push({ nombre: p.nombre, texto: v.texto });
+          pres.push(Object.assign({}, v, { sin_actualizar: v.sin_actualizar || ahora }));
+          return;
+        }
         usadas[v.ref] = 1;
         if (n.precio !== v.precio || n.kilo !== !!v.kilo){
           cambios.push({ nombre: p.nombre, texto: v.texto, antes: v.precio, despues: n.precio, kilo: n.kilo });
           toco = true;
         }
-        pres.push(Object.assign({}, v, { precio: n.precio, kilo: n.kilo }));
+        var o = Object.assign({}, v, { precio: n.precio, kilo: n.kilo });
+        delete o.sin_actualizar;
+        if (isFinite(n.stock)) o.stock = n.stock;
+        pres.push(o);
       });
       if (pres.length) out.push(Object.assign({}, p, { presentaciones: pres, actualizado: toco ? ahora : p.actualizado }));
     });
@@ -404,7 +416,7 @@ body.usd #usd-badge{display:inline-block}
       out.push({
         id: id, nombre: r0.producto, categoria: r0.categoria || '', emoji: emojiFor(r0.producto, r0.categoria),
         pregunta: preguntaFor(g),
-        presentaciones: g.map(function(v){ return { texto: v.texto, precio: v.precio, kilo: v.kilo, ref: v.ref }; }),
+        presentaciones: g.map(function(v){ var o = { texto: v.texto, precio: v.precio, kilo: v.kilo, ref: v.ref }; if (isFinite(v.stock)) o.stock = v.stock; return o; }),
         actualizado: ahora
       });
       nuevos.push(r0.producto);
@@ -508,6 +520,15 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
   const disc = () => S.moneda === 'usd' ? discUsd() : discBcv();
   const confirmed = () => S.moneda === 'usd' ? true : confirmedBcv();
   const priceToday = (v, d) => d == null ? v.precio : v.precio * (1 - d / 100);
+  const conStock = v => v.stock != null && v.stock !== '' && isFinite(Number(v.stock));
+  const agotado = (p, v) => !p.bajo_pedido && conStock(v) && Number(v.stock) <= 0;
+  function stockTag(p, v, numero){
+    if (v.sin_actualizar) return '<span class="tag off">Stock sin actualizar</span>';
+    if (p.bajo_pedido) return '<span class="tag">Bajo pedido</span>';
+    if (!conStock(v)) return '';
+    if (Number(v.stock) <= 0) return '<span class="tag off">Agotado</span>';
+    return numero ? '<span class="tag">Stock ' + esc(num(Number(v.stock))) + '</span>' : '';
+  }
   function lineFor(p, v, d){
     return (p.emoji || '🔹') + ' ' + money(priceToday(v, d)) + (v.kilo ? ' el kilo' : '') + (v.texto ? ' ' + v.texto.trim() : '');
   }
@@ -656,7 +677,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
   async function leerDb(){
     if (!SB) return null;
     try {
-      const r = await fetch(SB + '/rest/v1/armador_datos?id=eq.1&select=datos,actualizado_en,descuento_manual,descuento_fecha,descuento_en', { headers: { apikey: SBK }, cache: 'no-store' });
+      const r = await fetch(SB + '/rest/v1/armador_datos?id=eq.1&select=datos,actualizado_en,editado_en,descuento_manual,descuento_fecha,descuento_en', { headers: { apikey: SBK }, cache: 'no-store' });
       if (!r.ok) return null;
       return (await r.json())[0] || null;
     } catch (_){ return null; }
@@ -670,7 +691,9 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
     S.busy = true; renderBusy();
     try {
       S.dbVer = await rpcCil('guardar_armador', { p_datos: next, p_antes: S.dbVer || null });
-      applyData(next);
+      // la base de datos mezcla el precio y stock del robot: se recarga lo guardado
+      const db = await leerDb();
+      applyData(db && db.datos ? db.datos : next);
       S.pending = null; S.edit = null;
       renderReport(); renderAll();
       toast(okMsg + '. Tu equipo lo verá al abrir el armador.');
@@ -841,6 +864,14 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
             <label class="flabel" for="f-preg">Pregunta de cierre (opcional)</label>
             <input id="f-preg" class="field" type="text" placeholder="¿Prefiere la barra completa o la media barra?">
             <p class="hint">Se usa cuando el mensaje lleva solo este producto.</p>
+            <label class="v-kilo" for="f-pedido" style="margin-top:6px"><input id="f-pedido" type="checkbox"> Bajo pedido (reposición en 1 día)</label>
+            <p class="hint">Se ofrece aunque no haya stock en Yobel. El bot da el precio y pasa el chat a una persona.</p>
+            <label class="flabel" for="f-ficha">Ficha técnica (solo datos comprobados)</label>
+            <textarea id="f-ficha" class="field" rows="3" maxlength="2000" placeholder="Acidez 0,2 %. Origen: Jaén, España."></textarea>
+            <p class="hint">El bot solo da datos técnicos (acidez, maduración, origen…) si están aquí.</p>
+            <label class="flabel" for="f-usos">Usos y platos (opcional)</label>
+            <textarea id="f-usos" class="field" rows="2" maxlength="2000" placeholder="Para pasta negra, risotto y paella."></textarea>
+            <p class="hint">Si queda vacío, el bot sugiere usos generales.</p>
             <p id="ed-err" class="err" role="alert" hidden></p>
             <div class="actions">
               <button type="button" class="btn primary" id="ed-save">Guardar producto</button>
@@ -938,7 +969,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
     if (!items.length){ list.innerHTML = `<p class="empty">Ningún producto coincide con «${esc(S.q)}».</p>`; return; }
     list.innerHTML = items.map(p => {
       const on = S.sel.has(p.id);
-      const lines = p.presentaciones.map(v => `<span><span class="price">${money(priceToday(v, d))}${v.kilo ? ' el kilo' : ''}</span> ${esc(v.texto)}</span>`).join('');
+      const lines = p.presentaciones.map(v => `<span${agotado(p, v) ? ' class="sin"' : ''}><span class="price">${money(priceToday(v, d))}${v.kilo ? ' el kilo' : ''}</span> ${esc(v.texto)}${stockTag(p, v, false)}</span>`).join('');
       return `<button type="button" class="prod" data-id="${esc(p.id)}" aria-pressed="${on}">
         <span class="tick" aria-hidden="true"></span>
         <span class="prod-main">
@@ -956,7 +987,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
     $('#selected').innerHTML = e.length ? e.map(({ p }) => {
       const set = S.sel.get(p.id);
       const chips = p.presentaciones.length > 1
-        ? `<div class="vchips">${p.presentaciones.map((v, i) => `<button type="button" class="vchip" data-act="v" data-i="${i}" aria-pressed="${set.has(i)}">${money(priceToday(v, d))}${v.kilo ? ' el kilo' : ''} ${esc(v.texto)}</button>`).join('')}</div>`
+        ? `<div class="vchips">${p.presentaciones.map((v, i) => `<button type="button" class="vchip" data-act="v" data-i="${i}" aria-pressed="${set.has(i)}">${money(priceToday(v, d))}${v.kilo ? ' el kilo' : ''} ${esc(v.texto)}${agotado(p, v) ? ' · agotado' : ''}</button>`).join('')}</div>`
         : '';
       return `<div class="sitem" data-id="${esc(p.id)}"><div class="sitem-top"><span class="sname">${esc(p.nombre)}</span><button type="button" class="x" data-act="rm" aria-label="Quitar ${esc(p.nombre)}">×</button></div>${chips}</div>`;
     }).join('') : '<p class="empty small">Aún no has elegido productos.</p>';
@@ -989,7 +1020,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
     $('#editor').hidden = !S.edit;
     $('#cat-list-wrap').hidden = !!S.edit;
     if (S.edit) return;
-    $('#cat-sub').textContent = `${S.products.length} productos. Precios base de barquerofood.com, sin descuento` + (S.imp && S.imp.fecha ? `, cargados ${shortDate(S.imp.fecha)}.` : '.');
+    $('#cat-sub').textContent = `${S.products.length} productos. Precios base de barquerofood.com, sin descuento` + (S.imp && S.imp.fecha ? `, cargados ${shortDate(S.imp.fecha)}.` : '.') + (DATA.robot && DATA.robot.fecha ? ` Precio y stock de Yobel: ${fmtWhen(DATA.robot.fecha)}.` : '');
     const list = $('#clist');
     if (!S.products.length) list.innerHTML = '<p class="empty">Todavía no hay productos.</p>';
     else {
@@ -999,8 +1030,8 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
       for (const p of items){
         const c = p.categoria || 'Sin categoría';
         if (c !== last){ html += `<h3 class="cgroup">${esc(c)}</h3>`; last = c; }
-        const vars = p.presentaciones.map(v => `<li><span class="web">${money(v.precio)}${v.kilo ? '/kg' : ''} web</span>${d != null ? ` → <span class="hoy">${money(priceToday(v, d))}${v.kilo ? ' el kilo' : ''}</span>` : ''} ${esc(v.texto)}</li>`).join('');
-        html += `<article class="crow"><div class="crow-main"><p class="cname">${esc(p.emoji)} ${esc(p.nombre)}</p><p class="cmeta">${p.actualizado ? 'Precio actualizado ' + esc(shortDate(p.actualizado)) : 'Sin fecha de actualización'}</p><ul class="cvars">${vars}</ul></div><button type="button" class="btn ghost small owner-only" data-edit="${esc(p.id)}">Editar</button></article>`;
+        const vars = p.presentaciones.map(v => `<li><span class="web">${money(v.precio)}${v.kilo ? '/kg' : ''} web</span>${d != null ? ` → <span class="hoy">${money(priceToday(v, d))}${v.kilo ? ' el kilo' : ''}</span>` : ''} ${esc(v.texto)}${stockTag(p, v, true)}</li>`).join('');
+        html += `<article class="crow"><div class="crow-main"><p class="cname">${esc(p.emoji)} ${esc(p.nombre)}</p><p class="cmeta">${p.actualizado ? 'Precio actualizado ' + esc(shortDate(p.actualizado)) : 'Sin fecha de actualización'}${p.ficha ? ' · Con ficha' : ''}${p.usos ? ' · Con usos' : ''}</p><ul class="cvars">${vars}</ul></div><button type="button" class="btn ghost small owner-only" data-edit="${esc(p.id)}">Editar</button></article>`;
       }
       list.innerHTML = items.length ? html : `<p class="empty">Ningún producto coincide con «${esc(S.cq)}».</p>`;
     }
@@ -1026,12 +1057,12 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
       <div class="tally">
         <span class="pill up">${inf.cambios.length === 1 ? '1 precio cambia' : inf.cambios.length + ' precios cambian'}</span>
         <span class="pill">${inf.nuevos.length === 1 ? '1 producto nuevo' : inf.nuevos.length + ' productos nuevos'}</span>
-        <span class="pill">${inf.eliminadas.length === 1 ? '1 ya no está en la web' : inf.eliminadas.length + ' ya no están en la web'}</span>
+        <span class="pill">${inf.eliminadas.length === 1 ? '1 no vino en el archivo' : inf.eliminadas.length + ' no vinieron en el archivo'}</span>
         ${inf.raros.length ? `<span class="pill alert">${inf.raros.length === 1 ? '1 con precio sospechoso' : inf.raros.length + ' con precio sospechoso'}</span>` : ''}
       </div>
       ${sec('Precios que cambian', inf.cambios.map(c => `${esc(c.nombre)}${c.texto ? ' · ' + esc(c.texto) : ''}: ${money(c.antes)} → <strong>${money(c.despues)}</strong>${c.kilo ? ' el kilo' : ''}`), true)}
       ${sec('Productos nuevos', inf.nuevos.map(esc))}
-      ${sec('Se quitan del armador', inf.eliminadas.map(x => esc(x.nombre) + (x.texto ? ' · ' + esc(x.texto) : '')))}
+      ${sec('No vinieron en el archivo: no se borran, quedan con «stock sin actualizar» (revísalos en Yobel)', inf.eliminadas.map(x => esc(x.nombre) + (x.texto ? ' · ' + esc(x.texto) : '')))}
       ${sec('No se cargaron por precio sospechoso (revísalos en la web)', inf.raros.map(x => esc(x.producto) + (x.texto ? ' · ' + esc(x.texto) : '') + ': $' + esc(x.precio)), true)}
       ${inf.piezas ? `<p class="hint" style="margin:0">${inf.piezas} productos descontinuados (con «V» delante del nombre) no se cargan.</p>` : ''}
       <div class="actions">
@@ -1045,7 +1076,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
   function openEditor(id){
     const p = id ? S.products.find(x => x.id === id) : null;
     const draft = p
-      ? { presentaciones: p.presentaciones.map(v => ({ texto: v.texto, precio: num(v.precio), kilo: !!v.kilo, ref: v.ref || null })) }
+      ? { presentaciones: p.presentaciones.map(v => ({ texto: v.texto, precio: num(v.precio), kilo: !!v.kilo, ref: v.ref || null, stock: v.stock })) }
       : { presentaciones: [{ texto: '', precio: '', kilo: false, ref: null }] };
     S.edit = { id: p ? p.id : null, draft };
     $('#ed-title').textContent = p ? 'Editar producto' : 'Nuevo producto';
@@ -1053,6 +1084,9 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
     $('#f-cat').value = p ? p.categoria : (S.cat || '');
     $('#f-emoji').value = p ? p.emoji : '🔹';
     $('#f-preg').value = p ? p.pregunta : '';
+    $('#f-pedido').checked = !!(p && p.bajo_pedido);
+    $('#f-ficha').value = p && p.ficha ? p.ficha : '';
+    $('#f-usos').value = p && p.usos ? p.usos : '';
     $('#ed-del').hidden = !p;
     $('#del-confirm').hidden = true;
     $('#ed-err').hidden = true;
@@ -1077,8 +1111,11 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
       categoria: $('#f-cat').value.trim(),
       emoji: $('#f-emoji').value.trim(),
       pregunta: $('#f-preg').value.trim(),
+      bajo_pedido: $('#f-pedido').checked,
+      ficha: $('#f-ficha').value.trim(),
+      usos: $('#f-usos').value.trim(),
       presentaciones: S.edit.draft.presentaciones
-        .map(v => { const o = { texto: String(v.texto || '').trim(), precio: parseNum(v.precio), kilo: !!v.kilo }; if (v.ref) o.ref = v.ref; return o; })
+        .map(v => { const o = { texto: String(v.texto || '').trim(), precio: parseNum(v.precio), kilo: !!v.kilo }; if (v.ref) o.ref = v.ref; if (v.stock != null && v.stock !== '') o.stock = v.stock; return o; })
         .filter(v => v.texto || isFinite(v.precio))
     };
   }
@@ -1115,7 +1152,8 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
     else {
       const p = S.products.find(x => x.id === id);
       if (!p) return;
-      S.sel.set(id, new Set(p.presentaciones.map((_, i) => i)));
+      const hay = p.presentaciones.map((_, i) => i).filter(i => !agotado(p, p.presentaciones[i]));
+      S.sel.set(id, new Set(hay.length ? hay : p.presentaciones.map((_, i) => i)));
     }
     stashUI();
     renderPicker(); renderComposer(); renderBar();
@@ -1126,18 +1164,28 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
     renderBar();
     if (m === 'msg') window.scrollTo(0, 0);
   }
+  // Suma 1 a cada producto del mensaje copiado (una vez por mensaje): el bot ofrece primero los más usados
+  function contarUso(){
+    if (!SB) return;
+    const ids = selEntries().map(e => e.p.id).sort();
+    const k = ids.join(',') + '|' + $('#msg').value;
+    if (!ids.length || k === S.contado) return;
+    S.contado = k;
+    fetch(SB + '/rest/v1/rpc/armador_usado', { method: 'POST', headers: { apikey: SBK, 'Content-Type': 'application/json' }, body: JSON.stringify({ p_ids: ids }) }).catch(() => {});
+  }
   async function copyMsg(){
     const ta = $('#msg');
     const text = ta.value;
     if (!text.trim() || !confirmed()) return;
     try {
       await navigator.clipboard.writeText(text);
-      toast('Mensaje copiado');
+      toast('Mensaje copiado'); contarUso();
     } catch (e){
       ta.focus(); ta.select();
       let ok = false;
       try { ok = document.execCommand('copy'); } catch (_){}
       toast(ok ? 'Mensaje copiado' : 'Texto seleccionado: cópialo con el menú del teléfono');
+      if (ok) contarUso();
     }
   }
   let shareT;
@@ -1361,7 +1409,11 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
   $('#ed-save').addEventListener('click', saveEdit);
   $('#ed-cancel').addEventListener('click', closeEditor);
   $('#ed-back').addEventListener('click', closeEditor);
-  $('#ed-del').addEventListener('click', () => { $('#del-confirm').hidden = false; });
+  $('#ed-del').addEventListener('click', () => {
+    const p = S.edit && S.products.find(x => x.id === S.edit.id);
+    $('#del-confirm span').textContent = '¿Eliminar este producto del armador? No se borra de la web.' + (p && (p.ficha || p.usos) ? ' Se pierden su ficha y sus usos.' : '');
+    $('#del-confirm').hidden = false;
+  });
   $('#del-no').addEventListener('click', () => { $('#del-confirm').hidden = true; });
   $('#del-yes').addEventListener('click', () => {
     if (!S.edit || !S.edit.id) return;
@@ -1415,11 +1467,11 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
     S.owner = !!ghToken(); renderOwner();
     // El catálogo de la última vez abre al instante; el descuento siempre llega fresco (no se guarda: debe ser el de hoy)
     const LS_CAT = 'barquero-armador-catalogo';
-    try { const c = JSON.parse(localStorage.getItem(LS_CAT) || 'null'); if (c && c.datos && c.datos.productos){ applyData(c.datos); S.dbVer = c.ver || null; restoreUI(); S.loading = false; renderAll(); } } catch (_){}
+    try { const c = JSON.parse(localStorage.getItem(LS_CAT) || 'null'); if (c && c.datos && c.datos.productos){ applyData(c.datos); S.dbVer = c.ver2 || null; restoreUI(); S.loading = false; renderAll(); } } catch (_){}
     S.tasasListas = false;  // mientras llegan, no se avisa «las tasas no se actualizaron hoy»
     (async () => {
       const [db] = await Promise.all([leerDb(), loadTasas()]);
-      if (db && db.datos){ applyData(db.datos); S.dbVer = db.actualizado_en; restoreUI(); try { localStorage.setItem(LS_CAT, JSON.stringify({ datos: db.datos, ver: db.actualizado_en })); } catch (_){} }
+      if (db && db.datos){ applyData(db.datos); S.dbVer = db.editado_en || db.actualizado_en; restoreUI(); try { localStorage.setItem(LS_CAT, JSON.stringify({ datos: db.datos, ver2: S.dbVer })); } catch (_){} }
       else try {
         // mientras nadie haya guardado en la base de datos, se lee el data.json de siempre
         const r = await fetch(DATOS + 'data.json?v=' + Date.now(), { cache: 'no-store' });
