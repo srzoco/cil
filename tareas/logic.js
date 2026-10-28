@@ -545,6 +545,29 @@
     });
     return out;
   }
+  // Igual que _resincronizar: si cambia el local o quién puede hacerla, lo pendiente de hoy en adelante pasa al local
+  // nuevo y, si quien la tenía ya no puede, se le da a otra persona que sí (o queda sin asignar). Devuelve [{ ids, de, quien }].
+  function resincronizar(db, p, hoy, ahora) {
+    var grupos = {}, out = [];
+    db.asignaciones.forEach(function (a) {
+      if (a.plantilla_id !== p.id || a.estado !== 'pendiente' || a.fecha < hoy) return;
+      a.local_id = p.local_id;
+      if (!a.asignado_a) return;
+      var pe = persona(db, a.asignado_a);
+      if (pe && localDePersona(db, pe) === p.local_id && puedeSegun(p, pe)) return;
+      var k = a.fecha + '|' + a.puesto + '|' + a.asignado_a;
+      (grupos[k] = grupos[k] || []).push(a);
+    });
+    Object.keys(grupos).sort().forEach(function (k) {
+      var as = grupos[k], f = as[0].fecha, de = as[0].asignado_a;
+      var otros = db.asignaciones.filter(function (y) { return y.plantilla_id === p.id && y.fecha === f && y.puesto !== as[0].puesto && y.asignado_a; }).map(function (y) { return y.asignado_a; });
+      as.forEach(function (a) { a.asignado_a = null; });  // que su propia carga no cuente al elegir
+      var quien = elegirPersona(db, p, f, ahora, otros);
+      as.forEach(function (a) { a.asignado_a = quien; a.asignado_original = quien; a.motivo = quien ? 'rotacion' : 'pool'; });
+      out.push({ ids: as.map(function (a) { return a.id; }), de: de, quien: quien });
+    });
+    return out;
+  }
   function personasDe(p) { var n = Number(p && p.personas) || 1; return Math.max(1, Math.min(5, n)); }
   // Los otros puestos de la misma tarea (mismo día y misma vez)
   function companerosDe(db, a) {
@@ -829,7 +852,7 @@
     localDe: localDe, localPrincipal: localPrincipal, labDe: labDe, laborable: laborable, laborableFn: laborableFn, trabaja: trabaja, libreDe: libreDe, especial: especial, localDePersona: localDePersona, frecuenciaTxt: frecuenciaTxt, proximas: proximas, siguienteLaborable: siguienteLaborable,
     seFue: seFue, anteriorLaborable: anteriorLaborable, carga: carga, capacidad: capacidad, cabeEn: cabeEn, estadoAsistencia: estadoAsistencia, estaPresente: estaPresente, asistenciaDe: asistenciaDe,
     esEmpleadoActivo: esEmpleadoActivo, plantillaDe: plantillaDe, puedeHacer: puedeHacer, puedeRescatar: puedeRescatar,
-    elegirPersona: elegirPersona, puedeSegun: puedeSegun, generarDia: generarDia, repartirSinDueno: repartirSinDueno, repartoAutomatico: repartoAutomatico, almorzandoGrupo: almorzandoGrupo, balance: balance, sobrecargados: sobrecargados, sugerenciasBalance: sugerenciasBalance, factorDia: factorDia, personasDe: personasDe, statsConsumible: statsConsumible, receta: receta, companerosDe: companerosDe, tareasDe: tareasDe, delPool: delPool,
+    elegirPersona: elegirPersona, puedeSegun: puedeSegun, generarDia: generarDia, repartirSinDueno: repartirSinDueno, resincronizar: resincronizar, repartoAutomatico: repartoAutomatico, almorzandoGrupo: almorzandoGrupo, balance: balance, sobrecargados: sobrecargados, sugerenciasBalance: sugerenciasBalance, factorDia: factorDia, personasDe: personasDe, statsConsumible: statsConsumible, receta: receta, companerosDe: companerosDe, tareasDe: tareasDe, delPool: delPool,
     sugerirReasignacion: sugerirReasignacion, reporteDia: reporteDia, textoReporte: textoReporte,
     historial: historial, cargaTipica: cargaTipica
   };

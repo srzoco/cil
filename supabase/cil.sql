@@ -1281,14 +1281,77 @@ begin
     -- pausada: se quita lo pendiente de hoy en adelante (lo atrasado sigue debiéndose)
     delete from asignaciones where plantilla_id = new.id and estado = 'pendiente' and fecha >= public.hoy();
   else
-    update asignaciones set titulo = new.titulo, detalle = new.detalle, minutos = new.minutos, registro = new.registro, equipos = new.equipos
+    update asignaciones set titulo = new.titulo, detalle = new.detalle, minutos = new.minutos, registro = new.registro, equipos = new.equipos, consumible_id = new.consumible_id
     where plantilla_id = new.id and estado = 'pendiente' and fecha >= public.hoy() and momento < 50;
+    -- si solo cambiaron las horas (mismas veces al día), también aplican hoy
+    if greatest(1, jsonb_array_length(new.momentos)) = greatest(1, jsonb_array_length(old.momentos)) and new.momentos is distinct from old.momentos then
+      update asignaciones set antes = nullif(new.momentos -> momento ->> 'antes', '')::time, desde = nullif(new.momentos -> momento ->> 'desde', '')::time,
+        momento_nombre = nullif(trim(new.momentos -> momento ->> 'nombre'), '')
+      where plantilla_id = new.id and estado = 'pendiente' and fecha >= public.hoy() and momento < 50;
+    end if;
   end if;
   return new;
 end $$;
 drop trigger if exists plantillas_sync on public.plantillas;
 create trigger plantillas_sync before update on public.plantillas
   for each row execute function public._sync_plantilla();
+-- Si cambia el local o quién puede hacerla: lo pendiente de hoy en adelante pasa al local nuevo, y si quien la tenía
+-- ya no puede hacerla, se le da a otra persona que sí (o queda sin asignar si no hay nadie). Igual que resincronizar en logic.js.
+create or replace function public._resincronizar(p public.plantillas) returns int
+language plpgsql security definer set search_path = public as $$
+declare u record; quien uuid; n int := 0;
+begin
+  update asignaciones set local_id = p.local_id
+  where plantilla_id = p.id and estado = 'pendiente' and fecha >= public.hoy() and local_id is distinct from p.local_id;
+  for u in
+    select a.fecha, a.puesto, a.asignado_a from asignaciones a
+    where a.plantilla_id = p.id and a.estado = 'pendiente' and a.fecha >= public.hoy() and a.asignado_a is not null
+      and not exists (select 1 from personas pe where pe.id = a.asignado_a and pe.local_id = p.local_id
+                      and case when cardinality(p.solo_pueden) > 0 then pe.id = any (p.solo_pueden)
+                               when cardinality(p.grupos) > 0 then pe.grupos && p.grupos
+                               else pe.rota end)
+    group by 1, 2, 3 order by 1, 2
+  loop
+    quien := public._elegir_persona(p, u.fecha,
+      coalesce((select array_agg(distinct y.asignado_a) from asignaciones y where y.plantilla_id = p.id and y.fecha = u.fecha and y.puesto <> u.puesto and y.asignado_a is not null), '{}'));
+    with c as (update asignaciones set asignado_a = quien, asignado_original = quien, motivo = case when quien is null then 'pool' else 'rotacion' end
+               where plantilla_id = p.id and fecha = u.fecha and puesto = u.puesto and estado = 'pendiente' and asignado_a = u.asignado_a returning id)
+    insert into tareas_eventos (asignacion_id, tipo, de, a, texto) select id, 'reasignada', u.asignado_a, quien, 'Cambió la tarea' from c;
+    n := n + 1;
+  end loop;
+  return n;
+end $$;
+create or replace function public._resincronizar_trg() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if new.activa and (new.local_id is distinct from old.local_id or new.grupos is distinct from old.grupos or new.solo_pueden is distinct from old.solo_pueden) then
+    perform public._resincronizar(new);
+  end if;
+  return null;
+end $$;
+drop trigger if exists plantillas_resincronizar on public.plantillas;
+create trigger plantillas_resincronizar after update on public.plantillas
+  for each row execute function public._resincronizar_trg();
+-- Si a una persona le cambian los grupos o la sacan de las tareas «para cualquiera», lo pendiente que ya no puede
+-- hacer pasa a otra persona que sí (el cambio de local lo maneja la app: lo deja sin asignar para que gerencia reparta).
+create or replace function public._resincronizar_persona_trg() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare p public.plantillas;
+begin
+  if new.local_id is not distinct from old.local_id and (new.grupos is distinct from old.grupos or new.rota is distinct from old.rota) then
+    for p in select pl.* from plantillas pl where pl.activa and exists (select 1 from asignaciones a where a.plantilla_id = pl.id and a.asignado_a = new.id and a.estado = 'pendiente' and a.fecha >= public.hoy()) loop
+      perform public._resincronizar(p);
+    end loop;
+  end if;
+  return null;
+end $$;
+drop trigger if exists personas_resincronizar on public.personas;
+create trigger personas_resincronizar after update on public.personas
+  for each row execute function public._resincronizar_persona_trg();
+-- Arreglo de lo que ya quedó desfasado (tareas cuyo local se cambió antes de esta regla). Se puede correr siempre.
+select public._resincronizar(p) from public.plantillas p
+where p.activa and exists (select 1 from public.asignaciones a where a.plantilla_id = p.id and a.estado = 'pendiente'
+                           and a.fecha >= public.hoy() and a.local_id is distinct from p.local_id);
 
 -- ¿Estaba fuera (marcó «Salí a despachar») en ese momento?
 create or replace function public._fuera_en(p_persona uuid, p_ts timestamptz) returns boolean

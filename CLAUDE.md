@@ -39,6 +39,7 @@ App web unificada **CIL** en GitHub Pages: https://srzoco.github.io/cil/
 - Rescate urgente a mitad de la ventana. "Salí a despachar"/"Volví" es opcional (`usar_salidas`), y sus reglas dependientes se apagan con él.
 - "Llegué" solo desde el Wi-Fi del local (IP registrada). **No negociable**: `solo_en_tienda` ya no se puede apagar (restricción en SQL), un local sin Wi-Fi registrado no deja marcar, y «Hecho» exige «Llegué». Única excepción: gerencia marca «hoy no hay Wi-Fi» en un local. **No rastrear ubicaciones.** Desde afuera sale un error genérico, sin explicar por qué.
 - Consumibles (Equipo → Consumibles): inventario por local; el empleado pide con un botón sin ver cantidades; entrega gerencia o el encargado (`entrega_consumibles`), anotando quién dio y quién recibió. El café va en una tarea con `consumible_id`: pregunta tazas y descuenta según la receta en vasitos (solo gerencia la edita). Avisos: pedido al momento, inventario bajo 1 vez al día, consumo alto los lunes (+30 % sobre el promedio de 4 semanas).
+- Cambios que aplican a lo ya creado de hoy: si gerencia cambia el local, los grupos o las personas de una tarea (o los grupos/«para cualquiera» de una persona), lo pendiente pasa a quien sí puede (`_resincronizar`, `resincronizar` en logic.js); las horas también, si no cambian las veces al día. Al guardar a una persona se reparte lo de hoy que salió sin dueño (`repartir_sin_dueno`).
 - Quien no tiene el acceso `tareas` (por ejemplo Verónica, de contenido, que trabaja en línea) no marca "Llegué" ni entra en la rotación.
 
 ## Seguridad

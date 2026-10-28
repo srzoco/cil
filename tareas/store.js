@@ -654,14 +654,30 @@
     var hoy = L.hoyISO();
     var fila = tabla === 'ajustes' ? this.db.ajustes : this.db[tabla].filter(function (r) { return r.id === id; })[0];
     if (!fila) return Promise.resolve(null);
-    var estabaActiva = !!fila.activa;
+    var estabaActiva = !!fila.activa, quienAntes = JSON.stringify([fila.local_id, fila.grupos || [], fila.solo_pueden || []]), self = this;
+    var momentosAntes = JSON.parse(JSON.stringify(fila.momentos || [])), localAntes = fila.local_id, gruposAntes = JSON.stringify([fila.grupos || [], fila.rota]);
     Object.assign(fila, patch);
     if (tabla === 'plantillas') {
       if (estabaActiva && !fila.activa) {
         this.db.asignaciones = this.db.asignaciones.filter(function (a) { return !(a.plantilla_id === id && a.estado === 'pendiente' && a.fecha >= hoy); });
       } else this.db.asignaciones.forEach(function (a) {
-        if (a.plantilla_id === id && a.estado === 'pendiente' && a.fecha >= hoy && (a.momento || 0) < 50) { a.titulo = fila.titulo; a.detalle = fila.detalle; a.minutos = fila.minutos; a.registro = !!fila.registro; a.equipos = (fila.equipos || []).slice(); }
+        if (a.plantilla_id === id && a.estado === 'pendiente' && a.fecha >= hoy && (a.momento || 0) < 50) { a.titulo = fila.titulo; a.detalle = fila.detalle; a.minutos = fila.minutos; a.registro = !!fila.registro; a.equipos = (fila.equipos || []).slice(); a.consumible_id = fila.consumible_id || null; }
       });
+      if (Math.max(1, (fila.momentos || []).length) === Math.max(1, momentosAntes.length) && JSON.stringify(fila.momentos || []) !== JSON.stringify(momentosAntes)) {
+        this.db.asignaciones.forEach(function (a) {
+          if (a.plantilla_id !== id || a.estado !== 'pendiente' || a.fecha < hoy || (a.momento || 0) >= 50) return;
+          var m = (fila.momentos || [])[a.momento || 0];
+          a.antes = (m && m.antes) || null; a.desde = (m && m.desde) || null; a.momento_nombre = (m && String(m.nombre || '').trim()) || null;
+        });
+      }
+      if (fila.activa && quienAntes !== JSON.stringify([fila.local_id, fila.grupos || [], fila.solo_pueden || []])) {
+        L.resincronizar(this.db, fila, hoy).forEach(function (u) { u.ids.forEach(function (aid) { self._evento(aid, 'reasignada', u.de, u.quien, 'Cambió la tarea'); }); });
+      }
+    }
+    if (tabla === 'personas' && localAntes === fila.local_id && gruposAntes !== JSON.stringify([fila.grupos || [], fila.rota])) {
+      var db = this.db;
+      db.plantillas.filter(function (p) { return p.activa && db.asignaciones.some(function (a) { return a.plantilla_id === p.id && a.asignado_a === id && a.estado === 'pendiente' && a.fecha >= hoy; }); })
+        .forEach(function (p) { L.resincronizar(db, p, hoy).forEach(function (u) { u.ids.forEach(function (aid) { self._evento(aid, 'reasignada', u.de, u.quien, 'Cambió la tarea'); }); }); });
     }
     this._guardar();
     return Promise.resolve(copia(fila));
