@@ -2894,6 +2894,7 @@ insert into public.bot_config (clave, valor, descripcion) values
 ('robot_dias', 'lunes,martes,miercoles,jueves,viernes', 'Días que corre el robot. Temporada navideña: agregar sabado.'),
 ('verificar_robot', 'no', 'si = el bot no da precios si el robot se saltó un horario (activar cuando el robot esté instalado).'),
 ('robot_token_hash', '', 'Huella del token del robot (se pone con robot_nuevo_token; no editar a mano).'),
+('robot_forzar', 'no', 'si = aceptar UNA subida del robot aunque cambien muchos precios o lleguen pocos productos (vuelve sola a no).'),
 ('estilo',
 'Trata SIEMPRE de usted ("tiene", "desea", "se encuentra"). Nunca tutees. Cálido y cercano, nunca robótico ni genérico. Muchos clientes son personas mayores que prefieren trato humano: sé claro y paciente.
 Saluda solo al inicio de la conversación, según la hora, y con "Sr." o "Sra." + nombre únicamente si el género del nombre es claro; si no, sin Sr./Sra. No vuelvas a saludar en cada mensaje.
@@ -3186,7 +3187,7 @@ declare
   hash text := _bot_cfg('robot_token_hash', '');
   fila armador_datos%rowtype; prods jsonb; p jsonb; v jsonb; nuevas_pres jsonb; nuevos_prods jsonb := '[]';
   mapa jsonb := '{}'; f jsonb; ref text; precio_nuevo numeric; precio_viejo numeric; stock_nuevo numeric;
-  n_filas int; n_antes int; vistos text[] := '{}';
+  n_filas int; n_antes int; vistos text[] := '{}'; forzar boolean := _bot_cfg('robot_forzar', 'no') = 'si';
   cambios int := 0; grandes text[] := '{}'; pausados text[] := '{}'; nuevos text[] := '{}';
   bajo boolean;
 begin
@@ -3196,6 +3197,7 @@ begin
   if jsonb_typeof(p_filas) <> 'array' then raise exception 'datos no válidos'; end if;
   n_filas := jsonb_array_length(p_filas);
   if n_filas < 1 or n_filas > 3000 then raise exception 'cantidad de filas no válida'; end if;
+  if octet_length(p_filas::text) > 1500000 then raise exception 'datos demasiado grandes'; end if;
 
   -- índice ref → {precio, stock}, validando cada fila
   for f in select value from jsonb_array_elements(p_filas) loop
@@ -3205,17 +3207,22 @@ begin
       precio_nuevo := (f->>'precio')::numeric; stock_nuevo := coalesce(nullif(f->>'stock', '')::numeric, 0);
     exception when others then continue;
     end;
-    continue when precio_nuevo is null or precio_nuevo < 0 or precio_nuevo > 100000 or stock_nuevo < -100000 or stock_nuevo > 1000000;
+    continue when precio_nuevo is null or precio_nuevo <= 0 or precio_nuevo > 100000 or stock_nuevo < -100000 or stock_nuevo > 1000000;
     mapa := mapa || jsonb_build_object(ref, jsonb_build_object('precio', precio_nuevo, 'stock', stock_nuevo, 'producto', left(f->>'producto', 200)));
   end loop;
 
   select * into fila from armador_datos where id = 1 for update;
   if fila.datos is null then raise exception 'el armador no tiene catálogo en la base de datos'; end if;
 
+  -- Freno: no más de una subida cada 3 minutos
+  if (fila.datos->'robot'->>'fecha')::timestamptz > now() - interval '3 minutes' then
+    return json_build_object('ok', false, 'error', 'muy_seguido');
+  end if;
+
   -- Freno: si llegan muchas menos filas que en la última subida, puede ser una exportación rota
   n_antes := nullif(fila.datos->'robot'->>'filas', '')::int;
-  if n_antes is not null and (select count(*) from jsonb_object_keys(mapa)) < n_antes * 0.5 then
-    perform bot_aviso('robot_pocas_filas', format('El robot recibió solo %s productos de Yobel (antes %s). No se aplicó: revisa la exportación.', (select count(*) from jsonb_object_keys(mapa)), n_antes), true);
+  if not forzar and n_antes is not null and (select count(*) from jsonb_object_keys(mapa)) < n_antes * 0.5 then
+    perform bot_aviso('robot_pocas_filas', format('El robot recibió solo %s productos de Yobel (antes %s). No se aplicó: revisa la exportación. Si es correcto, pon robot_forzar = si en bot_config.', (select count(*) from jsonb_object_keys(mapa)), n_antes), true);
     return json_build_object('ok', false, 'error', 'pocas_filas');
   end if;
 
@@ -3248,6 +3255,15 @@ begin
     prods := prods || jsonb_build_array(jsonb_set(p, '{presentaciones}', nuevas_pres));
   end loop;
 
+  -- Freno: si cambia más de 30% el precio de más de la cuarta parte de lo que coincide, no se aplica
+  -- (exportación con otra moneda o formato, o alguien usando el token)
+  if not forzar and coalesce(array_length(vistos, 1), 0) >= 10
+     and coalesce(array_length(grandes, 1), 0) > array_length(vistos, 1) * 0.25 then
+    perform bot_aviso('robot_cambio_masivo', format('El robot vio cambios de más de 30%% en %s de %s precios. No se aplicó nada. Ej.: %s. Si es correcto, pon robot_forzar = si en bot_config.',
+      array_length(grandes, 1), array_length(vistos, 1), array_to_string(grandes[1:3], '; ')), true);
+    return json_build_object('ok', false, 'error', 'cambio_masivo');
+  end if;
+
   -- en Yobel pero no en el armador
   select coalesce(array_agg(distinct mapa->k->>'producto'), '{}') into nuevos
     from jsonb_object_keys(mapa) k where not (k = any(vistos));
@@ -3257,6 +3273,7 @@ begin
                   jsonb_build_object('fecha', now(), 'filas', (select count(*) from jsonb_object_keys(mapa)))),
          actualizado_en = clock_timestamp()
    where id = 1;
+  if forzar then update bot_config set valor = 'no', actualizado = now() where clave = 'robot_forzar'; end if;
 
   if array_length(grandes, 1) > 0 then
     perform bot_aviso('robot_precio_grande', 'Precios que cambiaron más de 30%: ' || array_to_string(grandes[1:10], '; ') || case when array_length(grandes, 1) > 10 then '…' else '' end, false);
@@ -3279,7 +3296,8 @@ language plpgsql security definer set search_path = public as $$
 declare hash text := _bot_cfg('robot_token_hash', '');
 begin
   if hash = '' or p_token is null or encode(sha256(convert_to(p_token, 'UTF8')), 'hex') <> hash then raise exception 'no autorizado'; end if;
-  -- un aviso por cada tipo de problema al día (código, clave, Yobel caído…)
+  -- un aviso por cada tipo de problema al día (código, clave, Yobel caído…), máximo 5 tipos al día
+  if (select count(*) from bot_avisos where tipo like 'robot_error:%' and fecha = hoy()) >= 5 then return; end if;
   perform bot_aviso('robot_error:' || left(md5(left(coalesce(p_motivo, ''), 40)), 8), 'Robot de Yobel: ' || left(coalesce(p_motivo, 'error desconocido'), 300), true);
 end $$;
 
