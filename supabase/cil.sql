@@ -2293,21 +2293,64 @@ grant select on public.armador_datos to anon, authenticated;
 drop policy if exists armador_ver on public.armador_datos;
 create policy armador_ver on public.armador_datos for select to anon, authenticated using (true);
 
--- Guarda el catálogo. p_antes = la versión que se tenía al abrir (si alguien guardó en medio, avisa).
+-- Versión de los cambios de gerencia (el robot actualiza actualizado_en, pero no esta: así no choca con el armador abierto)
+alter table public.armador_datos add column if not exists editado_en timestamptz;
+update public.armador_datos set editado_en = actualizado_en where editado_en is null and datos is not null;
+
+-- Guarda el catálogo. p_antes = la versión que se tenía al abrir (si alguien de gerencia guardó en medio, avisa).
+-- Lo que pone el robot de Yobel manda: el stock se toma siempre de la base de datos, y los precios también
+-- si el robot subió después de abrir el armador. Así guardar una ficha no devuelve precios o stock viejos.
 create or replace function public.guardar_armador(p_datos jsonb, p_antes timestamptz default null) returns timestamptz
 language plpgsql security definer set search_path = public as $$
-declare r public.armador_datos; ahora timestamptz := clock_timestamp();
+declare r public.armador_datos; ahora timestamptz := clock_timestamp(); mapa jsonb; robot_nuevo boolean;
 begin
   if not public.es_admin() then raise exception 'Solo gerencia puede cambiar productos y precios.'; end if;
   if p_datos is null or jsonb_typeof(p_datos -> 'productos') <> 'array' then raise exception 'Datos no válidos.'; end if;
   select * into r from armador_datos where id = 1 for update;
-  if r.id is not null and r.datos is not null and p_antes is distinct from r.actualizado_en then
+  if r.id is not null and r.datos is not null and p_antes is distinct from coalesce(r.editado_en, r.actualizado_en) then
     raise exception 'Alguien de gerencia guardó un cambio al mismo tiempo. Recarga la página e intenta de nuevo.';
   end if;
-  insert into armador_datos (id, datos, actualizado_en, actualizado_por) values (1, p_datos, ahora, auth.uid())
-  on conflict (id) do update set datos = excluded.datos, actualizado_en = excluded.actualizado_en, actualizado_por = excluded.actualizado_por;
+  if r.datos is not null and r.datos ? 'robot' then
+    robot_nuevo := (r.datos->'robot'->>'fecha') is distinct from (p_datos->'robot'->>'fecha');
+    select coalesce(jsonb_object_agg(v->>'ref', v), '{}') into mapa
+      from jsonb_array_elements(r.datos->'productos') p, jsonb_array_elements(p->'presentaciones') v
+     where coalesce(v->>'ref', '') <> '';
+    select coalesce(jsonb_agg(case when jsonb_typeof(p->'presentaciones') = 'array' then jsonb_set(p, '{presentaciones}', (
+             select coalesce(jsonb_agg(case when mapa ? (v->>'ref')
+                      then (v - 'stock') || jsonb_strip_nulls(jsonb_build_object('stock', mapa->(v->>'ref')->'stock'))
+                           || case when robot_nuevo then jsonb_strip_nulls(jsonb_build_object('precio', mapa->(v->>'ref')->'precio')) else '{}' end
+                      else v end order by o2), '[]')
+               from jsonb_array_elements(p->'presentaciones') with ordinality b(v, o2))) else p end order by o), '[]')
+      into mapa
+      from jsonb_array_elements(p_datos->'productos') with ordinality a(p, o);
+    p_datos := jsonb_set(p_datos, '{productos}', mapa) || jsonb_build_object('robot', r.datos->'robot');
+  end if;
+  insert into armador_datos (id, datos, actualizado_en, actualizado_por, editado_en) values (1, p_datos, ahora, auth.uid(), ahora)
+  on conflict (id) do update set datos = excluded.datos, actualizado_en = excluded.actualizado_en,
+    actualizado_por = excluded.actualizado_por, editado_en = excluded.editado_en;
   return ahora;
 end $$;
+
+-- Contador de uso: cuántas veces el equipo copió un mensaje con cada producto (el bot ofrece primero los más usados).
+-- Tabla aparte para no chocar con los guardados del armador ni con el robot.
+create table if not exists public.armador_usos (
+  id      text primary key,
+  veces   int not null default 0,
+  ultimo  timestamptz not null default now()
+);
+alter table public.armador_usos enable row level security;
+revoke all on public.armador_usos from anon, authenticated;
+-- Una vez por producto cada 10 s (el armador no pide sesión: así no se puede inflar el contador a golpes)
+create or replace function public.armador_usado(p_ids text[]) returns void
+language sql security definer set search_path = public as $$
+  insert into armador_usos (id, veces, ultimo)
+  select distinct x, 1, now() from unnest(p_ids[1:12]) x
+   where x ~ '^[A-Za-z0-9_-]{1,80}$'
+     and exists (select 1 from armador_datos d, jsonb_array_elements(d.datos->'productos') p where d.id = 1 and p->>'id' = x)
+  on conflict (id) do update set veces = armador_usos.veces + 1, ultimo = now()
+   where armador_usos.ultimo < now() - interval '10 seconds';
+$$;
+grant execute on function public.armador_usado(text[]) to anon, authenticated;
 
 -- Gerencia fija el descuento de hoy para todo el equipo (null = volver al automático)
 create or replace function public.fijar_descuento(p_valor numeric) returns void
@@ -3203,7 +3246,7 @@ begin
     with prods as (
       select p, ord, public.bot_norm(p->>'nombre') as nom,
              coalesce((p->>'bajo_pedido')::boolean, false) as bajo_pedido,
-             coalesce(nullif(p->>'veces_usado', '')::numeric, 0) as usos
+             coalesce((select u.veces from armador_usos u where u.id = p->>'id'), nullif(p->>'veces_usado', '')::numeric, 0) as usos
       from jsonb_array_elements(fila.datos->'productos') with ordinality as x(p, ord)
     ), cand as (
       select pr.*, (select bool_and(position(w in pr.nom) > 0) from unnest(palabras) w) as por_nombre from prods pr
@@ -3293,8 +3336,8 @@ declare
   fila armador_datos%rowtype; prods jsonb; p jsonb; v jsonb; nuevas_pres jsonb; nuevos_prods jsonb := '[]';
   mapa jsonb := '{}'; f jsonb; ref text; precio_nuevo numeric; precio_viejo numeric; stock_nuevo numeric;
   n_filas int; n_antes int; vistos text[] := '{}'; forzar boolean := _bot_cfg('robot_forzar', 'no') = 'si';
-  cambios int := 0; grandes text[] := '{}'; pausados text[] := '{}'; nuevos text[] := '{}';
-  bajo boolean;
+  cambios int := 0; grandes text[] := '{}'; pausados text[] := '{}'; nuevos text[] := '{}'; huerfanas text[] := '{}';
+  bajo boolean; con_ref boolean; alguno boolean;
 begin
   if hash = '' or p_token is null or encode(sha256(convert_to(p_token, 'UTF8')), 'hex') <> hash then
     raise exception 'no autorizado';
@@ -3335,9 +3378,12 @@ begin
   for p in select value from jsonb_array_elements(fila.datos->'productos') loop
     bajo := coalesce((p->>'bajo_pedido')::boolean, false);
     nuevas_pres := '[]';
+    con_ref := false; alguno := false;
     for v in select value from jsonb_array_elements(p->'presentaciones') loop
       ref := v->>'ref';
+      if ref is not null then con_ref := true; end if;
       if ref is not null and mapa ? ref then
+        alguno := true;
         vistos := vistos || ref;
         precio_viejo := nullif(v->>'precio', '')::numeric;
         precio_nuevo := (mapa->ref->>'precio')::numeric;
@@ -3347,7 +3393,7 @@ begin
             grandes := grandes || format('%s: $%s → $%s', coalesce(nullif(trim(p->>'nombre'), ''), ref), trim_scale(precio_viejo), trim_scale(precio_nuevo));
           end if;
         end if;
-        v := v || jsonb_build_object('precio', precio_nuevo, 'stock', (mapa->ref->>'stock')::numeric);
+        v := (v - 'sin_actualizar') || jsonb_build_object('precio', precio_nuevo, 'stock', (mapa->ref->>'stock')::numeric);
       elsif ref is not null then
         -- no vino en la exportación (pausado o eliminado en Yobel)
         if not bajo and coalesce(nullif(v->>'stock', '')::numeric, 1) > 0 then
@@ -3357,6 +3403,10 @@ begin
       end if;
       nuevas_pres := nuevas_pres || jsonb_build_array(v);
     end loop;
+    -- ninguna de sus presentaciones vino y tiene ficha o usos: quizá cambió de nombre en Yobel
+    if con_ref and not alguno and not bajo and (coalesce(trim(p->>'ficha'), '') <> '' or coalesce(trim(p->>'usos'), '') <> '') then
+      huerfanas := huerfanas || coalesce(nullif(trim(p->>'nombre'), ''), p->>'id');
+    end if;
     prods := prods || jsonb_build_array(jsonb_set(p, '{presentaciones}', nuevas_pres));
   end loop;
 
@@ -3376,6 +3426,7 @@ begin
   update armador_datos
      set datos = jsonb_set(jsonb_set(datos, '{productos}', prods), '{robot}',
                   jsonb_build_object('fecha', now(), 'filas', (select count(*) from jsonb_object_keys(mapa)))),
+         editado_en = coalesce(editado_en, actualizado_en),   -- la versión de gerencia no cambia
          actualizado_en = clock_timestamp()
    where id = 1;
   if forzar then update bot_config set valor = 'no', actualizado = now() where clave = 'robot_forzar'; end if;
@@ -3385,6 +3436,10 @@ begin
   end if;
   if array_length(pausados, 1) > 0 then
     perform bot_aviso('robot_pausados', 'Ya no están en Yobel (el bot dejó de ofrecerlos): ' || array_to_string((select array_agg(distinct x) from unnest(pausados) x)[1:15], ', '), false);
+  end if;
+  if array_length(huerfanas, 1) > 0 then
+    perform bot_aviso('robot_ficha', 'Ya no están en Yobel y tienen ficha o usos: ' || array_to_string(huerfanas[1:10], ', ')
+      || '. Si cambiaron de nombre en Yobel, copia la ficha al producto nuevo en el armador.', false);
   end if;
   if array_length(nuevos, 1) > 0 then
     perform bot_aviso('robot_nuevos', 'Productos en Yobel que no están en el armador (agrégalos para que el bot los ofrezca): ' || array_to_string(nuevos[1:15], ', ') || case when array_length(nuevos, 1) > 15 then '…' else '' end, false);
