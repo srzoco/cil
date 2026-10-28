@@ -658,3 +658,9 @@ html.marco-fijo .desliza:has(~ .tabs) .contenido { padding-bottom: 28px; }
 .bloque-head > a, .bloque-head .ver-mas { white-space: nowrap; flex: none; }
 .asis-verif { font-size: .76rem; color: var(--muted); font-weight: 500; }
 .asis .pill { white-space: nowrap; }
+.temp-res { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid var(--line); }
+.temp-res:first-of-type { border-top: 0; }
+.temp-res > span:first-child { font-weight: 600; min-width: 84px; }
+.temp-res .pill { margin-left: auto; }
+.eq-local { display: flex; align-items: center; gap: 6px; font-size: .84rem; color: var(--muted); white-space: nowrap; }
+.eq-local select { flex: 1; min-width: 0; font: inherit; padding: 4px 8px; border-radius: 8px; border: 1.5px solid var(--line); background: var(--card); color: var(--ink); }

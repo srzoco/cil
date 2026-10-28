@@ -1668,26 +1668,25 @@
     fs.querySelector('.lectura-aviso').hidden = !fuera;
   }
   // Hoy: una cuadrícula por local (equipos × veces del día)
+  // En Hoy: resumen corto por cada vez del día; el detalle está en Historial de temperaturas. En rojo lo fuera de rango o lo que no se tomó.
   function bloqueTemperaturas(localId) {
     var eqs = equiposLocal(localId).filter(function (e) { return e.activo !== false; });
     if (!eqs.length) return '';
     var tareas = db().asignaciones.filter(function (a) { return a.registro && a.fecha === S.hoy && (!localId || a.local_id === localId); })
       .sort(function (x, y) { return (x.momento || 0) - (y.momento || 0); });
     if (!tareas.length) return '';
-    var fuera = 0;
-    var filas = eqs.map(function (e) {
-      return '<tr><th>' + esc(e.nombre) + '</th>' + tareas.map(function (a) {
-        var x = lecturasDe(a.id).filter(function (l) { return l.equipo_id === e.id; })[0];
-        if (x && x.fuera_rango) fuera++;
-        var cls = !x ? (L.estadoHora(a, new Date()) === 'vencida' ? 'vencida' : '') : x.fuera_rango ? 'fuera' : x.estado !== 'normal' ? 'otro' : 'ok';
-        return '<td class="' + cls + '"' + (x && x.nota ? ' title="' + esc(x.nota) + '"' : '') + '>' + esc(x ? tempCorto(x) : (cls === 'vencida' ? 'no se tomó' : '—')) + '</td>';
-      }).join('') + '</tr>';
+    var malo = false, ahora = new Date();
+    var filas = tareas.map(function (a) {
+      var del = L.equiposDe(db(), a.local_id, a), ls = lecturasDe(a.id), hechas = del.filter(function (e) { return ls.some(function (l) { return l.equipo_id === e.id; }); }).length;
+      var fuera = ls.filter(function (l) { return l.fuera_rango; }).length, vencida = hechas < del.length && L.estadoHora(a, ahora) === 'vencida';
+      if (fuera || vencida) malo = true;
+      var estado = fuera ? '<span class="pill corregir">' + plural(fuera, 'fuera de rango', 'fuera de rango') + '</span>'
+        : vencida ? '<span class="pill corregir">' + (hechas ? 'faltan ' + (del.length - hechas) : 'no se tomó') + '</span>'
+        : hechas === del.length ? '<span class="pill ok">en rango</span>' : '';
+      return '<div class="temp-res"><span>' + esc(a.momento_nombre || (a.desde ? L.fmtHoraTxt(L.hhmm(a.desde)) : 'Hoy')) + '</span><span class="muted">' + hechas + ' de ' + del.length + '</span>' + estado + '</div>';
     }).join('');
     var notas = ((S.data && S.data.lecturas) || []).filter(function (l) { return l.fecha === S.hoy && l.fuera_rango && tareas.some(function (a) { return a.id === l.asignacion_id; }); });
-    return '<section class="bloque' + (fuera ? ' alerta' : '') + '"><div class="bloque-head"><h2>Temperaturas <small class="muted">°C · D defrost · A apagado</small></h2><a class="muted" href="#/temperaturas' + (localId ? '?local=' + esc(localId) : '') + '">Historial ›</a></div>' +
-      '<div class="tabla-scroll"><table class="temps"><thead><tr><th></th>' + tareas.map(function (a) {
-        return '<th>' + esc(a.momento_nombre || (a.desde ? L.fmtHoraTxt(L.hhmm(a.desde)) : 'Hoy')) + (a.desde ? '<small>' + esc(L.fmtHoraTxt(L.hhmm(a.desde))) + '</small>' : '') + '</th>';
-      }).join('') + '</tr></thead><tbody>' + filas + '</tbody></table></div>' +
+    return '<section class="bloque' + (malo ? ' alerta' : '') + '"><div class="bloque-head"><h2>Temperaturas</h2><a class="muted" href="#/temperaturas' + (localId ? '?local=' + esc(localId) : '') + '">Historial ›</a></div>' + filas +
       (notas.length ? '<ul class="rep-lista">' + notas.map(function (l) {
         var e = equipo(l.equipo_id);
         return '<li class="rojo">' + esc(e ? e.nombre : 'Equipo') + ': ' + esc(tempTxt(l)) + ' · «' + esc(l.nota || '') + '» <small class="muted">' + esc(nombreDe(l.registrado_por)) + ', ' + esc(L.fmtHora(l.registrado_en)) + '</small></li>';
@@ -1696,7 +1695,7 @@
   // Historial de temperaturas (35 días) con descarga
   function vistaTemperaturas(q) {
     var d = db(), loc = q.get('local') && L.localDe(d, q.get('local')) ? q.get('local') : localElegido();
-    var h = '<a class="volver" href="#/reporte">‹ Reporte</a><h1>Temperaturas</h1>' + tabsLocales('/temperaturas', loc);
+    var h = '<a class="volver" href="#/reporte">‹ Reporte</a><h1>Historial de temperaturas</h1>' + tabsLocales('/temperaturas', loc);
     var eqs = equiposLocal(loc);
     if (!eqs.length) return h + '<p class="vacio muted">Este local no tiene equipos. Agrégalos en <a href="#/equipo/frio">Equipo → Equipos de frío</a>.</p>';
     var lects = (d.lecturas || []).filter(function (l) { return eqs.some(function (e) { return e.id === l.equipo_id; }); });
@@ -1738,7 +1737,8 @@
           '<input name="nombre" value="' + esc(e.nombre) + '" maxlength="40" aria-label="Nombre del equipo" required>' +
           '<span class="rango"><label>Mín.<input type="number" step="0.1" name="temp_min" value="' + (e.temp_min == null ? '' : e.temp_min) + '"></label>' +
           '<label>Máx.<input type="number" step="0.1" name="temp_max" value="' + (e.temp_max == null ? '' : e.temp_max) + '"></label><span>°C</span></span>' +
-          '<label class="check chico"><input type="checkbox" name="activo"' + (e.activo !== false ? ' checked' : '') + '>Activo</label></span>' +
+          '<label class="check chico"><input type="checkbox" name="activo"' + (e.activo !== false ? ' checked' : '') + '>Activo</label>' +
+          (variosLocales() ? '<label class="eq-local">Local<select name="local_id">' + locales().map(function (o) { return '<option value="' + esc(o.id) + '"' + (o.id === l.id ? ' selected' : '') + '>' + esc(o.nombre) + '</option>'; }).join('') + '</select></label>' : '') + '</span>' +
           '<button class="btn chico sec" type="submit">Guardar</button><button class="quitar" type="button" data-acc="borrar-equipo" data-id="' + esc(e.id) + '" aria-label="Borrar equipo">×</button></form>';
       }).join('') + '</div><button class="btn sec" data-acc="agregar-equipo" data-id="' + esc(l.id) + '">' + ICON.mas + 'Agregar equipo' + (variosLocales() ? ' en ' + esc(l.nombre) : '') + '</button>';
     });
@@ -2209,7 +2209,9 @@
       var fila = { nombre: String(fd.get('nombre') || '').trim(), temp_min: mn === '' ? null : Number(mn), temp_max: mx === '' ? null : Number(mx), activo: !!fd.get('activo') };
       if (!fila.nombre) { aviso('Ponle nombre al equipo.'); return; }
       if (fila.temp_min !== null && fila.temp_max !== null && fila.temp_min > fila.temp_max) { aviso('El mínimo tiene que ser menor que el máximo.'); return; }
-      ejecutar(store.actualizar('equipos', f.getAttribute('data-id'), fila), 'Equipo guardado.');
+      var antesEq = equipo(f.getAttribute('data-id'));
+      if (fd.get('local_id')) fila.local_id = fd.get('local_id');
+      ejecutar(store.actualizar('equipos', f.getAttribute('data-id'), fila), antesEq && fila.local_id && fila.local_id !== antesEq.local_id ? 'Equipo movido a ' + nombreLocal(fila.local_id) + ' (con su historial).' : 'Equipo guardado.');
     }
     else if (tipo === 'registro') {
       var lects = [], falta = null;
