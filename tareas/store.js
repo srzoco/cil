@@ -541,6 +541,9 @@
         if (!adm) { r = 0; }
         else {
           db.revisiones = db.revisiones || [];
+          // igual que el SQL: solo lo que la persona marcó ella misma
+          var marcoElla = function (asigId, persona) { return (db.eventos || []).some(function (e) { return e.asignacion_id === asigId && e.tipo === 'hecha' && e.autor === persona; }); };
+          db.revisiones = db.revisiones.filter(function (x) { return !(x.fecha === hoy && x.calificacion == null && !marcoElla(x.asignacion_id, x.hecho_por)); });
           var now = new Date(), minAhora = now.getHours() * 60 + now.getMinutes();
           var n = db.ajustes.revisiones_dia == null ? 4 : db.ajustes.revisiones_dia;
           var admins = db.personas.filter(function (p) { return p.rol === 'admin' && p.activo; });
@@ -554,6 +557,7 @@
               var cands = db.asignaciones.filter(function (x) {
                 if (x.estado !== 'hecha' || !x.hecha_en || !x.hecha_por || revisadas.indexOf(x.id) >= 0) return false;
                 if (!db.personas.some(function (p) { return p.id === x.hecha_por && p.rol === 'empleado'; })) return false;
+                if (!marcoElla(x.id, x.hecha_por)) return false;
                 var dh = new Date(x.hecha_en);
                 if (L.hoyISO(dh) !== hoy) return false;
                 return (fr[0] === 'manana') === (dh.getHours() < 12);

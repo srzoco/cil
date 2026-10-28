@@ -654,7 +654,10 @@
         var a = asig(r.asignacion_id);
         var quien = r.revisor === y.id ? '<span class="pill aprueba">Te toca a ti</span>' : '<span class="extra">Le toca a ' + esc(nombreDe(r.revisor)) + '</span>';
         return '<button class="item" data-acc="ver-revision" data-id="' + esc(r.id) + '"><span class="item-cuerpo"><span class="item-titulo">' + tituloHtml(a) + '</span>' +
-          '<span class="item-meta"><span class="extra">' + esc(nombreDe(r.hecho_por || a.hecha_por || a.asignado_a)) + (a.hecha_en ? ' · ' + esc(L.fmtHora(a.hecha_en)) : '') + '</span>' +
+          '<span class="item-meta"><span class="extra">' + esc(nombreDe(r.hecho_por || a.hecha_por || a.asignado_a)) + (a.hecha_en ? ' · ' + esc(L.fmtHora(a.hecha_en)) : '') +
+          // de dónde salió: atrasada de otro día, rescatada, tomada o reasignada
+          (a.fecha !== S.hoy ? ' · era del ' + esc(L.fmtFecha(a.fecha)) : '') +
+          ({ rescate: ' · la rescató', tomada: ' · la tomó del pool', manual: ' · reasignada', ausencia: ' · por una falta', compensa: ' · por compensación', devuelta: ' · devuelta' }[a.motivo] || '') + '</span>' +
           (r.calificacion != null ? '<span class="pill ' + CALIF_TONO[r.calificacion] + '">' + CALIF[r.calificacion] + '</span><span class="extra">por ' + esc(nombreDe(r.revisado_por)) + '</span>' : quien) +
           '</span></span><span class="flecha">›</span></button>';
       }).join('') + '</div></section>';

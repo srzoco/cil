@@ -1075,6 +1075,10 @@ declare
 begin
   if not public.es_admin() then return 0; end if;
   perform pg_advisory_xact_lock(hashtext('revisiones:' || public.hoy()::text));
+  -- Solo se revisa lo que la persona marcó ella misma (no lo que marcó gerencia por ella, ni su parte de una tarea de
+  -- varias personas que marcó otra). Si hoy se eligió una así y no se ha calificado, se quita y se elige otra.
+  delete from revisiones r where r.fecha = public.hoy() and r.calificacion is null
+    and not exists (select 1 from tareas_eventos e where e.asignacion_id = r.asignacion_id and e.tipo = 'hecha' and e.autor = r.hecho_por);
   foreach fr in array array['manana', 'tarde'] loop
     continue when (fr = 'manana' and ahora < '12:00') or (fr = 'tarde' and ahora < '16:00');
     meta := case when fr = 'manana' then ceil(n / 2.0)::int else floor(n / 2.0)::int end;
@@ -1084,6 +1088,7 @@ begin
       where x.estado = 'hecha' and (x.hecha_en at time zone 'America/Caracas')::date = public.hoy()
         and ((fr = 'manana') = ((x.hecha_en at time zone 'America/Caracas')::time < '12:00'))
         and x.hecha_por is not null and not exists (select 1 from revisiones r where r.asignacion_id = x.id)
+        and exists (select 1 from tareas_eventos e where e.asignacion_id = x.id and e.tipo = 'hecha' and e.autor = x.hecha_por)
         and exists (select 1 from personas pe where pe.id = x.hecha_por and pe.rol = 'empleado')
       order by exists (select 1 from revisiones r where r.fecha = public.hoy() and r.hecho_por = x.hecha_por), random()
       limit 1;
