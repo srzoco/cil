@@ -1180,6 +1180,38 @@ begin
   return n;
 end $$;
 
+-- Tareas de hoy que se crearon sin dueño porque no había nadie que pudiera hacerlas (por ejemplo, la persona
+-- se configuró en su local después de la madrugada). La app la llama al guardar a una persona.
+-- Solo las que nadie tocó desde que se crearon (no las que gerencia dejó sin asignar a propósito ni las «al pool»).
+-- Cada puesto va con todas sus veces del día a la misma persona, como en generar_dia.
+create or replace function public.repartir_sin_dueno(p_local uuid default null) returns int
+language plpgsql security definer set search_path = public as $$
+declare u record; p public.plantillas; quien uuid; n int := 0;
+begin
+  if not public.es_admin() then raise exception 'Solo gerencia puede repartir.'; end if;
+  perform pg_advisory_xact_lock(hashtext('generar_dia:' || public.hoy()::text));
+  for u in
+    select a.plantilla_id, a.puesto from asignaciones a join plantillas pl on pl.id = a.plantilla_id
+    where a.fecha = public.hoy() and a.asignado_a is null and a.motivo = 'pool' and not a.oculta
+      and not (pl.frecuencia = 'unica' and pl.al_pool) and (p_local is null or a.local_id = p_local)
+    group by a.plantilla_id, a.puesto, pl.minutos, pl.momentos, pl.titulo
+    having bool_and(a.estado = 'pendiente')
+       and not exists (select 1 from tareas_eventos e join asignaciones y on y.id = e.asignacion_id
+                       where y.plantilla_id = a.plantilla_id and y.fecha = public.hoy() and y.puesto = a.puesto and e.tipo <> 'generada')
+    order by pl.minutos * greatest(1, jsonb_array_length(pl.momentos)) desc, pl.titulo, a.puesto
+  loop
+    select * into p from plantillas where id = u.plantilla_id;
+    quien := public._elegir_persona(p, public.hoy(),
+      coalesce((select array_agg(distinct y.asignado_a) from asignaciones y where y.plantilla_id = p.id and y.fecha = public.hoy() and y.asignado_a is not null), '{}'));
+    continue when quien is null;
+    with c as (update asignaciones set asignado_a = quien, asignado_original = quien, motivo = 'rotacion'
+               where plantilla_id = p.id and fecha = public.hoy() and puesto = u.puesto and asignado_a is null returning id)
+    insert into tareas_eventos (asignacion_id, tipo, de, a, texto) select id, 'reasignada', null, quien, 'rotacion' from c;
+    n := n + 1;
+  end loop;
+  return n;
+end $$;
+
 -- Empleado: «Me voy antes». Queda la hora; lo pendiente lo reparte gerencia (igual que una ausencia).
 create or replace function public.marcar_salida(p_motivo text default null) returns json
 language plpgsql security definer set search_path = public as $$
@@ -2083,7 +2115,7 @@ alter default privileges in schema public revoke execute on functions from anon,
 grant execute on function public.hoy(), public.es_admin(), public.tiene_acceso(text), public._urgente(public.asignaciones), public._puede_rescatar(uuid, uuid), public.generar_dia(date),
   public.marcar_llegada(double precision, double precision, double precision, timestamptz), public.mi_red(), public.registrar_red(uuid),
   public.sin_wifi_hoy(uuid, boolean), public.aceptar_red(uuid, uuid),
-  public.marcar_hecha(uuid, boolean), public.tomar_del_pool(uuid), public.reasignar(jsonb, text),
+  public.marcar_hecha(uuid, boolean), public.tomar_del_pool(uuid), public.reasignar(jsonb, text), public.repartir_sin_dueno(uuid),
   public.marcar_asistencia(uuid, text), public.mi_perfil(text, text),
   public.justificar(uuid, text), public.revisar_justificacion(uuid, boolean),
   public.asignar_revisiones(), public.calificar(uuid, int, text, boolean),

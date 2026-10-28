@@ -515,6 +515,36 @@
     });
     return nuevas;
   }
+  // Igual que repartir_sin_dueno: lo de hoy que salió sin dueño (nadie podía hacerlo) y nadie tocó después.
+  // Devuelve [{ ids, quien }] (cada puesto con todas sus veces a la misma persona) y ya lo deja asignado.
+  function repartirSinDueno(db, localId, f, ahora) {
+    var grupos = {}, out = [];
+    db.asignaciones.forEach(function (a) {
+      if (a.fecha !== f || a.puesto == null || !a.plantilla_id) return;
+      var k = a.plantilla_id + '|' + a.puesto;
+      (grupos[k] = grupos[k] || []).push(a);
+    });
+    Object.keys(grupos).map(function (k) { return grupos[k]; }).filter(function (as) {
+      var p = plantilla(db, as[0].plantilla_id);
+      if (!p || (p.frecuencia === 'unica' && p.al_pool) || (localId && as[0].local_id !== localId)) return false;
+      return as.every(function (a) {
+        return !a.asignado_a && a.motivo === 'pool' && !a.oculta && a.estado === 'pendiente' &&
+          !(db.eventos || []).some(function (e) { return e.asignacion_id === a.id && e.tipo !== 'generada'; });
+      });
+    }).sort(function (x, y) {
+      var px = plantilla(db, x[0].plantilla_id), py = plantilla(db, y[0].plantilla_id);
+      var mx = px.minutos * Math.max(1, (px.momentos || []).length), my = py.minutos * Math.max(1, (py.momentos || []).length);
+      return my - mx || (px.titulo < py.titulo ? -1 : px.titulo > py.titulo ? 1 : x[0].puesto - y[0].puesto);
+    }).forEach(function (as) {
+      var p = plantilla(db, as[0].plantilla_id);
+      var otros = db.asignaciones.filter(function (y) { return y.plantilla_id === p.id && y.fecha === f && y.asignado_a; }).map(function (y) { return y.asignado_a; });
+      var quien = elegirPersona(db, p, f, ahora, otros);
+      if (!quien) return;
+      as.forEach(function (a) { a.asignado_a = quien; a.asignado_original = quien; a.motivo = 'rotacion'; });
+      out.push({ ids: as.map(function (a) { return a.id; }), quien: quien });
+    });
+    return out;
+  }
   function personasDe(p) { var n = Number(p && p.personas) || 1; return Math.max(1, Math.min(5, n)); }
   // Los otros puestos de la misma tarea (mismo día y misma vez)
   function companerosDe(db, a) {
@@ -643,6 +673,7 @@
     return res;
   }
   function persona(db, id) { return db.personas.filter(function (p) { return p.id === id; })[0] || null; }
+  function plantilla(db, id) { return db.plantillas.filter(function (p) { return p.id === id; })[0] || null; }
   function puedenCuantos(db, a, gente) { return gente.filter(function (pe) { return puedeHacer(db, a, pe.id); }).length; }
 
   // ---------- Reporte del día ----------
@@ -798,7 +829,7 @@
     localDe: localDe, localPrincipal: localPrincipal, labDe: labDe, laborable: laborable, laborableFn: laborableFn, trabaja: trabaja, libreDe: libreDe, especial: especial, localDePersona: localDePersona, frecuenciaTxt: frecuenciaTxt, proximas: proximas, siguienteLaborable: siguienteLaborable,
     seFue: seFue, anteriorLaborable: anteriorLaborable, carga: carga, capacidad: capacidad, cabeEn: cabeEn, estadoAsistencia: estadoAsistencia, estaPresente: estaPresente, asistenciaDe: asistenciaDe,
     esEmpleadoActivo: esEmpleadoActivo, plantillaDe: plantillaDe, puedeHacer: puedeHacer, puedeRescatar: puedeRescatar,
-    elegirPersona: elegirPersona, puedeSegun: puedeSegun, generarDia: generarDia, repartoAutomatico: repartoAutomatico, almorzandoGrupo: almorzandoGrupo, balance: balance, sobrecargados: sobrecargados, sugerenciasBalance: sugerenciasBalance, factorDia: factorDia, personasDe: personasDe, statsConsumible: statsConsumible, receta: receta, companerosDe: companerosDe, tareasDe: tareasDe, delPool: delPool,
+    elegirPersona: elegirPersona, puedeSegun: puedeSegun, generarDia: generarDia, repartirSinDueno: repartirSinDueno, repartoAutomatico: repartoAutomatico, almorzandoGrupo: almorzandoGrupo, balance: balance, sobrecargados: sobrecargados, sugerenciasBalance: sugerenciasBalance, factorDia: factorDia, personasDe: personasDe, statsConsumible: statsConsumible, receta: receta, companerosDe: companerosDe, tareasDe: tareasDe, delPool: delPool,
     sugerirReasignacion: sugerirReasignacion, reporteDia: reporteDia, textoReporte: textoReporte,
     historial: historial, cargaTipica: cargaTipica
   };

@@ -477,6 +477,11 @@
         var antesAo = ao.asignado_a;
         ao.oculta = false; if (args.p_persona) ao.asignado_a = args.p_persona; if (ao.fecha < hoy) ao.arrastra = true;
         if (args.p_persona && args.p_persona !== antesAo) this._evento(ao.id, 'reasignada', antesAo, args.p_persona, 'ausencia');
+      } else if (nombre === 'repartir_sin_dueno') {
+        if (!adm) throw errorUsuario('Solo gerencia puede repartir.');
+        var rs = L.repartirSinDueno(db, args.p_local || null, hoy);
+        rs.forEach(function (u) { u.ids.forEach(function (id) { self._evento(id, 'reasignada', null, u.quien, 'rotacion'); }); });
+        r = rs.length;
       } else if (nombre === 'reasignar') {
         if (!adm) throw errorUsuario('Solo gerencia puede reasignar.');
         var mot = args.p_motivo || 'manual', n = 0;

@@ -2130,7 +2130,13 @@
       }
       var pp = store.actualizar('personas', pid, patch);
       if (sueltas.length) pp = pp.then(function () { return store.rpc('reasignar', { p_items: sueltas.map(function (x) { return { id: x.id, a: null }; }), p_motivo: 'manual' }); });
-      ejecutar(pp, sueltas.length ? 'Guardado. Sus ' + plural(sueltas.length, 'tarea pendiente quedó', 'tareas pendientes quedaron') + ' sin asignar: repártelas desde Hoy.' : 'Guardado.', true);
+      // Lo de hoy que salió sin dueño porque nadie podía hacerlo (por ejemplo, recién la pusieron en su local) se reparte ya
+      var repartidas = 0;
+      if (antes && antes.rol === 'empleado' && patch.activo !== false) pp = pp.then(function () { return store.rpc('repartir_sin_dueno', { p_local: patch.local_id || localDe(antes) }); }).then(function (n) { repartidas = Number(n) || 0; }, function () { /* si falla, igual quedó guardado */ });
+      ejecutar(pp, function () {
+        return (sueltas.length ? 'Guardado. Sus ' + plural(sueltas.length, 'tarea pendiente quedó', 'tareas pendientes quedaron') + ' sin asignar: repártelas desde Hoy.' : 'Guardado.') +
+          (repartidas ? ' Se ' + (repartidas === 1 ? 'repartió 1 tarea' : 'repartieron ' + repartidas + ' tareas') + ' de hoy que estaban sin dueño.' : '');
+      }, true);
     }
     else if (tipo === 'libre') {
       var lpid = f.getAttribute('data-id'), ld = fd.get('desde'), lh = fd.get('hasta');
