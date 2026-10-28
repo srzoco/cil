@@ -62,7 +62,7 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 .tab.activo svg { stroke-width: 2.2; }
 .badge {
   position: absolute; top: 1px; left: calc(50% + 6px); min-width: 19px; height: 19px; padding: 0 5px; border-radius: 999px;
-  background: var(--wine); color: #fff; font-size: .7rem; line-height: 19px; text-align: center;
+  background: var(--wine); color: var(--sobre); font-size: .7rem; line-height: 19px; text-align: center;
 }
 .tab-nueva .mas-ic {
   display: grid; place-items: center; width: 42px; height: 30px; border-radius: 10px; background: var(--accent); color: var(--accent-ink);
@@ -84,13 +84,10 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 .btn.chico { min-height: 36px; padding: 6px 12px; font-size: .88rem; border-radius: 10px; }
 .btn.sec { background: transparent; color: var(--ink); border-color: var(--line); }
 .btn.fantasma { background: transparent; color: var(--muted); }
-.btn.ok { background: var(--green); color: #fff; }
-.btn.warn { background: var(--wine); color: #fff; }
-.btn.wa { background: var(--wa); color: #fff; }
+.btn.ok { background: var(--green); color: var(--sobre); }
+.btn.warn { background: var(--wine); color: var(--sobre); }
+.btn.wa { background: var(--wa); color: var(--sobre); }
 .btn.link { background: none; color: var(--accent); padding: 4px 2px; min-height: 0; font-weight: 600; }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .btn.ok, :root:not([data-theme="light"]) .btn.warn, :root:not([data-theme="light"]) .btn.wa { color: #12100e; }
-}
 
 /* ---------- Tarjetas, listas ---------- */
 .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); margin: 0 0 14px; }
@@ -131,16 +128,18 @@ a.item:hover, .item a.item-cuerpo:hover .item-titulo { color: var(--accent); }
 .plat.tt { background: #dfeff0; color: #1d6468; }
 .plat.pub { outline: 1.5px solid currentColor; }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .plat.ig { background: #3d2230; color: #f0a6c5; }
-  :root:not([data-theme="light"]) .plat.tt { background: #183133; color: #8fd5d9; }
+  :root:not([data-theme="claro"]) .plat.ig { background: #3d2230; color: #f0a6c5; }
+  :root:not([data-theme="claro"]) .plat.tt { background: #183133; color: #8fd5d9; }
 }
+:root[data-theme="oscuro"] .plat.ig { background: #3d2230; color: #f0a6c5; }
+:root[data-theme="oscuro"] .plat.tt { background: #183133; color: #8fd5d9; }
 .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: .78rem; font-weight: 600; background: var(--gray-bg); color: var(--muted); }
 .pill.aprueba { background: var(--amber-bg); color: var(--amber); }
 .pill.corregir { background: var(--wine-bg); color: var(--wine); }
 .pill.edita { background: var(--blue-bg); color: var(--blue); }
 .pill.ok { background: var(--green-bg); color: var(--green); }
 .pill.espera { background: var(--purple-bg); color: var(--purple); }
-.pill.atrasada { background: var(--wine); color: #fff; }
+.pill.atrasada { background: var(--wine); color: var(--sobre); }
 .pill.banco { background: var(--accent-bg); color: var(--accent); }
 
 /* ---------- Pendientes ---------- */
@@ -273,7 +272,7 @@ ol.ranking li a { flex: 1; min-width: 140px; color: var(--ink); text-decoration:
 .flash-t { font: 600 1.1rem var(--serif); margin: 0; }
 .toast {
   position: fixed; top: calc(70px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 60; max-width: min(520px, calc(100vw - 24px));
-  background: var(--wine); color: #fff; padding: 12px 16px; border-radius: 12px; box-shadow: var(--shadow); font-weight: 600;
+  background: var(--wine); color: var(--sobre); padding: 12px 16px; border-radius: 12px; box-shadow: var(--shadow); font-weight: 600;
 }
 .centro { min-height: 60vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 10px; padding: 20px; }
 .spinner { width: 34px; height: 34px; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--accent); animation: girar .8s linear infinite; }
@@ -318,8 +317,8 @@ ol.ranking li a { flex: 1; min-width: 140px; color: var(--ink); text-decoration:
 
 /* ---------- Empleado: Mi día ---------- */
 .hero.llegada { align-items: center; }
-.hero.llegada.tarde { background: var(--wine); color: #fff; }
-.hero.llegada.tarde .btn.grande { color: var(--wine); background: #fff; }
+.hero.llegada.tarde { background: var(--wine); color: var(--sobre); }
+.hero.llegada.tarde .btn.grande { color: var(--wine); background: var(--sobre); }
 .hero-sub { margin: 4px 0 0; font-size: .9rem; opacity: .9; }
 .hero .btn.grande { min-width: 120px; font-size: 1.15rem; }
 .llego { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--green); margin: 0 0 14px; }
@@ -341,15 +340,15 @@ ol.ranking li a { flex: 1; min-width: 140px; color: var(--ink); text-decoration:
 .marcar:active { transform: scale(.92); }
 .marcar svg { width: 24px; height: 24px; stroke-width: 2.6; }
 .marcar:hover { border-color: var(--green); color: color-mix(in srgb, var(--green) 40%, transparent); }
-.tarea.hecha .marcar { background: var(--green); border-color: var(--green); color: #fff; }
+.tarea.hecha .marcar { background: var(--green); border-color: var(--green); color: var(--sobre); }
 .tarea.hecha .item-titulo { text-decoration: line-through; color: var(--muted); }
 .tarea-cuerpo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; padding-top: 2px; }
 .tarea-detalle { color: var(--muted); font-size: .88rem; }
 .tarea.hecha .tarea-detalle { display: none; }
 
 /* ---------- Gerencia: Hoy ---------- */
-.alerta-hero { background: var(--wine); color: #fff; }
-.alerta-hero .btn.grande { color: var(--wine); background: #fff; }
+.alerta-hero { background: var(--wine); color: var(--sobre); }
+.alerta-hero .btn.grande { color: var(--wine); background: var(--sobre); }
 .alerta-hero .hero-t { font-weight: 500; }
 .reporte-listo, .enlace-card { display: flex; flex-direction: column; gap: 2px; text-decoration: none; color: var(--ink); }
 .asistencia { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
@@ -365,7 +364,7 @@ ol.ranking li a { flex: 1; min-width: 140px; color: var(--ink); text-decoration:
 button.item { width: 100%; font: inherit; text-align: left; cursor: pointer; }
 .tarea-admin.hecha .item-titulo { color: var(--muted); text-decoration: line-through; }
 .estado-dot { flex: none; width: 22px; height: 22px; border-radius: 7px; border: 2px solid var(--line); display: grid; place-items: center; }
-.estado-dot.ok { background: var(--green); border-color: var(--green); color: #fff; }
+.estado-dot.ok { background: var(--green); border-color: var(--green); color: var(--sobre); }
 .estado-dot svg { width: 15px; height: 15px; stroke-width: 3; }
 .item.pausada { opacity: .6; }
 
@@ -425,12 +424,8 @@ button.item { width: 100%; font: inherit; text-align: left; cursor: pointer; }
 .botones { gap: 10px; margin-top: 12px; }
 .toast.ok { background: var(--green); }
 .ocupado { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; background: rgba(20, 15, 10, .12); }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .toast.ok, :root:not([data-theme="light"]) .alerta-hero { color: #12100e; }
-}
 
 .seg.vertical label { flex: none; }
-:root[data-theme="dark"] .toast.ok, :root[data-theme="dark"] .alerta-hero { color: #12100e; }
 
 .regla { margin: -2px 0 12px; padding: 10px 12px; border-left: 3px solid var(--accent); background: var(--accent-bg); border-radius: 0 10px 10px 0; font-size: .95rem; color: var(--ink); }
 
@@ -453,7 +448,7 @@ button.item { width: 100%; font: inherit; text-align: left; cursor: pointer; }
 .local-titulo { font-size: 1.3rem; margin: 18px 0 2px; color: var(--accent); }
 .local-sec .local-titulo { margin-top: 8px; }
 .locales-tabs a { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
-.badge-in { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--wine); color: #fff; font-size: .72rem; }
+.badge-in { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--wine); color: var(--sobre); font-size: .72rem; }
 .local-chico { font: 500 .78rem var(--sans); }
 .local-card { display: flex; flex-direction: column; gap: 6px; }
 .local-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }

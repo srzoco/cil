@@ -2,11 +2,11 @@
 .seg { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; background: var(--gray-bg); border-radius: 14px; padding: 4px; margin: 0 0 16px; }
 .seg a { text-align: center; text-decoration: none; color: var(--muted); font-weight: 600; font-size: .84rem; padding: 9px 4px; border-radius: 10px; position: relative; }
 .seg a.activo { background: var(--card); color: var(--ink); box-shadow: var(--shadow); }
-.seg .num { display: inline-block; min-width: 18px; height: 18px; line-height: 18px; padding: 0 5px; margin-left: 4px; border-radius: 999px; background: var(--wine); color: #fff; font-size: .7rem; }
+.seg .num { display: inline-block; min-width: 18px; height: 18px; line-height: 18px; padding: 0 5px; margin-left: 4px; border-radius: 999px; background: var(--wine); color: var(--sobre); font-size: .7rem; }
 .punto { width: 10px; height: 10px; border-radius: 50%; background: var(--wine); flex: none; }
 .previa { color: var(--muted); font-size: .86rem; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .pill.vence { background: var(--wine-bg); color: var(--wine); }
-.pill.hoy { background: var(--wine); color: #fff; }
+.pill.hoy { background: var(--wine); color: var(--sobre); }
 .persona-sec { margin: 22px 0 8px; display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .persona-sec h2 { margin: 0; }
 .cab-detalle { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
