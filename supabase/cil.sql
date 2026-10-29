@@ -3029,7 +3029,9 @@ insert into public.bot_config (clave, valor, descripcion) values
 ('hora_noches', '19', 'Desde esta hora se saluda "Buenas noches".'),
 ('avisos_correo', 'srzoco00@gmail.com', 'Correo de quien recibe los avisos del bot y del robot en CIL.'),
 ('robot_horarios', '9:15,12:30,17:00', 'Horas a las que corre el robot de Yobel en la PC.'),
-('robot_dias', 'lunes,martes,miercoles,jueves,viernes', 'Días que corre el robot. Temporada navideña: agregar sabado.'),
+('robot_dias', 'lunes,martes,miercoles,jueves,viernes', 'Días que corre el robot. Los sábados de temporada van en robot_sabados_desde/hasta.'),
+('robot_sabados_desde', '2026-11-07', 'Temporada navideña: desde este día (AAAA-MM-DD) el robot también corre los sábados.'),
+('robot_sabados_hasta', '2026-12-31', 'Temporada navideña: hasta este día (AAAA-MM-DD) el robot corre los sábados.'),
 ('verificar_robot', 'no', 'si = el bot no da precios si el robot se saltó un horario (activar cuando el robot esté instalado).'),
 ('robot_token_hash', '', 'Huella del token del robot (se pone con robot_nuevo_token; no editar a mano).'),
 ('robot_forzar', 'no', 'si = aceptar UNA subida del robot aunque cambien muchos precios o lleguen pocos productos (vuelve sola a no).'),
@@ -3187,15 +3189,22 @@ declare
   ultima timestamptz; limite timestamptz; ahora_vet timestamp := (now() at time zone 'America/Caracas');
   dias text[]; horas text[]; d date; h text; slot timestamp; ultimo_slot timestamp;
   nombres text[] := array['domingo','lunes','martes','miercoles','jueves','viernes','sabado'];
+  sab_desde date; sab_hasta date;
 begin
   if _bot_cfg('verificar_robot', 'no') <> 'si' then return true; end if;
   select nullif(datos->'robot'->>'fecha', '')::timestamptz into ultima from armador_datos where id = 1;
   if ultima is null then return false; end if;
   dias := string_to_array(replace(bot_norm(_bot_cfg('robot_dias', '')), ' ', ''), ',');
   horas := string_to_array(replace(_bot_cfg('robot_horarios', ''), ' ', ''), ',');
+  begin  -- fechas de la temporada de sábados (si están mal escritas, no hay sábados)
+    sab_desde := nullif(trim(_bot_cfg('robot_sabados_desde', '')), '')::date;
+    sab_hasta := nullif(trim(_bot_cfg('robot_sabados_hasta', '')), '')::date;
+  exception when others then sab_desde := null; sab_hasta := null;
+  end;
   -- el último horario que ya debería haber corrido, con 1 h de margen
   for d in select generate_series(ahora_vet::date - 8, ahora_vet::date, interval '1 day')::date loop
-    continue when not (nombres[extract(dow from d)::int + 1] = any(dias));
+    continue when not (nombres[extract(dow from d)::int + 1] = any(dias)
+                       or (extract(dow from d) = 6 and d >= sab_desde and d <= sab_hasta));
     foreach h in array horas loop
       slot := d + h::time;
       if slot + interval '1 hour' <= ahora_vet and (ultimo_slot is null or slot > ultimo_slot) then ultimo_slot := slot; end if;
@@ -3260,6 +3269,7 @@ begin
       end if;
       stock_n := nullif(v->>'stock', '')::numeric;
       continue when stock_n is not null and stock_n <= 0 and not r.bajo_pedido;
+      continue when v ? 'sin_actualizar' and not r.bajo_pedido;   -- no vino de Yobel: no se da precio
       lineas := lineas || E'\n' || coalesce(nullif(r.p->>'emoji', ''), '🔹') || ' $'
                 || trim_scale(round((v->>'precio')::numeric * (1 - descu / 100), 2))::text
                 || case when (v->>'kilo')::boolean then ' el kilo' else '' end
@@ -3436,7 +3446,7 @@ begin
     perform bot_aviso('robot_precio_grande', 'Precios que cambiaron más de 30%: ' || array_to_string(grandes[1:10], '; ') || case when array_length(grandes, 1) > 10 then '…' else '' end, false);
   end if;
   if array_length(pausados, 1) > 0 then
-    perform bot_aviso('robot_pausados', 'No vinieron de Yobel (quedan con «stock sin actualizar», revísalos en Yobel): ' || array_to_string((select array_agg(distinct x) from unnest(pausados) x)[1:15], ', '), false);
+    perform bot_aviso('robot_pausados', 'No vinieron de Yobel (el bot no da su precio hasta que vuelvan; revísalos en Yobel): ' || array_to_string((select array_agg(distinct x) from unnest(pausados) x)[1:15], ', '), true);
   end if;
   if array_length(huerfanas, 1) > 0 then
     perform bot_aviso('robot_ficha', 'Ya no están en Yobel y tienen ficha o usos: ' || array_to_string(huerfanas[1:10], ', ')
