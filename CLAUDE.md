@@ -43,6 +43,7 @@ App web unificada **CIL** en GitHub Pages: https://srzoco.github.io/cil/
 - Revisiones de calidad: al azar (`asignar_revisiones`) y además a mano desde el día de una persona (`#/persona/<id>`, RPC `revisar_tarea`, `revisiones.manual`; no cuentan en el cupo del azar). Cantidades por local y por persona de gerencia (`locales.revisiones` = {id: n}, Equipo → Locales; reemplaza a `locales.revisor`): se eligen en el momento en que el empleado marca la tarea (`_revision_al_momento`, probabilidad = las que faltan / tareas que faltan) con aviso a quien le toca; a las 4 p. m. se completa lo que falte. Locales sin cantidades usan `revisiones_dia` (azar de las 12 y las 4). Decidido 30/10/2026: BQTO 2 al día para Sara; CIL 1 para cada uno de Pulpo, Langostica y Barquero, y 2 para Sara. «Hecho» no pide el Wi-Fi (decidido).
 - Hoy (gerencia) ya no lista todas las tareas: «Equipo de hoy» es una tarjeta por persona (asistencia + avance) que abre su día (`#/persona/<id>`, ahí se cambia la asistencia).
 - Contenido: los enlaces solo se muestran si empiezan por http(s) (`url()` en contenido/app.js).
+- Avisos: los de Tareas llevan url «./#/…»; `sw.js` (notificationclick) los abre en `tareas/#/…` (antes caían en el menú de CIL).
 - Sin zoom en todas las apps (viewport `user-scalable=no` + `comun/tema.js` frena el pellizco del iPhone y pone los campos a 16 px mínimo).
 - Quien no tiene el acceso `tareas` (por ejemplo Verónica, de contenido, que trabaja en línea) no marca "Llegué" ni entra en la rotación.
 

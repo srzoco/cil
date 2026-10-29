@@ -1,7 +1,7 @@
 /* CIL — guarda la app en el teléfono para que abra al instante (menú y módulos).
    Los datos (Supabase) nunca se guardan aquí: siempre se piden a internet.
    Al publicar una versión nueva, se sube el número de VERSION y el ?v= de index.html. */
-var VERSION = 'cil-v72';
+var VERSION = 'cil-v73';
 var ARCHIVOS = ['./', 'index.html', 'comun/tema.css?v=3', 'comun/tema.js?v=2', 'comun/hub.css?v=7', 'comun/hub.js?v=13',
   'tareas/', 'tareas/styles.css?v=33', 'tareas/logic.js?v=26', 'tareas/store.js?v=42', 'tareas/app.js?v=57', 'pendientes/', 'pendientes/styles.css?v=3', 'pendientes/app.js?v=6',
   'mensajes/', 'contenido/', 'contenido/styles.css?v=6', 'contenido/logic.js?v=3', 'contenido/demo.js?v=1', 'contenido/store.js?v=2', 'contenido/app.js?v=7',
@@ -60,7 +60,10 @@ self.addEventListener('push', function (e) {
 });
 self.addEventListener('notificationclick', function (e) {
   e.notification.close();
-  var url = new URL((e.notification.data && e.notification.data.url) || './', self.registration.scope).href;
+  var u = new URL((e.notification.data && e.notification.data.url) || './', self.registration.scope), raiz = new URL(self.registration.scope);
+  // Los avisos de Tareas vienen como «./#/…» (la raíz es el menú de CIL): se abren dentro de Tareas
+  if (u.origin === raiz.origin && u.pathname === raiz.pathname && u.hash.indexOf('#/') === 0) u = new URL('tareas/' + u.hash, raiz);
+  var url = u.href;
   e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (cs) {
     for (var i = 0; i < cs.length; i++) { if (cs[i].url.indexOf(self.registration.scope) === 0 && 'focus' in cs[i]) { cs[i].navigate(url); return cs[i].focus(); } }
     return self.clients.openWindow(url);
