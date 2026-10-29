@@ -3329,6 +3329,7 @@ end $$;
 
 -- El robot sube precio y stock. p_filas = [{ref, producto, categoria, precio, stock}] (sin costos).
 -- Mezcla con el armador SIN tocar nombres, emojis, preguntas, fichas, usos ni marcas de bajo pedido.
+-- Lo que no viene de Yobel no se borra ni cambia su stock: se marca sin_actualizar y se avisa.
 create or replace function public.robot_subir(p_token text, p_filas jsonb) returns json
 language plpgsql security definer set search_path = public as $$
 declare
@@ -3395,11 +3396,11 @@ begin
         end if;
         v := (v - 'sin_actualizar') || jsonb_build_object('precio', precio_nuevo, 'stock', (mapa->ref->>'stock')::numeric);
       elsif ref is not null then
-        -- no vino en la exportación (pausado o eliminado en Yobel)
-        if not bajo and coalesce(nullif(v->>'stock', '')::numeric, 1) > 0 then
+        -- no vino en la exportación: no se toca el stock (puede ser un error de Yobel); queda «stock sin actualizar» y avisa
+        if not (v ? 'sin_actualizar') then
           pausados := pausados || coalesce(nullif(trim(p->>'nombre'), ''), ref);
+          v := v || jsonb_build_object('sin_actualizar', now());
         end if;
-        if not bajo then v := v || jsonb_build_object('stock', 0); end if;
       end if;
       nuevas_pres := nuevas_pres || jsonb_build_array(v);
     end loop;
@@ -3435,7 +3436,7 @@ begin
     perform bot_aviso('robot_precio_grande', 'Precios que cambiaron más de 30%: ' || array_to_string(grandes[1:10], '; ') || case when array_length(grandes, 1) > 10 then '…' else '' end, false);
   end if;
   if array_length(pausados, 1) > 0 then
-    perform bot_aviso('robot_pausados', 'Ya no están en Yobel (el bot dejó de ofrecerlos): ' || array_to_string((select array_agg(distinct x) from unnest(pausados) x)[1:15], ', '), false);
+    perform bot_aviso('robot_pausados', 'No vinieron de Yobel (quedan con «stock sin actualizar», revísalos en Yobel): ' || array_to_string((select array_agg(distinct x) from unnest(pausados) x)[1:15], ', '), false);
   end if;
   if array_length(huerfanas, 1) > 0 then
     perform bot_aviso('robot_ficha', 'Ya no están en Yobel y tienen ficha o usos: ' || array_to_string(huerfanas[1:10], ', ')

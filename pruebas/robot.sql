@@ -49,8 +49,11 @@ do $$ declare r json; d jsonb; begin
   select datos into d from armador_datos where id = 1;
   if d::text like '%costo%' or d::text like '%999%' then raise exception 'FALLO: se guardaron costos'; end if;
   if (d->'productos'->0->'presentaciones'->0->>'precio')::numeric <> 11 then raise exception 'FALLO: precio no actualizado'; end if;
-  if (d->'productos'->10->'presentaciones'->0->>'stock')::numeric <> 0 then raise exception 'FALLO: precio 0 no se pausó'; end if;
-  if d->'productos'->11->'presentaciones'->0 ? 'stock' then raise exception 'FALLO: tocó el producto bajo pedido'; end if;
+  if d->'productos'->10->'presentaciones'->0 ? 'stock' or not (d->'productos'->10->'presentaciones'->0 ? 'sin_actualizar') then
+    raise exception 'FALLO: lo que no vino debe quedar con su stock y marcado sin actualizar: %', d->'productos'->10; end if;
+  if d->'productos'->11->'presentaciones'->0 ? 'stock' then raise exception 'FALLO: tocó el stock del producto bajo pedido'; end if;
+  if (d->'productos'->0->'presentaciones'->0 ? 'sin_actualizar') then raise exception 'FALLO: marcó sin actualizar uno que sí vino'; end if;
+  if not exists (select 1 from bot_avisos where tipo = 'robot_pausados' and texto like '%Producto 11%') then raise exception 'FALLO: no avisó de lo que no vino'; end if;
   if d->'productos'->0->>'ficha' <> 'ficha 1' then raise exception 'FALLO: tocó la ficha'; end if;
   set role anon;
 end $$;
