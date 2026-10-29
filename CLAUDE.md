@@ -32,7 +32,7 @@ App web unificada **CIL** en GitHub Pages: https://srzoco.github.io/cil/
 - Feriados: lo semanal o mensual que cae en día libre pasa al día laboral **anterior**.
 - Semanal o mensual sin hacer: sigue con su dueño como atrasada (si vino, no se reasigna sola) y **vence** al salir la siguiente vez (queda en el historial como no hecha). Para que otro pueda hacerla el mismo día, se le pone hora (sale como urgente).
 - Una tarea de X minutos no se puede marcar antes de que pasen X minutos desde que la persona llegó (o desde su «desde», si es más tarde). Gerencia sí puede (`listaDesde` en logic.js y `_hecha` en SQL). Además, en total lo marcado en el día no puede pasar de 1,5 × el tiempo desde que llegó.
-- "Me voy antes" reparte lo pendiente igual que una falta. "Día que no cuenta" para imprevistos generales.
+- "Me voy antes" reparte lo pendiente igual que una falta, y después de marcarlo ya no se puede marcar «Hecho» (solo gerencia). "Día que no cuenta" para imprevistos generales.
 - Récord de puntualidad oculto para empleados el primer mes (`mostrar_record`).
 - Temperaturas de equipos de frío 3 veces al día (8:30, 1 pm, 4 pm), con estado normal, defrost o apagado. Nota obligatoria si está fuera de rango. **Sin fotos** (almacenamiento).
 - "Prender contenedores" genera "Apagar contenedores" 45 min después.
@@ -41,6 +41,8 @@ App web unificada **CIL** en GitHub Pages: https://srzoco.github.io/cil/
 - Consumibles (Equipo → Consumibles): inventario por local; el empleado pide con un botón sin ver cantidades; entrega gerencia o el encargado (`entrega_consumibles`), anotando quién dio y quién recibió. El café va en una tarea con `consumible_id`: pregunta tazas y descuenta según la receta en vasitos (solo gerencia la edita). Avisos: pedido al momento, inventario bajo 1 vez al día, consumo alto los lunes (+30 % sobre el promedio de 4 semanas).
 - Cambios que aplican a lo ya creado de hoy: si gerencia cambia el local, los grupos o las personas de una tarea (o los grupos/«para cualquiera» de una persona), lo pendiente pasa a quien sí puede (`_resincronizar`, `resincronizar` en logic.js); las horas también, si no cambian las veces al día. Al guardar a una persona se reparte lo de hoy que salió sin dueño (`repartir_sin_dueno`).
 - Revisiones de calidad: al azar (`asignar_revisiones`) y además a mano desde el día de una persona (`#/persona/<id>`, RPC `revisar_tarea`, `revisiones.manual`; no cuentan en el cupo del azar). Un local puede tener revisora fija (`locales.revisor`, Equipo → Locales): sus revisiones no se reparten entre gerencia (BQTO → Sara, 29/10/2026).
+- Hoy (gerencia) ya no lista todas las tareas: «Equipo de hoy» es una tarjeta por persona (asistencia + avance) que abre su día (`#/persona/<id>`, ahí se cambia la asistencia).
+- Contenido: los enlaces solo se muestran si empiezan por http(s) (`url()` en contenido/app.js).
 - Sin zoom en todas las apps (viewport `user-scalable=no` + `comun/tema.js` frena el pellizco del iPhone y pone los campos a 16 px mínimo).
 - Quien no tiene el acceso `tareas` (por ejemplo Verónica, de contenido, que trabaja en línea) no marca "Llegué" ni entra en la rotación.
 

@@ -679,3 +679,8 @@ html.marco-fijo .desliza:has(~ .tabs) .contenido { padding-bottom: 28px; }
 .hecha-fila .btn { flex: none; }
 .asistencia + .sin-margen { margin-top: 8px; }
 .sin-margen .btn.link { text-align: left; }
+a.asis { text-decoration: none; }
+.asis-nombre { display: flex; width: 100%; align-items: baseline; justify-content: space-between; gap: 8px; }
+.asis-n { font-size: .85rem; color: var(--muted); font-weight: 700; }
+.asis.apagada { opacity: .6; }
+.asis-carga { display: block; width: 100%; margin: 2px 0 0; }

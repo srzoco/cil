@@ -918,6 +918,10 @@ begin
     if not adm and not exists (select 1 from asistencia where persona_id = auth.uid() and fecha = public.hoy() and estado = 'presente') then
       raise exception 'Primero marca «Llegué».';
     end if;
+    -- después de «Me voy antes» ya no se marca nada desde afuera (lo pendiente pasa a otra persona)
+    if not adm and exists (select 1 from asistencia where persona_id = auth.uid() and fecha = public.hoy() and salida is not null) then
+      raise exception 'Ya marcaste tu salida de hoy. Si fue un error, avísale a gerencia.';
+    end if;
     -- Una tarea de X minutos no se marca antes de que pasen X minutos desde que llegó (o desde su hora «desde»).
     -- Igual que listaDesde en logic.js.
     if not adm and a.minutos > 0 then

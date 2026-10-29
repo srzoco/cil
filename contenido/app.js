@@ -20,6 +20,8 @@
     });
   }
   function nl2br(s) { return esc(s).replace(/\n/g, '<br>'); }
+  // Solo enlaces web: un «javascript:…» guardado en un enlace correría al tocarlo
+  function url(u) { u = String(u || '').trim(); return /^https?:\/\//i.test(u) ? esc(u) : '#'; }
   function errU(msg) { var e = new Error(msg); e.usuario = true; return e; }
   function ruta() {
     var h = location.hash.replace(/^#/, '') || '/';
@@ -487,7 +489,7 @@
   }
   function archivoAviso(p) {
     var cosa = L.etapaNorm(p) === 'diseno' ? 'El diseño' : 'El video';
-    return '<div class="archivo">📱 ' + cosa + ' llega por WhatsApp.' + (p.enlace_version ? ' <a href="' + esc(p.enlace_version) + '" target="_blank" rel="noopener">Abrir enlace</a>' : '') + '</div>';
+    return '<div class="archivo">📱 ' + cosa + ' llega por WhatsApp.' + (p.enlace_version ? ' <a href="' + url(p.enlace_version) + '" target="_blank" rel="noopener">Abrir enlace</a>' : '') + '</div>';
   }
   function camposCopy(p, ayuda) {
     return L.plataformasDe(p).map(function (pl) {
@@ -701,7 +703,7 @@
       case 'envio':
         ic = '📤'; txt = quien + ' envió ' + esc(et) + ' a aprobar';
         if (e.texto) extra += '<p>' + nl2br(e.texto) + '</p>';
-        if (d.enlace) extra += '<p><a href="' + esc(d.enlace) + '" target="_blank" rel="noopener">Enlace</a></p>';
+        if (d.enlace) extra += '<p><a href="' + url(d.enlace) + '" target="_blank" rel="noopener">Enlace</a></p>';
         if (d.resueltas) extra += '<p class="muted">Marcó ' + plural(d.resueltas.length, 'corrección resuelta', 'correcciones resueltas') + '.</p>';
         if (d.texto_carrusel) extra += '<details><summary>Texto enviado</summary><div class="texto-largo">' + nl2br(d.texto_carrusel) + '</div></details>';
         if (d.copy_ig || d.copy_tt) extra += '<details><summary>Copy enviado</summary>' + (d.copy_ig ? '<p><b>IG:</b> ' + nl2br(d.copy_ig) + '</p>' : '') + (d.copy_tt ? '<p><b>TikTok:</b> ' + nl2br(d.copy_tt) + '</p>' : '') + '</details>';
@@ -723,7 +725,7 @@
         if (d.limite) extra += '<p class="muted">Entregar antes del ' + L.fmtFecha(d.limite) + '</p>';
         if (d.motivo) extra += '<p class="muted">Va en día de otro tipo: «' + esc(d.motivo) + '»</p>';
         break;
-      case 'publicado': ic = '🚀'; txt = quien + ' publicó en ' + (L.PLATAFORMAS[d.plataforma] || ''); if (d.enlace) extra += '<p><a href="' + esc(d.enlace) + '" target="_blank" rel="noopener">Ver post</a></p>'; break;
+      case 'publicado': ic = '🚀'; txt = quien + ' publicó en ' + (L.PLATAFORMAS[d.plataforma] || ''); if (d.enlace) extra += '<p><a href="' + url(d.enlace) + '" target="_blank" rel="noopener">Ver post</a></p>'; break;
       case 'vistas': ic = '👀'; txt = quien + ' anotó vistas: ' + ['ig', 'tt'].filter(function (k) { return d['vistas_' + k] != null; }).map(function (k) { return L.PLAT_CORTO[k] + ' ' + Number(d['vistas_' + k]).toLocaleString('es'); }).join(' · '); break;
       case 'archivada': ic = '🗄️'; txt = quien + ' la archivó'; break;
       case 'reabierta': ic = '↩️'; txt = quien + ' la reabrió'; break;

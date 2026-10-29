@@ -352,7 +352,7 @@
     }
     if (t.atrasadas.length) {
       h += '<section class="bloque alerta"><div class="bloque-head"><h2>Atrasadas</h2></div>' +
-        '<p class="ayuda sin-margen">Se recuperan además de tus tareas de hoy. Si no se pudo hacer por un motivo válido, explícalo y gerencia lo revisa.</p><div class="lista">' +
+        '<p class="ayuda sin-margen">Se suman a las de hoy. Si no se pudo por un motivo válido, explícalo.</p><div class="lista">' +
         t.atrasadas.map(function (a) { return filaTareaEmpleado(a, true); }).join('') + '</div></section>';
     }
     h += '<section class="bloque"><div class="bloque-head"><h2>Tus tareas de hoy</h2></div>';
@@ -563,22 +563,27 @@
       var s = L.asistenciaDe(d, pe.id, hoy);
       return localDe(pe) !== localId && s && s.estado === 'presente' && s.local_id === localId;
     }) : [];
-    h += chipsPersonas(emps, null);
-    h += '<section class="bloque"><div class="bloque-head"><h2>Asistencia</h2><small class="muted">' + marcados + ' de ' + trabajan.length + '</small></div><div class="asistencia">' +
+    // Equipo de hoy: una tarjeta por persona con su asistencia y cuánto lleva; al tocarla se abre su día
+    h += '<section class="bloque"><div class="bloque-head"><h2>Equipo de hoy</h2><small class="muted">' + marcados + ' de ' + trabajan.length + ' llegaron</small></div><div class="asistencia">' +
       emps.map(function (pe) {
         var e = L.estadoAsistencia(d, pe.id, hoy, ahora), s = L.asistenciaDe(d, pe.id, hoy);
         var otro = s && s.estado === 'presente' && s.local_id && s.local_id !== localDe(pe);
-        return '<button class="asis" data-acc="asistencia" data-id="' + esc(pe.id) + '"><span class="asis-nombre">' + esc(pe.nombre) + '</span>' +
+        var t = L.tareasDe(d, pe.id, hoy), todas = t.atrasadas.concat(t.hoy), hechas = todas.filter(function (a) { return a.estado === 'hecha'; });
+        var pct = todas.length ? Math.round(100 * sumMin(hechas) / (sumMin(todas) || 1)) : 0;
+        var apagada = (e === 'libre' && !todas.length) || e === 'ausente' || e === 'falta' || L.seFue(d, pe.id, hoy);
+        return '<a class="asis' + (apagada ? ' apagada' : '') + '" href="#/persona/' + esc(pe.id) + '"><span class="asis-nombre">' + esc(pe.nombre) +
+          (todas.length ? '<b class="asis-n">' + hechas.length + '/' + todas.length + '</b>' : '') + '</span>' +
           '<span class="pill ' + ESTADO_TONO[e] + '">' + (e === 'libre' && L.libreDe(pe, hoy) ? esc(L.libreDe(pe, hoy).motivo || 'Vacaciones') : ESTADO_TXT[e]) + (s && s.llegada ? ' · ' + esc(L.fmtHora(s.llegada)) : '') + '</span>' +
           (s && s.salida && s.estado === 'presente' ? '<span class="pill corregir">Se fue ' + esc(L.fmtHora(s.salida)) + '</span>' : '') +
           (L.estaFuera(d, pe.id, hoy) ? '<span class="pill hora">Fuera (despachando)</span>' : '') +
           (otro ? '<span class="pill edita">Vino a ' + esc(nombreLocal(s.local_id)) + '</span>' : '') +
-          (s && s.llegada && s.estado === 'presente' ? '<span class="asis-verif">' + esc(verifCorto(s, pe.id)) + '</span>' : '') + '</button>';
+          (s && s.llegada && s.estado === 'presente' && s.verificado !== 'wifi' ? '<span class="asis-verif">' + esc(verifCorto(s, pe.id)) + '</span>' : '') +
+          (todas.length ? '<span class="carga asis-carga" aria-hidden="true"><span class="hecho" style="width:' + pct + '%"></span></span>' : '') + '</a>';
       }).join('') +
       visitas.map(function (pe) {
         var s = L.asistenciaDe(d, pe.id, hoy);
-        return '<button class="asis visita" data-acc="asistencia" data-id="' + esc(pe.id) + '"><span class="asis-nombre">' + esc(pe.nombre) + '</span>' +
-          '<span class="pill edita">Vino de ' + esc(nombreLocal(localDe(pe))) + ' · ' + esc(L.fmtHora(s.llegada)) + '</span></button>';
+        return '<a class="asis visita" href="#/persona/' + esc(pe.id) + '"><span class="asis-nombre">' + esc(pe.nombre) + '</span>' +
+          '<span class="pill edita">Vino de ' + esc(nombreLocal(localDe(pe))) + ' · ' + esc(L.fmtHora(s.llegada)) + '</span></a>';
       }).join('') + '</div>' + lineaSinPuntualidad(emps, hoy, ahora) + '</section>';
 
     var justs = justPorRevisar(localId);
@@ -602,19 +607,6 @@
         '<small class="muted">' + esc(L.minutosTxt(sumMin(pool))) + '</small></div><div class="lista">' + pool.map(filaTareaAdmin).join('') + '</div></section>';
     }
 
-    emps.forEach(function (pe) {
-      var t = L.tareasDe(d, pe.id, hoy), todas = t.atrasadas.concat(t.hoy);
-      var e = L.estadoAsistencia(d, pe.id, hoy, ahora);
-      if (e === 'libre' && !todas.length) return;
-      var min = sumMin(todas), hechas = todas.filter(function (a) { return a.estado === 'hecha'; });
-      var disp = Math.round(aj().minutos_jornada * L.capacidad(pe) / 100);
-      h += '<section class="bloque persona-bloque' + (e === 'ausente' || e === 'falta' || L.seFue(d, pe.id, hoy) ? ' falta' : '') + '"><div class="bloque-head"><h2><a class="ver-persona" href="#/persona/' + esc(pe.id) + '">' + esc(pe.nombre) +
-        (L.capacidad(pe) < 100 ? ' <small class="muted cap">' + L.capacidad(pe) + '%</small>' : '') + ' ›</a></h2>' +
-        '<small class="muted">' + hechas.length + ' de ' + todas.length + ' · ' + esc(L.minutosTxt(min)) + '</small></div>' +
-        '<div class="carga" title="Minutos asignados frente a su tiempo para tareas (' + esc(L.minutosTxt(disp)) + ')"><span style="width:' + Math.min(100, Math.round(100 * min / disp)) + '%"></span><span class="hecho" style="width:' +
-        Math.min(100, Math.round(100 * sumMin(hechas) / disp)) + '%"></span></div>' +
-        (todas.length ? '<div class="lista">' + todas.map(filaTareaAdmin).join('') + '</div>' : '<p class="muted vacio-chico">Sin tareas hoy.</p>') + '</section>';
-    });
     if (!emps.length) h += '<p class="vacio muted">Este local no tiene empleados activos. Asígnalos en <a href="#/equipo/personas">Equipo → Personas</a>.</p>';
     return h;
   }
@@ -647,7 +639,8 @@
     var h = '<a class="volver" href="#/">‹ Hoy</a>' + chipsPersonas(loc ? empleadosDe(loc) : empleados(), pe.id);
     h += '<h1>' + esc(pe.nombre) + '</h1><p class="fecha-hoy">' + (variosLocales() && loc ? esc(nombreLocal(loc)) + ' · ' : '') +
       '<span class="pill ' + ESTADO_TONO[e] + '">' + ESTADO_TXT[e] + (s && s.llegada ? ' · ' + esc(L.fmtHora(s.llegada)) : '') + '</span>' +
-      (s && s.salida && s.estado === 'presente' ? ' <span class="pill corregir">Se fue ' + esc(L.fmtHora(s.salida)) + '</span>' : '') + '</p>';
+      (s && s.salida && s.estado === 'presente' ? ' <span class="pill corregir">Se fue ' + esc(L.fmtHora(s.salida)) + '</span>' : '') +
+      ' <button class="btn link" data-acc="asistencia" data-id="' + esc(pe.id) + '">Cambiar asistencia</button></p>';
     h += '<div class="resumen-persona"><div><b>' + suyas.length + ' de ' + todas.length + '</b><span class="muted">hechas</span></div>' +
       '<div><b>' + porHacer.length + '</b><span class="muted">por hacer</span></div>' +
       '<div><b>' + esc(L.minutosTxt(min)) + '</b><span class="muted">de ' + esc(L.minutosTxt(disp)) + '</span></div></div>' +
