@@ -684,3 +684,5 @@ a.asis { text-decoration: none; }
 .asis-n { font-size: .85rem; color: var(--muted); font-weight: 700; }
 .asis.apagada { opacity: .6; }
 .asis-carga { display: block; width: 100%; margin: 2px 0 0; }
+.cuotas { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.cuotas .fila-inline { margin-top: 4px; }

@@ -281,6 +281,11 @@ alter table public.revisiones add column if not exists hecho_por uuid references
 alter table public.revisiones add column if not exists manual boolean not null default false;
 -- Local cuyas revisiones las hace siempre la misma persona de gerencia (no entra en el reparto entre gerencia)
 alter table public.locales add column if not exists revisor uuid references public.personas (id) on delete set null;
+-- Revisiones al día por persona de gerencia en este local: {"<id de gerencia>": n}. Vacío = las del azar general (revisiones_dia).
+-- Se eligen en el momento en que el empleado marca la tarea (ver _revision_al_momento).
+alter table public.locales add column if not exists revisiones jsonb not null default '{}';
+-- la revisora fija de antes pasa a 2 al día (una sola vez: se borra revisor)
+update public.locales set revisiones = jsonb_build_object(revisor::text, 2), revisor = null where revisor is not null and revisiones = '{}';
 alter table public.asignaciones add column if not exists repetir boolean not null default false;  -- gerencia la mandó a repetir
 -- Lo que otro hizo por alguien que llegó tarde y ya se le compensó (para no compensar dos veces)
 alter table public.asignaciones add column if not exists compensada boolean not null default false;
@@ -941,6 +946,7 @@ begin
     end if;
     update asignaciones set estado = 'hecha', hecha_en = now(), hecha_por = coalesce(a.asignado_a, auth.uid()), repetir = false where id = p_id;
     insert into tareas_eventos (asignacion_id, tipo, a) values (p_id, 'hecha', coalesce(a.asignado_a, auth.uid()));
+    if not adm then perform public._revision_al_momento(p_id); end if;
     -- Tarea de varias personas: con que una la marque, queda hecha para todos. Cada puesto queda como hecho
     -- por su dueño (la hicieron juntos: nadie le debe minutos a nadie).
     with b as (
@@ -1071,6 +1077,40 @@ begin
   insert into tareas_eventos (asignacion_id, tipo, a, texto) values (p_id, case when p_ok then 'just_aprobada' else 'just_rechazada' end, a.asignado_a, a.justificacion);
 end $$;
 
+-- Revisión en el momento: cuando un empleado marca una tarea de un local con reparto propio (locales.revisiones),
+-- se decide al azar si se revisa, con probabilidad = revisiones que faltan hoy / tareas que faltan (incluida esta).
+-- Así salen exactamente las del día, repartidas a lo largo de la jornada, y le llega un aviso a quien le toca.
+create or replace function public._revision_al_momento(p_id uuid) returns void
+language plpgsql security definer set search_path = public as $$
+declare a public.asignaciones; cfg jsonb; faltan int; quedan int; quien uuid; v uuid; nom text;
+begin
+  select * into a from asignaciones where id = p_id;
+  if a.id is null or a.estado <> 'hecha' or a.hecha_por is null then return; end if;
+  select revisiones into cfg from locales where id = a.local_id;
+  if cfg is null or cfg = '{}' then return; end if;
+  if not exists (select 1 from personas where id = a.hecha_por and rol = 'empleado') then return; end if;
+  perform pg_advisory_xact_lock(hashtext('revisiones:' || public.hoy()::text));
+  if exists (select 1 from revisiones where asignacion_id = a.id) then return; end if;
+  -- cuántas le faltan hoy a cada persona de gerencia en este local
+  with c as (
+    select pe.id, greatest(0, (cfg->>pe.id::text)::int - (select count(*) from revisiones r join asignaciones x on x.id = r.asignacion_id
+             where r.fecha = public.hoy() and not r.manual and r.revisor = pe.id and x.local_id = a.local_id)) as f
+    from personas pe where pe.rol = 'admin' and pe.activo and cfg ? pe.id::text)
+  select coalesce(sum(f), 0), (select id from c where f > 0 order by f desc, random() limit 1) into faltan, quien from c;
+  if faltan <= 0 or quien is null then return; end if;
+  select count(*) + 1 into quedan from asignaciones x
+  where x.local_id = a.local_id and x.estado = 'pendiente' and x.asignado_a is not null and x.id <> a.id
+    and (x.fecha = public.hoy() or (x.fecha < public.hoy() and x.arrastra));
+  if random() >= faltan::numeric / quedan then return; end if;
+  insert into revisiones (asignacion_id, fecha, revisor, franja, hecho_por)
+  values (a.id, public.hoy(), quien, case when (now() at time zone 'America/Caracas')::time < '12:00' then 'manana' else 'tarde' end, a.hecha_por)
+  on conflict (asignacion_id) do nothing returning id into v;
+  if v is null then return; end if;
+  select coalesce(nullif(nombre, ''), email) into nom from personas where id = a.hecha_por;
+  insert into avisos_cola (persona_id, titulo, cuerpo, url)
+  values (quien, '🔍 Revisión: ' || left(a.titulo, 60), nom || ' la acaba de marcar. Ve a verla y califícala.', './#/');
+end $$;
+
 -- Gerencia: elige al azar tareas hechas hoy para revisar y las reparte entre gerencia.
 -- La mitad sale de lo hecho ANTES de las 12 (se eligen desde las 12, cuando ya se puede escoger entre todo lo de la mañana)
 -- y la otra mitad de lo hecho DESDE las 12 (se eligen desde las 4 p. m.). Prefiere personas que aún no tienen revisión hoy.
@@ -1090,7 +1130,9 @@ begin
   foreach fr in array array['manana', 'tarde'] loop
     continue when (fr = 'manana' and ahora < '12:00') or (fr = 'tarde' and ahora < '16:00');
     meta := case when fr = 'manana' then ceil(n / 2.0)::int else floor(n / 2.0)::int end;
-    select count(*) into ya from revisiones where fecha = public.hoy() and franja = fr and not manual;
+    select count(*) into ya from revisiones r join asignaciones x on x.id = r.asignacion_id
+    where r.fecha = public.hoy() and r.franja = fr and not r.manual
+      and not exists (select 1 from locales lo where lo.id = x.local_id and lo.revisiones <> '{}');
     while ya < meta loop
       select x.id, x.hecha_por, x.local_id into a from asignaciones x
       where x.estado = 'hecha' and (x.hecha_en at time zone 'America/Caracas')::date = public.hoy()
@@ -1098,22 +1140,40 @@ begin
         and x.hecha_por is not null and not exists (select 1 from revisiones r where r.asignacion_id = x.id)
         and exists (select 1 from tareas_eventos e where e.asignacion_id = x.id and e.tipo = 'hecha' and e.autor = x.hecha_por)
         and exists (select 1 from personas pe where pe.id = x.hecha_por and pe.rol = 'empleado')
+        and not exists (select 1 from locales lo where lo.id = x.local_id and lo.revisiones <> '{}')
       order by exists (select 1 from revisiones r where r.fecha = public.hoy() and r.hecho_por = x.hecha_por), random()
       limit 1;
       exit when a.id is null;
-      -- si el local tiene su propia persona de gerencia para revisar, es ella; si no, la que lleva menos hoy
-      select pe.id into quien from locales lo join personas pe on pe.id = lo.revisor and pe.rol = 'admin' and pe.activo where lo.id = a.local_id;
-      if quien is null then
       select pe.id into quien from personas pe
       where pe.rol = 'admin' and pe.activo
       order by (select count(*) from revisiones r where r.revisor = pe.id and r.fecha = public.hoy()), random()
       limit 1;
-      end if;
       insert into revisiones (asignacion_id, fecha, revisor, franja, hecho_por) values (a.id, public.hoy(), quien, fr, a.hecha_por) on conflict do nothing;
       ya := ya + 1; nuevas := nuevas + 1;
-      a := null; quien := null;
+      a := null;
     end loop;
   end loop;
+  -- Locales con reparto propio: si a las 4 p. m. a alguien de gerencia le faltan revisiones (se marcó menos de lo previsto),
+  -- se completan con lo que ya se hizo hoy en ese local
+  if ahora >= '16:00' then
+    for a in
+      select lo.id as local_id, pe.id as revisor, (lo.revisiones->>pe.id::text)::int - (select count(*) from revisiones r join asignaciones x on x.id = r.asignacion_id
+               where r.fecha = public.hoy() and not r.manual and r.revisor = pe.id and x.local_id = lo.id) as f
+      from locales lo join personas pe on lo.revisiones ? pe.id::text and pe.rol = 'admin' and pe.activo
+    loop
+      continue when a.f <= 0;
+      insert into revisiones (asignacion_id, fecha, revisor, franja, hecho_por)
+      select x.id, public.hoy(), a.revisor, case when (x.hecha_en at time zone 'America/Caracas')::time < '12:00' then 'manana' else 'tarde' end, x.hecha_por
+      from asignaciones x
+      where x.local_id = a.local_id and x.estado = 'hecha' and (x.hecha_en at time zone 'America/Caracas')::date = public.hoy()
+        and x.hecha_por is not null and not exists (select 1 from revisiones r where r.asignacion_id = x.id)
+        and exists (select 1 from tareas_eventos e where e.asignacion_id = x.id and e.tipo = 'hecha' and e.autor = x.hecha_por)
+        and exists (select 1 from personas p2 where p2.id = x.hecha_por and p2.rol = 'empleado')
+      order by random() limit a.f
+      on conflict do nothing;
+      get diagnostics ya = row_count; nuevas := nuevas + ya;
+    end loop;
+  end if;
   return nuevas;
 end $$;
 

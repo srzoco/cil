@@ -57,6 +57,29 @@
   DemoStore.prototype._evento = function (asigId, tipo, de, a, texto) {
     this.db.eventos.push({ id: uuid(), asignacion_id: asigId, tipo: tipo, de: de || null, a: a || null, autor: this.usuarioId, texto: texto || null, creado_en: new Date().toISOString() });
   };
+  // Revisiones de hoy (no manuales) de una persona de gerencia en un local
+  DemoStore.prototype._revisionesDe = function (revisor, localId) {
+    var self = this, hoy = L.hoyISO();
+    return (this.db.revisiones || []).filter(function (r) { var t = self._asig(r.asignacion_id); return r.fecha === hoy && !r.manual && r.revisor === revisor && t && t.local_id === localId; });
+  };
+  // Igual que _revision_al_momento en el SQL: probabilidad = revisiones que faltan / tareas que faltan (incluida esta)
+  DemoStore.prototype._revisionAlMomento = function (a) {
+    var self = this, db = this.db, hoy = L.hoyISO();
+    var lo = db.locales.filter(function (l) { return l.id === a.local_id; })[0], cfg = (lo && lo.revisiones) || {};
+    if (!Object.keys(cfg).length || !db.personas.some(function (p) { return p.id === a.hecha_por && p.rol === 'empleado'; })) return;
+    db.revisiones = db.revisiones || [];
+    if (db.revisiones.some(function (r) { return r.asignacion_id === a.id; })) return;
+    var falta = db.personas.filter(function (p) { return p.rol === 'admin' && p.activo && cfg[p.id]; })
+      .map(function (p) { return { id: p.id, f: Math.max(0, cfg[p.id] - self._revisionesDe(p.id, a.local_id).length) }; }).filter(function (x) { return x.f > 0; });
+    var faltan = falta.reduce(function (t, x) { return t + x.f; }, 0);
+    if (!faltan) return;
+    var quedan = 1 + db.asignaciones.filter(function (x) { return x.local_id === a.local_id && x.estado === 'pendiente' && x.asignado_a && x.id !== a.id && (x.fecha === hoy || (x.fecha < hoy && x.arrastra)); }).length;
+    if (Math.random() >= faltan / quedan) return;
+    var maxF = Math.max.apply(null, falta.map(function (x) { return x.f; })), top = falta.filter(function (x) { return x.f === maxF; });
+    var rev = top[Math.floor(Math.random() * top.length)];
+    db.revisiones.push({ id: uuid(), asignacion_id: a.id, fecha: hoy, franja: new Date().getHours() < 12 ? 'manana' : 'tarde', hecho_por: a.hecha_por, revisor: rev.id,
+      calificacion: null, nota: null, revisado_por: null, revisado_en: null, creado_en: new Date().toISOString() });
+  };
   DemoStore.prototype.sesion = function () { var y = this._yo(); return { user: { id: y.id, email: y.email } }; };
   DemoStore.prototype.cambiarUsuario = function (id) { this.usuarioId = id; LS.set('tareasbf_demo_usuario', id); };
   DemoStore.prototype.reiniciar = function () { this.db = this.semilla(); this._guardar(); };
@@ -239,6 +262,7 @@
       }
       a.estado = 'hecha'; a.hecha_en = new Date().toISOString(); a.hecha_por = a.asignado_a || yo.id; a.repetir = false;
       this._evento(a.id, 'hecha', null, a.hecha_por);
+      if (!adm) this._revisionAlMomento(a);
       // Tarea de varias personas: con que una la marque, queda hecha para todos (igual que el SQL).
       // Cada puesto queda como hecho por su dueño: la hicieron juntos, nadie le «debe» minutos a nadie.
       L.companerosDe(db, a).forEach(function (b) {
@@ -554,19 +578,21 @@
           // igual que el SQL: solo lo que la persona marcó ella misma
           var marcoElla = function (asigId, persona) { return (db.eventos || []).some(function (e) { return e.asignacion_id === asigId && e.tipo === 'hecha' && e.autor === persona; }); };
           db.revisiones = db.revisiones.filter(function (x) { return !(x.fecha === hoy && x.calificacion == null && !x.manual && !marcoElla(x.asignacion_id, x.hecho_por)); });
+          var self = this, conReparto = function (lid) { var lo = db.locales.filter(function (l) { return l.id === lid; })[0]; return !!(lo && lo.revisiones && Object.keys(lo.revisiones).length); };
           var now = new Date(), minAhora = now.getHours() * 60 + now.getMinutes();
           var n = db.ajustes.revisiones_dia == null ? 4 : db.ajustes.revisiones_dia;
           var admins = db.personas.filter(function (p) { return p.rol === 'admin' && p.activo; });
           var nuevas = 0;
           [['manana', 720, Math.ceil(n / 2)], ['tarde', 960, Math.floor(n / 2)]].forEach(function (fr) {
             if (minAhora < fr[1]) return;
-            var ya = db.revisiones.filter(function (x) { return x.fecha === hoy && x.franja === fr[0] && !x.manual; }).length;
+            var ya = db.revisiones.filter(function (x) { var t = self._asig(x.asignacion_id); return x.fecha === hoy && x.franja === fr[0] && !x.manual && !(t && conReparto(t.local_id)); }).length;
             while (ya < fr[2]) {
               var revisadas = db.revisiones.map(function (x) { return x.asignacion_id; });
               var conRev = db.revisiones.filter(function (x) { return x.fecha === hoy; }).map(function (x) { return x.hecho_por; });
               var cands = db.asignaciones.filter(function (x) {
                 if (x.estado !== 'hecha' || !x.hecha_en || !x.hecha_por || revisadas.indexOf(x.id) >= 0) return false;
                 if (!db.personas.some(function (p) { return p.id === x.hecha_por && p.rol === 'empleado'; })) return false;
+                if (conReparto(x.local_id)) return false;
                 if (!marcoElla(x.id, x.hecha_por)) return false;
                 var dh = new Date(x.hecha_en);
                 if (L.hoyISO(dh) !== hoy) return false;
@@ -581,12 +607,26 @@
               var libres = admins.filter(function (p) { return cuenta(p) === minC; });
               var rev = libres[Math.floor(Math.random() * libres.length)];
               // el local puede tener su propia persona de gerencia para revisar
-              var locR = db.locales.filter(function (l) { return l.id === elegida.local_id; })[0];
-              var fijo = locR && locR.revisor && admins.filter(function (p) { return p.id === locR.revisor; })[0];
-              if (fijo) rev = fijo;
               db.revisiones.push({ id: uuid(), asignacion_id: elegida.id, fecha: hoy, franja: fr[0], hecho_por: elegida.hecha_por, revisor: rev ? rev.id : null, calificacion: null, nota: null, revisado_por: null, revisado_en: null, creado_en: new Date().toISOString() });
               ya++; nuevas++;
             }
+          });
+          // locales con reparto propio: a las 4 p. m. se completa lo que falte con lo hecho hoy (igual que el SQL)
+          if (minAhora >= 960) db.locales.forEach(function (lo) {
+            Object.keys(lo.revisiones || {}).forEach(function (rid) {
+              if (!admins.some(function (p) { return p.id === rid; })) return;
+              var f = lo.revisiones[rid] - self._revisionesDe(rid, lo.id).length;
+              var cands = db.asignaciones.filter(function (x) {
+                return x.local_id === lo.id && x.estado === 'hecha' && x.hecha_por && x.hecha_en && L.hoyISO(new Date(x.hecha_en)) === hoy && marcoElla(x.id, x.hecha_por) &&
+                  !db.revisiones.some(function (v) { return v.asignacion_id === x.id; }) && db.personas.some(function (p) { return p.id === x.hecha_por && p.rol === 'empleado'; });
+              });
+              while (f > 0 && cands.length) {
+                var x = cands.splice(Math.floor(Math.random() * cands.length), 1)[0];
+                db.revisiones.push({ id: uuid(), asignacion_id: x.id, fecha: hoy, franja: new Date(x.hecha_en).getHours() < 12 ? 'manana' : 'tarde', hecho_por: x.hecha_por, revisor: rid,
+                  calificacion: null, nota: null, revisado_por: null, revisado_en: null, creado_en: new Date().toISOString() });
+                f--; nuevas++;
+              }
+            });
           });
           r = nuevas;
         }

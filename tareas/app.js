@@ -1310,7 +1310,7 @@
     h += '<label class="check"><input type="checkbox" name="pool"' + (a.pool_activo ? ' checked' : '') + '><span>Pool de tareas libres <small class="muted">— los empleados ven las tareas sin dueño de su local y pueden tomarlas. Si lo apagas, lo que quede sin asignar solo lo ves tú.</small></span></label>';
     h += '<p class="campo"><b>«Llegué» solo desde el Wi-Fi del local</b> <small class="muted">— siempre activo. Desde otra red les sale «No se pudo marcar tu llegada», sin explicar por qué, y a gerencia le llega un aviso para aprobar esa red si es la del local. Marcar «Hecho» exige haber marcado «Llegué».</small></p>';
     h += '<label class="check sub-check"><input type="checkbox" name="usar_gps"' + (a.usar_gps ? ' checked' : '') + '><span>Si no está en el Wi-Fi, probar con la ubicación del teléfono <small class="muted">— el teléfono les pedirá permiso de ubicación (eso no se puede ocultar). La ubicación no se guarda: solo se compara con la del local.</small></span></label>';
-    h += '<label class="campo">Revisiones de calidad por día<select name="revisiones_dia">' + [0, 2, 4, 6, 8, 10].map(function (n) {
+    h += '<label class="campo">Revisiones al azar por día <small>(solo locales sin cantidades propias en Equipo → Locales)</small><select name="revisiones_dia">' + [0, 2, 4, 6, 8, 10].map(function (n) {
       return '<option value="' + n + '"' + ((a.revisiones_dia == null ? 4 : a.revisiones_dia) === n ? ' selected' : '') + '>' + (n ? n + ' al día (' + n / 2 + ' de la mañana y ' + n / 2 + ' de la tarde)' : 'Ninguna') + '</option>';
     }).join('') + '</select><small class="ayuda">La mitad sale de lo hecho antes de las 12 (se eligen al mediodía) y la otra mitad de lo hecho desde las 12 (se eligen a las 4 p. m.). Se reparten entre gerencia.</small></label>';
     if (store.modo === 'demo') {
@@ -1409,11 +1409,12 @@
     h += '<div class="tienda-fila"><div><b>¿Se cayó el Wi-Fi?</b><span class="muted">' + (sinWifi ? '<span class="ok-txt">Hoy pueden marcar «Llegué» sin el Wi-Fi</span>' : 'Permite marcar «Llegué» sin el Wi-Fi solo por hoy') + '</span></div>' +
       '<button class="btn ' + (sinWifi ? 'sec' : 'warn') + ' chico" type="button" data-acc="sin-wifi" data-id="' + esc(l.id) + '" data-v="' + (sinWifi ? '0' : '1') + '">' + (sinWifi ? 'Ya volvió' : 'Hoy no hay Wi-Fi') + '</button></div>';
     var gerencia = S.data.personas.filter(function (x) { return x.rol === 'admin' && x.activo; });
-    if (gerencia.length > 1) {
-      h += '<label class="campo">Revisiones de calidad de este local<select name="revisor"><option value="">Se reparten entre gerencia</option>' + gerencia.map(function (x) {
-        return '<option value="' + esc(x.id) + '"' + (l.revisor === x.id ? ' selected' : '') + '>Solo las revisa ' + esc(x.nombre || x.email) + '</option>';
+    var cuotas = l.revisiones || {};
+    h += '<div class="campo"><span>Revisiones de calidad al día</span><div class="cuotas">' + gerencia.map(function (x) {
+      return '<label class="fila-inline">' + esc(x.nombre || x.email) + '<select name="rev_' + esc(x.id) + '">' + [0, 1, 2, 3, 4, 5].map(function (n) {
+        return '<option value="' + n + '"' + ((cuotas[x.id] || 0) === n ? ' selected' : '') + '>' + n + '</option>';
       }).join('') + '</select></label>';
-    }
+    }).join('') + '</div><small class="muted">Salen en el momento en que el empleado marca la tarea, y te llega un aviso. Todo en 0: se usan las del azar de Equipo → Ajustes.</small></div>';
     h += '<div class="acciones"><button class="btn chico" type="submit">Guardar local</button>' +
       (l.principal ? '' : '<button class="btn fantasma rojo chico" type="button" data-acc="borrar-local" data-id="' + esc(l.id) + '">Borrar</button>') + '</div></form>';
     return h;
@@ -2164,7 +2165,9 @@
       var labL = fd.getAll('lab').map(Number);
       if (!labL.length) { aviso('Marca al menos un día de trabajo.'); return; }
       var patchL = { nombre: String(fd.get('nombre') || '').trim() || 'Local', dias_laborables: labL, radio_m: Number(fd.get('radio_m')) || 150 };
-      if (fd.has('revisor')) patchL.revisor = fd.get('revisor') || null;
+      var cuo = {};
+      S.data.personas.forEach(function (x) { var n = Number(fd.get('rev_' + x.id)); if (x.rol === 'admin' && n > 0) cuo[x.id] = n; });
+      patchL.revisiones = cuo;
       ejecutar(store.actualizar('locales', f.getAttribute('data-id'), patchL), 'Local guardado.');
     }
     else if (tipo === 'persona') {
