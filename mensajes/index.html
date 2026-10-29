@@ -1020,7 +1020,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
     $('#editor').hidden = !S.edit;
     $('#cat-list-wrap').hidden = !!S.edit;
     if (S.edit) return;
-    $('#cat-sub').textContent = `${S.products.length} productos. Precios base de barquerofood.com, sin descuento` + (S.imp && S.imp.fecha ? `, cargados ${shortDate(S.imp.fecha)}.` : '.') + (DATA.robot && DATA.robot.fecha ? ` Precio y stock de Yobel: ${fmtWhen(DATA.robot.fecha)}.` : '');
+    $('#cat-sub').textContent = `${S.products.length} productos. Precios base de barquerofood.com, sin descuento` + ((S.imp && S.imp.fecha ? `, cargados ${shortDate(S.imp.fecha)}` : '') + '.').replace(/\.\.$/, '.') + (DATA.robot && DATA.robot.fecha ? (` Precio y stock de Yobel: ${fmtWhen(DATA.robot.fecha)}` + '.').replace(/\.\.$/, '.') : '');
     const list = $('#clist');
     if (!S.products.length) list.innerHTML = '<p class="empty">Todavía no hay productos.</p>';
     else {
