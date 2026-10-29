@@ -1,0 +1,2595 @@
+{
+ "productos": [
+  {
+   "id": "bacalao-cajas",
+   "nombre": "🐟 BACALAO NORUEGO por cajas (Jangaard - talla 7/9)",
+   "categoria": "Al Mayor",
+   "emoji": "🔹",
+   "pregunta": "¿Qué presentación le interesa?",
+   "actualizado": "2026-10-07T15:23:08.642Z",
+   "presentaciones": [
+    {
+     "texto": "Gadus (25kg)",
+     "precio": 1800,
+     "kilo": false,
+     "ref": "Caja Bacalao Noruego Gadus - Jangaard|||||"
+    },
+    {
+     "texto": "Molva (25kg)",
+     "precio": 1450,
+     "kilo": false,
+     "ref": "Caja de Bacalao Noruego - Jangaard||||Molva|"
+    }
+   ]
+  },
+  {
+   "id": "caja-camaron-pelado-y-desvenado-18kg-agrolago",
+   "nombre": "Caja Camarón Pelado y Desvenado 18kg - Agrolago",
+   "categoria": "Al Mayor",
+   "emoji": "🦐",
+   "pregunta": "¿Qué talla le interesa?",
+   "presentaciones": [
+    {
+     "texto": "talla 61/70",
+     "precio": 326,
+     "kilo": false,
+     "ref": "Caja Camarón Pelado y Desvenado 18kg - Agrolago|61/70||||"
+    },
+    {
+     "texto": "talla 51/60",
+     "precio": 330,
+     "kilo": false,
+     "ref": "Caja Camarón Pelado y Desvenado 18kg - Agrolago|51/60||||"
+    },
+    {
+     "texto": "talla 41/50",
+     "precio": 356,
+     "kilo": false,
+     "ref": "Caja Camarón Pelado y Desvenado 18kg - Agrolago|41/50||||"
+    },
+    {
+     "texto": "talla 36/40",
+     "precio": 400,
+     "kilo": false,
+     "ref": "Caja Camarón Pelado y Desvenado 18kg - Agrolago|36/40||||"
+    },
+    {
+     "texto": "talla 31/35",
+     "precio": 440,
+     "kilo": false,
+     "ref": "Caja Camarón Pelado y Desvenado 18kg - Agrolago|31/35||||"
+    },
+    {
+     "texto": "talla 26/30",
+     "precio": 520,
+     "kilo": false,
+     "ref": "Caja Camarón Pelado y Desvenado 18kg - Agrolago|26/30||||"
+    },
+    {
+     "texto": "talla 21/25",
+     "precio": 580,
+     "kilo": false,
+     "ref": "Caja Camarón Pelado y Desvenado 18kg - Agrolago|21/25||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "caja-de-curvina-en-filet-s-p",
+   "nombre": "Caja de Curvina en Filet S/P",
+   "categoria": "Al Mayor",
+   "emoji": "🐟",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 32,
+     "kilo": true,
+     "ref": "Caja de Curvina en Filet S/P|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "caja-de-prosciutto-gutelli",
+   "nombre": "Caja de Prosciutto - Gutelli",
+   "categoria": "Al Mayor",
+   "emoji": "🍖",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 50,
+     "kilo": true,
+     "ref": "Caja de Prosciutto - Gutelli|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "caja-de-punta-importada-prime",
+   "nombre": "Caja de Punta Importada Prime",
+   "categoria": "Al Mayor",
+   "emoji": "🥩",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 80,
+     "kilo": true,
+     "ref": "Caja de Punta Importada Prime|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "caja-de-tinta-de-calamar-sepink",
+   "nombre": "Caja de Tinta de Calamar - Sepink",
+   "categoria": "Al Mayor",
+   "emoji": "🦑",
+   "pregunta": "¿Qué presentación le interesa?",
+   "presentaciones": [
+    {
+     "texto": "12 unidades · 180 g",
+     "precio": 340,
+     "kilo": false,
+     "ref": "Caja de Tinta de Calamar - Sepink||12 unidades|||180 g"
+    },
+    {
+     "texto": "6 unidades · 500 g",
+     "precio": 390,
+     "kilo": false,
+     "ref": "Caja de Tinta de Calamar - Sepink||6 unidades|||500 g"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "asado-de-tiras-deshuesado-choice",
+   "nombre": "Asado de Tiras deshuesado Choice",
+   "categoria": "Carnes",
+   "emoji": "🥩",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 80,
+     "kilo": true,
+     "ref": "Asado de Tiras deshuesado Choice|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "carne-mechada-500-g-entre-nos",
+   "nombre": "Carne Mechada 500 g - Entre Nos",
+   "categoria": "Carnes",
+   "emoji": "🥩",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 28,
+     "kilo": false,
+     "ref": "Carne Mechada 500 g - Entre Nos|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "entrana-king-beef",
+   "nombre": "Entraña - King Beef",
+   "categoria": "Carnes",
+   "emoji": "🥩",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "0.95kg",
+     "precio": 34.2,
+     "kilo": false,
+     "ref": "Entraña - King Beef|||||0.95kg"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "pernil-mechado-1kg",
+   "nombre": "Pernil mechado 1kg",
+   "categoria": "Carnes",
+   "emoji": "🥩",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 60,
+     "kilo": false,
+     "ref": "Pernil mechado 1kg|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "punta-importada-angus-cab",
+   "nombre": "Punta Importada Angus (CAB)",
+   "categoria": "Carnes",
+   "emoji": "🥩",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 80,
+     "kilo": true,
+     "ref": "Punta Importada Angus (CAB)|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "punta-importada-select",
+   "nombre": "Punta Importada Select",
+   "categoria": "Carnes",
+   "emoji": "🥩",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 69,
+     "kilo": true,
+     "ref": "Punta Importada Select|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "centro-de-jamon-serrano-costa-brava",
+   "nombre": "Centro de Jamón Serrano - Costa Brava",
+   "categoria": "Charcutería",
+   "emoji": "🍖",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 78,
+     "kilo": true,
+     "ref": "Centro de Jamón Serrano - Costa Brava|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "centro-jamon-serrano-18m-torre-de-nunez",
+   "nombre": "Centro Jamón Serrano 18M - Torre de Núñez",
+   "categoria": "Charcutería",
+   "emoji": "🍖",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 88,
+     "kilo": true,
+     "ref": "Centro Jamón Serrano 18M - Torre de Núñez|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "centro-jamon-serrano-18m-en-mitad-torre-de-nunez",
+   "nombre": "Centro Jamón Serrano 18M en Mitad - Torre de Núñez",
+   "categoria": "Charcutería",
+   "emoji": "🍖",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 88,
+     "kilo": true,
+     "ref": "Centro Jamón Serrano 18M en Mitad - Torre de Núñez|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "chorizo-corto-el-aguila",
+   "nombre": "Chorizo Corto - El Águila",
+   "categoria": "Charcutería",
+   "emoji": "🍖",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 100,
+     "kilo": true,
+     "ref": "Chorizo Corto - El Águila|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "chorizo-extra-vela-costa-brava",
+   "nombre": "Chorizo Extra Vela - Costa Brava",
+   "categoria": "Charcutería",
+   "emoji": "🍖",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 56,
+     "kilo": true,
+     "ref": "Chorizo Extra Vela - Costa Brava|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "chorizo-largo-el-aguila",
+   "nombre": "Chorizo Largo - El Águila",
+   "categoria": "Charcutería",
+   "emoji": "🍖",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 120,
+     "kilo": true,
+     "ref": "Chorizo Largo - El Águila|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "chorizo-malla-500g-torre-de-nunez",
+   "nombre": "Chorizo Malla 500g - Torre de Núñez",
+   "categoria": "Charcutería",
+   "emoji": "🍖",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 39,
+     "kilo": false,
+     "ref": "Chorizo Malla 500g - Torre de Núñez|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "chorizo-picante-el-aguila",
+   "nombre": "Chorizo Picante - El Águila",
+   "categoria": "Charcutería",
+   "emoji": "🍖",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 120,
+     "kilo": true,
+     "ref": "Chorizo Picante - El Águila|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "chorizo-portugues",
+   "nombre": "Chorizo Portugués",
+   "categoria": "Charcutería",
+   "emoji": "🍖",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 70,
+     "kilo": true,
+     "ref": "Chorizo Portugués|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "chorizo-sarta-200g-costa-brava",
+   "nombre": "Chorizo Sarta 200g - Costa Brava",
+   "categoria": "Charcutería",
+   "emoji": "🍖",
+   "pregunta": "¿Qué sabor prefiere?",
+   "presentaciones": [
+    {
+     "texto": "Dulce",
+     "precio": 12,
+     "kilo": false,
+     "ref": "Chorizo Sarta 200g - Costa Brava|||Dulce||"
+    },
+    {
+     "texto": "Picante",
+     "precio": 12,
+     "kilo": false,
+     "ref": "Chorizo Sarta 200g - Costa Brava|||Picante||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "chorizo-tapeo-torre-de-nunez",
+   "nombre": "Chorizo Tapeo - Torre de Núñez",
+   "categoria": "Charcutería",
+   "emoji": "🍖",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 20,
+     "kilo": false,
+     "ref": "Chorizo Tapeo - Torre de Núñez|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "chorizo-vela-galar",
+   "nombre": "Chorizo Vela - Galar",
+   "categoria": "Charcutería",
+   "emoji": "🍖",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 50,
+     "kilo": true,
+     "ref": "Chorizo Vela - Galar|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "contornos-parrilleros-meattown",
+   "nombre": "Contornos parrilleros - Meattown",
+   "categoria": "Charcutería",
+   "emoji": "🍖",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "Salchicha",
+     "precio": 16,
+     "kilo": false,
+     "ref": "Contornos parrilleros - Meattown|||Salchicha||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "fuet-costa-brava",
+   "nombre": "Fuet - Costa Brava",
+   "categoria": "Charcutería",
+   "emoji": "🍖",
+   "pregunta": "¿Qué sabor prefiere?",
+   "presentaciones": [
+    {
+     "texto": "Espetec",
+     "precio": 12,
+     "kilo": false,
+     "ref": "Fuet - Costa Brava|||Espetec||"
+    },
+    {
+     "texto": "Ibérico",
+     "precio": 12,
+     "kilo": false,
+     "ref": "Fuet - Costa Brava|||Ibérico||"
+    },
+    {
+     "texto": "Pimienta Negra",
+     "precio": 12,
+     "kilo": false,
+     "ref": "Fuet - Costa Brava|||Pimienta Negra||"
+    },
+    {
+     "texto": "Ajo",
+     "precio": 12,
+     "kilo": false,
+     "ref": "Fuet - Costa Brava|||Ajo||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "fuet-el-aguila",
+   "nombre": "Fuet - El Águila",
+   "categoria": "Charcutería",
+   "emoji": "🍖",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 120,
+     "kilo": true,
+     "ref": "Fuet - El Águila|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "guanciale-bombieri",
+   "nombre": "Guanciale - Bombieri",
+   "categoria": "Charcutería",
+   "emoji": "🍖",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 64,
+     "kilo": true,
+     "ref": "Guanciale - Bombieri|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "jamon-serrano-18m-corte-en-v-torre-de-nunez",
+   "nombre": "Jamón Serrano 18M Corte en V - Torre de Núñez",
+   "categoria": "Charcutería",
+   "emoji": "🍖",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 78,
+     "kilo": true,
+     "ref": "Jamón Serrano 18M Corte en V - Torre de Núñez|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "lomito-iberico-de-bellota-montesano",
+   "nombre": "Lomito Ibérico de Bellota - Montesano",
+   "categoria": "Charcutería",
+   "emoji": "🍖",
+   "pregunta": "¿Qué presentación le interesa?",
+   "presentaciones": [
+    {
+     "texto": "Al Vacío",
+     "precio": 59.8,
+     "kilo": false,
+     "ref": "Lomito Ibérico de Bellota - Montesano||Al Vacío|||"
+    },
+    {
+     "texto": "Lata",
+     "precio": 72,
+     "kilo": false,
+     "ref": "Lomito Ibérico de Bellota - Montesano||Lata|||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "lomo-embuchado-torre-de-nunez",
+   "nombre": "Lomo Embuchado - Torre de Núñez",
+   "categoria": "Charcutería",
+   "emoji": "🍖",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 104,
+     "kilo": true,
+     "ref": "Lomo Embuchado - Torre de Núñez|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "loncheado-80-g-galar",
+   "nombre": "Loncheado 80 g - Galar",
+   "categoria": "Charcutería",
+   "emoji": "🍖",
+   "pregunta": "¿Qué sabor prefiere?",
+   "presentaciones": [
+    {
+     "texto": "Jamón Serrano",
+     "precio": 12,
+     "kilo": false,
+     "ref": "Loncheado 80 g - Galar|||Jamón Serrano||"
+    },
+    {
+     "texto": "Pepperoni",
+     "precio": 7,
+     "kilo": false,
+     "ref": "Loncheado 80 g - Galar|||Pepperoni||"
+    },
+    {
+     "texto": "Salami",
+     "precio": 7,
+     "kilo": false,
+     "ref": "Loncheado 80 g - Galar|||Salami||"
+    },
+    {
+     "texto": "Salchichón Extra",
+     "precio": 7,
+     "kilo": false,
+     "ref": "Loncheado 80 g - Galar|||Salchichón Extra||"
+    },
+    {
+     "texto": "Chorizo Vela",
+     "precio": 7,
+     "kilo": false,
+     "ref": "Loncheado 80 g - Galar|||Chorizo Vela||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "loncheados-torre-de-nunez",
+   "nombre": "Loncheados - Torre de Núñez",
+   "categoria": "Charcutería",
+   "emoji": "🍖",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "300g · Jamón Serrano 15M",
+     "precio": 48,
+     "kilo": false,
+     "ref": "Loncheados - Torre de Núñez||300g|Jamón Serrano 15M||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "loncheados-100g-costa-brava",
+   "nombre": "Loncheados 100g - Costa Brava",
+   "categoria": "Charcutería",
+   "emoji": "🍖",
+   "pregunta": "¿Qué sabor prefiere?",
+   "presentaciones": [
+    {
+     "texto": "Coppa",
+     "precio": 12,
+     "kilo": false,
+     "ref": "Loncheados 100g - Costa Brava|||Coppa||"
+    },
+    {
+     "texto": "Lomo Embuchado",
+     "precio": 12,
+     "kilo": false,
+     "ref": "Loncheados 100g - Costa Brava|||Lomo Embuchado||"
+    },
+    {
+     "texto": "Jamón Serrano",
+     "precio": 12,
+     "kilo": false,
+     "ref": "Loncheados 100g - Costa Brava|||Jamón Serrano||"
+    },
+    {
+     "texto": "Chorizo Pimienta",
+     "precio": 10,
+     "kilo": false,
+     "ref": "Loncheados 100g - Costa Brava|||Chorizo Pimienta||"
+    },
+    {
+     "texto": "Salami",
+     "precio": 10,
+     "kilo": false,
+     "ref": "Loncheados 100g - Costa Brava|||Salami||"
+    },
+    {
+     "texto": "Salchichón",
+     "precio": 10,
+     "kilo": false,
+     "ref": "Loncheados 100g - Costa Brava|||Salchichón||"
+    },
+    {
+     "texto": "Salchichón Pimienta",
+     "precio": 10,
+     "kilo": false,
+     "ref": "Loncheados 100g - Costa Brava|||Salchichón Pimienta||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "prosciutto-crudo-dolce-sapore",
+   "nombre": "Prosciutto Crudo Dolce Sapore",
+   "categoria": "Charcutería",
+   "emoji": "🍖",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 60,
+     "kilo": true,
+     "ref": "Prosciutto Crudo Dolce Sapore|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "prosciutto-crudo-entero-matonella",
+   "nombre": "Prosciutto crudo entero Matonella",
+   "categoria": "Charcutería",
+   "emoji": "🍖",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 68,
+     "kilo": true,
+     "ref": "Prosciutto crudo entero Matonella|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "salami-extra-vela-costa-brava",
+   "nombre": "Salami Extra Vela - Costa Brava",
+   "categoria": "Charcutería",
+   "emoji": "🍖",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 56,
+     "kilo": true,
+     "ref": "Salami Extra Vela - Costa Brava|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "salami-extra-vela-mitad-costa-brava",
+   "nombre": "Salami Extra Vela Mitad - Costa Brava",
+   "categoria": "Charcutería",
+   "emoji": "🍖",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 56,
+     "kilo": true,
+     "ref": "Salami Extra Vela Mitad - Costa Brava|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "salchichon-extra-vela-costa-brava",
+   "nombre": "Salchichón Extra Vela - Costa Brava",
+   "categoria": "Charcutería",
+   "emoji": "🍖",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 56,
+     "kilo": true,
+     "ref": "Salchichón Extra Vela - Costa Brava|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "tocineta-ahumada-sugardale",
+   "nombre": "Tocineta Ahumada - Sugardale",
+   "categoria": "Charcutería",
+   "emoji": "🥓",
+   "pregunta": "¿Qué presentación le interesa?",
+   "presentaciones": [
+    {
+     "texto": "Center Cut 340g",
+     "precio": 26,
+     "kilo": false,
+     "ref": "Tocineta Ahumada - Sugardale||Center Cut 340g|||"
+    },
+    {
+     "texto": "Hickory 3* 450g",
+     "precio": 26,
+     "kilo": false,
+     "ref": "Tocineta Ahumada - Sugardale||Hickory 3* 450g|||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "colorante-290-g-carmencita",
+   "nombre": "Colorante 290 g - Carmencita",
+   "categoria": "Condimentos",
+   "emoji": "🧂",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 13,
+     "kilo": false,
+     "ref": "Colorante 290 g - Carmencita|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "pimienta-negra-con-molino-47g-carmencita",
+   "nombre": "Pimienta negra con molino 47g - Carmencita",
+   "categoria": "Condimentos",
+   "emoji": "🧂",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 11.4,
+     "kilo": false,
+     "ref": "Pimienta negra con molino 47g - Carmencita|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "sazonador-carmencita",
+   "nombre": "Sazonador - Carmencita",
+   "categoria": "Condimentos",
+   "emoji": "🧂",
+   "pregunta": "¿Qué sabor prefiere?",
+   "presentaciones": [
+    {
+     "texto": "Ajo-Perejil · 29g",
+     "precio": 5,
+     "kilo": false,
+     "ref": "Sazonador - Carmencita|||Ajo-Perejil||29g"
+    },
+    {
+     "texto": "Completo · 70g",
+     "precio": 7,
+     "kilo": false,
+     "ref": "Sazonador - Carmencita|||Completo||70g"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "tinta-de-calamar-sepink",
+   "nombre": "Tinta de Calamar - Sepink",
+   "categoria": "Condimentos",
+   "emoji": "🦑",
+   "pregunta": "¿Qué presentación le interesa?",
+   "presentaciones": [
+    {
+     "texto": "180 g",
+     "precio": 36,
+     "kilo": false,
+     "ref": "Tinta de Calamar - Sepink||180 g|||"
+    },
+    {
+     "texto": "500 g",
+     "precio": 82,
+     "kilo": false,
+     "ref": "Tinta de Calamar - Sepink||500 g|||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "berryumy",
+   "nombre": "Berryumy",
+   "categoria": "Dulces",
+   "emoji": "🍯",
+   "pregunta": "¿Qué presentación le interesa?",
+   "presentaciones": [
+    {
+     "texto": "Frasco 160g",
+     "precio": 22,
+     "kilo": false,
+     "ref": "Berryumy||Frasco 160g|||"
+    },
+    {
+     "texto": "Paleta",
+     "precio": 14,
+     "kilo": false,
+     "ref": "Berryumy||Paleta|||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "marquesas-180g-que-marquesas",
+   "nombre": "Marquesas 180g - Que Marquesas",
+   "categoria": "Dulces",
+   "emoji": "🍯",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "Cri-Cri",
+     "precio": 10,
+     "kilo": false,
+     "ref": "Marquesas 180g - Que Marquesas|||Cri-Cri||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "miel-de-trufa-sabatino",
+   "nombre": "Miel de trufa - Sabatino",
+   "categoria": "Dulces",
+   "emoji": "🍯",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 40,
+     "kilo": false,
+     "ref": "Miel de trufa - Sabatino|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "nutella-371-g",
+   "nombre": "Nutella 371 g",
+   "categoria": "Dulces",
+   "emoji": "🍫",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 18,
+     "kilo": false,
+     "ref": "Nutella 371 g|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "sardinas-en-aceite-de-oliva-190g-ortiz",
+   "nombre": "Sardinas en aceite de oliva 190g - Ortiz",
+   "categoria": "Enlatados",
+   "emoji": "🐟",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 26,
+     "kilo": false,
+     "ref": "Sardinas en aceite de oliva 190g - Ortiz|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "crema-de-pistacho-400g-visciano",
+   "nombre": "Crema de pistacho 400g - Visciano",
+   "categoria": "Enlatados y conservas",
+   "emoji": "🍯",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 24,
+     "kilo": false,
+     "ref": "Crema de pistacho 400g - Visciano|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "filetes-de-anchoas-80g-visciano",
+   "nombre": "Filetes de anchoas 80g - Visciano",
+   "categoria": "Enlatados y conservas",
+   "emoji": "🐟",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 11,
+     "kilo": false,
+     "ref": "Filetes de anchoas 80g - Visciano|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "lata-de-atun-170g-the-king-of-the-seas",
+   "nombre": "Lata de atún 170g - The king of the seas",
+   "categoria": "Enlatados y conservas",
+   "emoji": "🐟",
+   "pregunta": "¿Qué presentación le interesa?",
+   "presentaciones": [
+    {
+     "texto": "En Aceite Vegetal",
+     "precio": 4,
+     "kilo": false,
+     "ref": "Lata de atún 170g - The king of the seas||En Aceite Vegetal|||"
+    },
+    {
+     "texto": "Al Natural",
+     "precio": 4,
+     "kilo": false,
+     "ref": "Lata de atún 170g - The king of the seas||Al Natural|||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "mermelada-350g-ez",
+   "nombre": "Mermelada 350g - EZ",
+   "categoria": "Enlatados y conservas",
+   "emoji": "🍯",
+   "pregunta": "¿Qué sabor prefiere?",
+   "presentaciones": [
+    {
+     "texto": "Pimentón",
+     "precio": 10,
+     "kilo": false,
+     "ref": "Mermelada 350g - EZ|||Pimentón||"
+    },
+    {
+     "texto": "Pimentón Picante",
+     "precio": 10,
+     "kilo": false,
+     "ref": "Mermelada 350g - EZ|||Pimentón Picante||"
+    },
+    {
+     "texto": "Parchita",
+     "precio": 10,
+     "kilo": false,
+     "ref": "Mermelada 350g - EZ|||Parchita||"
+    },
+    {
+     "texto": "Guayaba - Limón",
+     "precio": 10,
+     "kilo": false,
+     "ref": "Mermelada 350g - EZ|||Guayaba - Limón||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "pesto-alla-genovese-180g-visciano",
+   "nombre": "Pesto Alla genovese 180g - Visciano",
+   "categoria": "Enlatados y conservas",
+   "emoji": "🥫",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 12,
+     "kilo": false,
+     "ref": "Pesto Alla genovese 180g - Visciano|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "tomates-secos-290g-visciano",
+   "nombre": "Tomates secos 290g - Visciano",
+   "categoria": "Enlatados y conservas",
+   "emoji": "🥫",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 12,
+     "kilo": false,
+     "ref": "Tomates secos 290g - Visciano|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "aceitunas-excelencia",
+   "nombre": "Aceitunas Excelencia",
+   "categoria": "Frutas",
+   "emoji": "🫒",
+   "pregunta": "¿Qué sabor prefiere?",
+   "presentaciones": [
+    {
+     "texto": "300g · Pimiento Asado",
+     "precio": 8,
+     "kilo": false,
+     "ref": "Aceitunas Excelencia||300g|Pimiento Asado||"
+    },
+    {
+     "texto": "800g · Aliñadas",
+     "precio": 22,
+     "kilo": false,
+     "ref": "Aceitunas Excelencia||800g|Aliñadas||"
+    },
+    {
+     "texto": "350g · Negras S/H",
+     "precio": 8,
+     "kilo": false,
+     "ref": "Aceitunas Excelencia||350g|Negras S/H||"
+    },
+    {
+     "texto": "350g · Verdes con Anchoas",
+     "precio": 8,
+     "kilo": false,
+     "ref": "Aceitunas Excelencia||350g|Verdes con Anchoas||"
+    },
+    {
+     "texto": "420g · Kalamata",
+     "precio": 16,
+     "kilo": false,
+     "ref": "Aceitunas Excelencia||420g|Kalamata||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "aceite-de-aguacate-en-spray-100ml-visciano",
+   "nombre": "Aceite de Aguacate en Spray (100ml) - Visciano",
+   "categoria": "Grasas",
+   "emoji": "🫒",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 14,
+     "kilo": false,
+     "ref": "Aceite de Aguacate en Spray (100ml) - Visciano|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "aceite-de-oliva-rafael-salgado",
+   "nombre": "Aceite de Oliva - Rafael Salgado",
+   "categoria": "Grasas",
+   "emoji": "🫒",
+   "pregunta": "¿Qué presentación le interesa?",
+   "presentaciones": [
+    {
+     "texto": "750ml",
+     "precio": 24,
+     "kilo": false,
+     "ref": "Aceite de Oliva - Rafael Salgado||750ml|||"
+    },
+    {
+     "texto": "Lata 500ml",
+     "precio": 17,
+     "kilo": false,
+     "ref": "Aceite de Oliva - Rafael Salgado||Lata 500ml|||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "aceite-de-oliva-tierra-santa",
+   "nombre": "Aceite de Oliva - Tierra Santa",
+   "categoria": "Grasas",
+   "emoji": "🫒",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "1L",
+     "precio": 30,
+     "kilo": false,
+     "ref": "Aceite de Oliva - Tierra Santa||1L|||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "aceite-de-oliva-250ml-visciano",
+   "nombre": "Aceite de Oliva (250ml)- Visciano",
+   "categoria": "Grasas",
+   "emoji": "🫒",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "Spray 250ml",
+     "precio": 20,
+     "kilo": false,
+     "ref": "Aceite de Oliva (250ml)- Visciano||Spray 250ml|||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "aceite-de-trufa-blanca-100ml-sabatino",
+   "nombre": "Aceite de trufa blanca (100ml)- Sabatino",
+   "categoria": "Grasas",
+   "emoji": "🫒",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 36,
+     "kilo": false,
+     "ref": "Aceite de trufa blanca (100ml)- Sabatino|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "aceite-de-trufa-blanca-1l-sabatino",
+   "nombre": "Aceite de trufa blanca 1L - Sabatino",
+   "categoria": "Grasas",
+   "emoji": "🫒",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 90,
+     "kilo": false,
+     "ref": "Aceite de trufa blanca 1L - Sabatino|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "aceite-de-trufa-negra-100ml-sabatino",
+   "nombre": "Aceite de trufa negra (100ml)- Sabatino",
+   "categoria": "Grasas",
+   "emoji": "🫒",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 30,
+     "kilo": false,
+     "ref": "Aceite de trufa negra (100ml)- Sabatino|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "manteca-de-cerdo-paticas-pa-keto-tengo",
+   "nombre": "Manteca de cerdo - Paticas pa´Keto tengo",
+   "categoria": "Grasas",
+   "emoji": "🫒",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 12,
+     "kilo": false,
+     "ref": "Manteca de cerdo - Paticas pa´Keto tengo|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "hamburguesa-hot-burguer",
+   "nombre": "Hamburguesa - Hot burguer",
+   "categoria": "Hamburguesas",
+   "emoji": "🍔",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 6,
+     "kilo": false,
+     "ref": "Hamburguesa - Hot burguer|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "calamar-criollo-limpio-500g",
+   "nombre": "Calamar criollo limpio (500g)",
+   "categoria": "Mariscos",
+   "emoji": "🦑",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 24,
+     "kilo": false,
+     "ref": "Calamar criollo limpio (500g)|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "camaron-pelado-y-desvenado-1-8kg-agrolago",
+   "nombre": "Camarón Pelado y Desvenado 1.8kg - Agrolago",
+   "categoria": "Mariscos",
+   "emoji": "🦐",
+   "pregunta": "¿Qué talla le interesa?",
+   "presentaciones": [
+    {
+     "texto": "talla M - 51/60",
+     "precio": 44,
+     "kilo": false,
+     "ref": "Camarón Pelado y Desvenado 1.8kg - Agrolago|M - 51/60||||"
+    },
+    {
+     "texto": "talla L - 41/50",
+     "precio": 50,
+     "kilo": false,
+     "ref": "Camarón Pelado y Desvenado 1.8kg - Agrolago|L - 41/50||||"
+    },
+    {
+     "texto": "talla XXL - 31/35",
+     "precio": 72,
+     "kilo": false,
+     "ref": "Camarón Pelado y Desvenado 1.8kg - Agrolago|XXL - 31/35||||"
+    },
+    {
+     "texto": "talla XXXL - 21/25",
+     "precio": 80,
+     "kilo": false,
+     "ref": "Camarón Pelado y Desvenado 1.8kg - Agrolago|XXXL - 21/25||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "camaron-pelado-y-desvenado-iqf-m-400g-agrolago",
+   "nombre": "Camarón Pelado y Desvenado IQF M 400g - Agrolago",
+   "categoria": "Mariscos",
+   "emoji": "🦐",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 12,
+     "kilo": false,
+     "ref": "Camarón Pelado y Desvenado IQF M 400g - Agrolago|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "cangrejo-azul",
+   "nombre": "Cangrejo Azul",
+   "categoria": "Mariscos",
+   "emoji": "🦀",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 36,
+     "kilo": true,
+     "ref": "Cangrejo Azul|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "chipi-chipi-c-c",
+   "nombre": "Chipi-Chipi C/C",
+   "categoria": "Mariscos",
+   "emoji": "🦪",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 12,
+     "kilo": false,
+     "ref": "Chipi-Chipi C/C|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "chupeticas-de-cangrejo-250g-meena",
+   "nombre": "Chupeticas de Cangrejo 250g - Meena",
+   "categoria": "Mariscos",
+   "emoji": "🦀",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 8,
+     "kilo": false,
+     "ref": "Chupeticas de Cangrejo 250g - Meena|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "cola-de-langosta",
+   "nombre": "Cola de Langosta",
+   "categoria": "Mariscos",
+   "emoji": "🦞",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 120,
+     "kilo": true,
+     "ref": "Cola de Langosta|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "guacucos",
+   "nombre": "Guacucos",
+   "categoria": "Mariscos",
+   "emoji": "🦪",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "C/C",
+     "precio": 12,
+     "kilo": false,
+     "ref": "Guacucos||C/C|||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "mejillon-limpio",
+   "nombre": "Mejillón Limpio",
+   "categoria": "Mariscos",
+   "emoji": "🦪",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 20,
+     "kilo": true,
+     "ref": "Mejillón Limpio|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "mejillon-nacional-c-c",
+   "nombre": "Mejillón Nacional C/C",
+   "categoria": "Mariscos",
+   "emoji": "🦪",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 8,
+     "kilo": true,
+     "ref": "Mejillón Nacional C/C|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "mixtura-de-mariscos-pescatore",
+   "nombre": "Mixtura de Mariscos - Pescatore",
+   "categoria": "Mariscos",
+   "emoji": "🦐",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 14,
+     "kilo": false,
+     "ref": "Mixtura de Mariscos - Pescatore|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "pulpo-limpio-m",
+   "nombre": "Pulpo Limpio M",
+   "categoria": "Mariscos",
+   "emoji": "🐙",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 36,
+     "kilo": true,
+     "ref": "Pulpo Limpio M|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "pulpo-limpio-xxl",
+   "nombre": "Pulpo Limpio XXL",
+   "categoria": "Mariscos",
+   "emoji": "🐙",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 42,
+     "kilo": true,
+     "ref": "Pulpo Limpio XXL|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "empanada-gallega",
+   "nombre": "Empanada Gallega",
+   "categoria": "Pasapalos",
+   "emoji": "🥟",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "Pollo con Chorizo",
+     "precio": 80,
+     "kilo": false,
+     "ref": "Empanada Gallega|||Pollo con Chorizo||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "empanadas-entre-nos",
+   "nombre": "Empanadas - Entre Nos",
+   "categoria": "Pasapalos",
+   "emoji": "🥟",
+   "pregunta": "¿Qué sabor prefiere?",
+   "presentaciones": [
+    {
+     "texto": "Queso",
+     "precio": 38,
+     "kilo": false,
+     "ref": "Empanadas - Entre Nos|||Queso||"
+    },
+    {
+     "texto": "Cazón",
+     "precio": 38,
+     "kilo": false,
+     "ref": "Empanadas - Entre Nos|||Cazón||"
+    },
+    {
+     "texto": "Mechada",
+     "precio": 38,
+     "kilo": false,
+     "ref": "Empanadas - Entre Nos|||Mechada||"
+    },
+    {
+     "texto": "Molida",
+     "precio": 38,
+     "kilo": false,
+     "ref": "Empanadas - Entre Nos|||Molida||"
+    },
+    {
+     "texto": "Pollo",
+     "precio": 38,
+     "kilo": false,
+     "ref": "Empanadas - Entre Nos|||Pollo||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "masa-de-hojaldre-500-g-k-t-dra",
+   "nombre": "Masa de hojaldre 500 g - K-T-Dra",
+   "categoria": "Pasapalos",
+   "emoji": "🥟",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 13,
+     "kilo": false,
+     "ref": "Masa de hojaldre 500 g - K-T-Dra|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "tequenos-12-und-k-t-dra",
+   "nombre": "Tequeños 12 und - K-T-DRA",
+   "categoria": "Pasapalos",
+   "emoji": "🥟",
+   "pregunta": "¿Qué sabor prefiere?",
+   "presentaciones": [
+    {
+     "texto": "Precocidos Queso",
+     "precio": 14,
+     "kilo": false,
+     "ref": "Tequeños 12 und - K-T-DRA|||Precocidos Queso||"
+    },
+    {
+     "texto": "Chocolate",
+     "precio": 14,
+     "kilo": false,
+     "ref": "Tequeños 12 und - K-T-DRA|||Chocolate||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "aros-de-calamar-iqf-pescatore",
+   "nombre": "Aros de Calamar IQF - Pescatore",
+   "categoria": "Pescados",
+   "emoji": "🦑",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 18,
+     "kilo": false,
+     "ref": "Aros de Calamar IQF - Pescatore|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "atun-importado-en-steak",
+   "nombre": "Atún Importado en Steak",
+   "categoria": "Pescados",
+   "emoji": "🐟",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 76,
+     "kilo": true,
+     "ref": "Atún Importado en Steak|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "atun-importado-poke",
+   "nombre": "Atún Importado Poke",
+   "categoria": "Pescados",
+   "emoji": "🐟",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 76,
+     "kilo": true,
+     "ref": "Atún Importado Poke|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "bacalao-noruego-gadus-penca-4-6-jangaard",
+   "nombre": "Bacalao Noruego Gadus Penca 4/6 - Jangaard",
+   "categoria": "Pescados",
+   "emoji": "🐟",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 92,
+     "kilo": true,
+     "ref": "Bacalao Noruego Gadus Penca 4/6 - Jangaard|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "bacalao-noruego-molva-jangaard",
+   "nombre": "Bacalao Noruego Molva - Jangaard",
+   "categoria": "Pescados",
+   "emoji": "🐟",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 70,
+     "kilo": true,
+     "ref": "Bacalao Noruego Molva - Jangaard|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "bacalao-portugues",
+   "nombre": "Bacalao Portugués",
+   "categoria": "Pescados",
+   "emoji": "🐟",
+   "pregunta": "¿Qué presentación le interesa?",
+   "presentaciones": [
+    {
+     "texto": "Desmenuzado · 500g",
+     "precio": 50,
+     "kilo": false,
+     "ref": "Bacalao Portugués||Desmenuzado|||500g"
+    },
+    {
+     "texto": "Lomo Desalado Brites · 540g",
+     "precio": 84,
+     "kilo": false,
+     "ref": "Bacalao Portugués||Lomo Desalado Brites|||540g"
+    },
+    {
+     "texto": "Pasteles · 360g",
+     "precio": 36,
+     "kilo": false,
+     "ref": "Bacalao Portugués||Pasteles|||360g"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "bonito-del-norte-en-aceite-de-oliva-ortiz",
+   "nombre": "Bonito del norte en aceite de oliva - Ortiz",
+   "categoria": "Pescados",
+   "emoji": "🐟",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 45,
+     "kilo": false,
+     "ref": "Bonito del norte en aceite de oliva - Ortiz|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "camaiguanas-500g",
+   "nombre": "Camaiguanas (500g)",
+   "categoria": "Pescados",
+   "emoji": "🐟",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 9,
+     "kilo": false,
+     "ref": "Camaiguanas (500g)|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "carite-en-rueda",
+   "nombre": "Carite en rueda",
+   "categoria": "Pescados",
+   "emoji": "🐟",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 20,
+     "kilo": true,
+     "ref": "Carite en rueda|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "carpaccio-200g-lox",
+   "nombre": "Carpaccio 200g - LOX",
+   "categoria": "Pescados",
+   "emoji": "🐟",
+   "pregunta": "¿Qué sabor prefiere?",
+   "presentaciones": [
+    {
+     "texto": "Res",
+     "precio": 20,
+     "kilo": false,
+     "ref": "Carpaccio 200g - LOX|||Res||"
+    },
+    {
+     "texto": "Salmón Gravlax",
+     "precio": 31,
+     "kilo": false,
+     "ref": "Carpaccio 200g - LOX|||Salmón Gravlax||"
+    },
+    {
+     "texto": "Aguja Ahumada",
+     "precio": 21,
+     "kilo": false,
+     "ref": "Carpaccio 200g - LOX|||Aguja Ahumada||"
+    },
+    {
+     "texto": "Atún ahumado",
+     "precio": 24,
+     "kilo": false,
+     "ref": "Carpaccio 200g - LOX|||Atún ahumado||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "churrasco-de-pez-espada",
+   "nombre": "Churrasco de Pez Espada",
+   "categoria": "Pescados",
+   "emoji": "🐟",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 30,
+     "kilo": true,
+     "ref": "Churrasco de Pez Espada|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "claritas",
+   "nombre": "Claritas",
+   "categoria": "Pescados",
+   "emoji": "🐟",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 28,
+     "kilo": true,
+     "ref": "Claritas|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "curvina-en-filet-s-p",
+   "nombre": "Curvina en Filet S/P",
+   "categoria": "Pescados",
+   "emoji": "🐟",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 34,
+     "kilo": true,
+     "ref": "Curvina en Filet S/P|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "filet-de-dorado",
+   "nombre": "Filet de Dorado",
+   "categoria": "Pescados",
+   "emoji": "🐟",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 20,
+     "kilo": true,
+     "ref": "Filet de Dorado|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "filet-de-dormilona",
+   "nombre": "Filet de dormilona",
+   "categoria": "Pescados",
+   "emoji": "🐟",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 25,
+     "kilo": true,
+     "ref": "Filet de dormilona|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "mero-en-filet-s-p",
+   "nombre": "Mero en Filet S/P",
+   "categoria": "Pescados",
+   "emoji": "🐟",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 64,
+     "kilo": true,
+     "ref": "Mero en Filet S/P|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "mojito-de-raya",
+   "nombre": "Mojito de raya",
+   "categoria": "Pescados",
+   "emoji": "🐟",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 16,
+     "kilo": false,
+     "ref": "Mojito de raya|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "pargo-en-filet-c-p",
+   "nombre": "Pargo en Filet C/P",
+   "categoria": "Pescados",
+   "emoji": "🐟",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 50,
+     "kilo": true,
+     "ref": "Pargo en Filet C/P|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "pisillo-de-cazon-500g-entre-nos",
+   "nombre": "Pisillo de cazón 500g - Entre Nos",
+   "categoria": "Pescados",
+   "emoji": "🐟",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 24,
+     "kilo": false,
+     "ref": "Pisillo de cazón 500g - Entre Nos|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "robalo-en-filet-s-p",
+   "nombre": "Robalo en Filet S/P",
+   "categoria": "Pescados",
+   "emoji": "🐟",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 38,
+     "kilo": true,
+     "ref": "Robalo en Filet S/P|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "salmon-ahumado-panamei",
+   "nombre": "Salmón ahumado - Panamei",
+   "categoria": "Pescados",
+   "emoji": "🐟",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 18,
+     "kilo": false,
+     "ref": "Salmón ahumado - Panamei|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "salmon-ahumado-para-sandwich-lox",
+   "nombre": "Salmón ahumado para sándwich - LOX",
+   "categoria": "Pescados",
+   "emoji": "🐟",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 24,
+     "kilo": false,
+     "ref": "Salmón ahumado para sándwich - LOX|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "salmon-chileno-premium-en-filet-c-p",
+   "nombre": "Salmón Chileno Premium en Filet C/P",
+   "categoria": "Pescados",
+   "emoji": "🐟",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 48,
+     "kilo": true,
+     "ref": "Salmón Chileno Premium en Filet C/P|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "salmon-chileno-premium-en-filet-s-p",
+   "nombre": "Salmón Chileno Premium en Filet S/P",
+   "categoria": "Pescados",
+   "emoji": "🐟",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 54,
+     "kilo": true,
+     "ref": "Salmón Chileno Premium en Filet S/P|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "salmon-del-caribe-en-filet-c-p",
+   "nombre": "Salmón del Caribe en Filet C/P",
+   "categoria": "Pescados",
+   "emoji": "🐟",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 24,
+     "kilo": true,
+     "ref": "Salmón del Caribe en Filet C/P|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "salmon-en-steak-c-p",
+   "nombre": "Salmón en Steak C/P",
+   "categoria": "Pescados",
+   "emoji": "🐟",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 60,
+     "kilo": true,
+     "ref": "Salmón en Steak C/P|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "salmon-en-steak-s-p",
+   "nombre": "Salmón en Steak S/P",
+   "categoria": "Pescados",
+   "emoji": "🐟",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 72,
+     "kilo": true,
+     "ref": "Salmón en Steak S/P|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "sashimi-de-salmon-150g-lox",
+   "nombre": "Sashimi de Salmón 150g - LOX",
+   "categoria": "Pescados",
+   "emoji": "🐟",
+   "pregunta": "¿Qué sabor prefiere?",
+   "presentaciones": [
+    {
+     "texto": "Crudo",
+     "precio": 24,
+     "kilo": false,
+     "ref": "Sashimi de Salmón 150g - LOX|||Crudo||"
+    },
+    {
+     "texto": "Gravlax",
+     "precio": 24,
+     "kilo": false,
+     "ref": "Sashimi de Salmón 150g - LOX|||Gravlax||"
+    },
+    {
+     "texto": "Ahumado",
+     "precio": 24,
+     "kilo": false,
+     "ref": "Sashimi de Salmón 150g - LOX|||Ahumado||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "crema-de-queso-125g-president",
+   "nombre": "Crema de Queso 125g - Président",
+   "categoria": "Quesos",
+   "emoji": "🧀",
+   "pregunta": "¿Qué sabor prefiere?",
+   "presentaciones": [
+    {
+     "texto": "Azul",
+     "precio": 13,
+     "kilo": false,
+     "ref": "Crema de Queso 125g - Président|||Azul||"
+    },
+    {
+     "texto": "Emmental",
+     "precio": 13,
+     "kilo": false,
+     "ref": "Crema de Queso 125g - Président|||Emmental||"
+    },
+    {
+     "texto": "Brie",
+     "precio": 13,
+     "kilo": false,
+     "ref": "Crema de Queso 125g - Président|||Brie||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "mantequilla-250g-mimosa",
+   "nombre": "Mantequilla 250g - Mimosa",
+   "categoria": "Quesos",
+   "emoji": "🧀",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 12,
+     "kilo": false,
+     "ref": "Mantequilla 250g - Mimosa|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "queso-emmental-250g-mon-a-muu-cuna",
+   "nombre": "Queso Emmental 250g - Mon A Muu cuña",
+   "categoria": "Quesos",
+   "emoji": "🧀",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 20,
+     "kilo": false,
+     "ref": "Queso Emmental 250g - Mon A Muu cuña|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "queso-en-rueda-125g-tgt",
+   "nombre": "Queso en Rueda 125g - TGT",
+   "categoria": "Quesos",
+   "emoji": "🧀",
+   "pregunta": "¿Qué sabor prefiere?",
+   "presentaciones": [
+    {
+     "texto": "Brie",
+     "precio": 13,
+     "kilo": false,
+     "ref": "Queso en Rueda 125g - TGT|||Brie||"
+    },
+    {
+     "texto": "Camembert",
+     "precio": 13,
+     "kilo": false,
+     "ref": "Queso en Rueda 125g - TGT|||Camembert||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "gouda-victoria",
+   "nombre": "Queso gouda Holandés Victoria Gallo Negro",
+   "categoria": "Quesos",
+   "emoji": "🧀",
+   "pregunta": "¿Prefiere la barra completa o la media barra?",
+   "actualizado": "2026-10-07T14:52:00.000Z",
+   "presentaciones": [
+    {
+     "texto": "de la barra completa (aprox. 3kg)",
+     "precio": 31,
+     "kilo": true,
+     "ref": "Queso Gouda Holandés Barra - Victoria (Gallo Negro)|||||"
+    },
+    {
+     "texto": "de la media barra (aprox. 1.5kg)",
+     "precio": 33,
+     "kilo": true,
+     "ref": "Queso Gouda Holandés 1/2 Barra - Victoria (Gallo Negro)|||||"
+    }
+   ]
+  },
+  {
+   "id": "queso-grana-padano-mantova",
+   "nombre": "Queso Grana Padano - Mantova",
+   "categoria": "Quesos",
+   "emoji": "🧀",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 64,
+     "kilo": true,
+     "ref": "Queso Grana Padano - Mantova|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "queso-grana-padano-dop-en-cuna",
+   "nombre": "Queso Grana Padano DOP en cuña",
+   "categoria": "Quesos",
+   "emoji": "🧀",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 60,
+     "kilo": true,
+     "ref": "Queso Grana Padano DOP en cuña|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "queso-madurado-checo-gran-moravia",
+   "nombre": "Queso Madurado Checo - Gran Moravia",
+   "categoria": "Quesos",
+   "emoji": "🧀",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "Rallado 500g",
+     "precio": 30,
+     "kilo": false,
+     "ref": "Queso Madurado Checo - Gran Moravia||Rallado 500g|||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "queso-manchego-con-dop-1-4-torta-mancha-real",
+   "nombre": "Queso Manchego con DOP 1/4 Torta - Mancha Real",
+   "categoria": "Quesos",
+   "emoji": "🧀",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 100,
+     "kilo": true,
+     "ref": "Queso Manchego con DOP 1/4 Torta - Mancha Real|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "queso-manchego-con-dop-3-kg-mancha-real",
+   "nombre": "Queso Manchego con DOP 3 Kg - Mancha Real",
+   "categoria": "Quesos",
+   "emoji": "🧀",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 100,
+     "kilo": true,
+     "ref": "Queso Manchego con DOP 3 Kg - Mancha Real|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "queso-oveja-con-trufa-reserva-1-4-torta-garcia-baquero",
+   "nombre": "Queso Oveja con Trufa Reserva 1/4 Torta - García Baquero",
+   "categoria": "Quesos",
+   "emoji": "🧀",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 100,
+     "kilo": true,
+     "ref": "Queso Oveja con Trufa Reserva 1/4 Torta - García Baquero|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "queso-parmesano-castelli",
+   "nombre": "Queso Parmesano Castelli",
+   "categoria": "Quesos",
+   "emoji": "🧀",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "Ruota de aprox. 38kg",
+     "precio": 41,
+     "kilo": true
+    }
+   ],
+   "actualizado": "2026-10-08T14:14:33.597Z"
+  },
+  {
+   "id": "queso-parmesano-fratelli",
+   "nombre": "Queso Parmesano Fratelli",
+   "categoria": "Quesos",
+   "emoji": "🧀",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "Ruota de aprox. 38kg",
+     "precio": 45,
+     "kilo": true
+    }
+   ],
+   "actualizado": "2026-10-08T14:15:23.349Z"
+  },
+  {
+   "id": "queso-tipo-manchego-con-trufa-1-4-torta-adarga-de-oro",
+   "nombre": "Queso tipo Manchego con trufa 1/4 torta - Adarga de Oro",
+   "categoria": "Quesos",
+   "emoji": "🧀",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 122.5,
+     "kilo": true,
+     "ref": "Queso tipo Manchego con trufa 1/4 torta - Adarga de Oro|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "queso-tipo-manchego-con-trufa-3-kg-adarga-de-oro",
+   "nombre": "Queso tipo Manchego con trufa 3 Kg - Adarga de Oro",
+   "categoria": "Quesos",
+   "emoji": "🧀",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 122.5,
+     "kilo": true,
+     "ref": "Queso tipo Manchego con trufa 3 Kg - Adarga de Oro|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "queso-tipo-manchego-semicurado-1-4-torta-adarga-de-oro",
+   "nombre": "Queso tipo Manchego Semicurado 1/4 torta - Adarga de Oro",
+   "categoria": "Quesos",
+   "emoji": "🧀",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 85,
+     "kilo": true,
+     "ref": "Queso tipo Manchego Semicurado 1/4 torta - Adarga de Oro|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "queso-tipo-manchego-semicurado-3-kg-adarga-de-oro",
+   "nombre": "Queso tipo Manchego Semicurado 3 Kg - Adarga de Oro",
+   "categoria": "Quesos",
+   "emoji": "🧀",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 85,
+     "kilo": true,
+     "ref": "Queso tipo Manchego Semicurado 3 Kg - Adarga de Oro|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "queso-tipo-manchego-semicurado-cuna-150g-adarga-de-oro",
+   "nombre": "Queso tipo Manchego Semicurado cuña 150g - Adarga de Oro",
+   "categoria": "Quesos",
+   "emoji": "🧀",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 14.5,
+     "kilo": false,
+     "ref": "Queso tipo Manchego Semicurado cuña 150g - Adarga de Oro|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "picante-de-trufa-calabrian-crunch-200g-sabatino",
+   "nombre": "Picante de trufa Calabrian Crunch 200g - Sabatino",
+   "categoria": "Sazonadores",
+   "emoji": "🍄",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 40,
+     "kilo": false,
+     "ref": "Picante de trufa Calabrian Crunch 200g - Sabatino|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "sazonador-de-trufa-sabatino",
+   "nombre": "Sazonador de trufa - Sabatino",
+   "categoria": "Sazonadores",
+   "emoji": "🍄",
+   "pregunta": "¿Qué sabor prefiere?",
+   "presentaciones": [
+    {
+     "texto": "Trufa y queso",
+     "precio": 36,
+     "kilo": false,
+     "ref": "Sazonador de trufa - Sabatino|||Trufa y queso||"
+    },
+    {
+     "texto": "Trufa",
+     "precio": 36,
+     "kilo": false,
+     "ref": "Sazonador de trufa - Sabatino|||Trufa||"
+    },
+    {
+     "texto": "Trufa, sal marina, romero",
+     "precio": 36,
+     "kilo": false,
+     "ref": "Sazonador de trufa - Sabatino|||Trufa, sal marina, romero||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "esparragos-blancos-540g-helios",
+   "nombre": "Espárragos blancos 540g - Helios",
+   "categoria": "Vegetales y Frutas",
+   "emoji": "🥫",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 31,
+     "kilo": false,
+     "ref": "Espárragos blancos 540g - Helios|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "papas-fritas-congeladas-mydibel",
+   "nombre": "Papas Fritas Congeladas - Mydibel",
+   "categoria": "Vegetales y Frutas",
+   "emoji": "🍟",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "1kg",
+     "precio": 8,
+     "kilo": false,
+     "ref": "Papas Fritas Congeladas - Mydibel|||||1kg"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "papas-fritas-congeladas-1kg-fresqual",
+   "nombre": "Papas Fritas Congeladas 1kg - Fresqüal",
+   "categoria": "Vegetales y Frutas",
+   "emoji": "🍟",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 8,
+     "kilo": false,
+     "ref": "Papas Fritas Congeladas 1kg - Fresqüal|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "pepinillos-en-vinagre-345g-helios",
+   "nombre": "Pepinillos en vinagre 345g - Helios",
+   "categoria": "Vegetales y Frutas",
+   "emoji": "🥫",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 10,
+     "kilo": false,
+     "ref": "Pepinillos en vinagre 345g - Helios|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "pimenton-ahumado-75g-carmencita",
+   "nombre": "Pimentón Ahumado 75g - Carmencita",
+   "categoria": "Vegetales y Frutas",
+   "emoji": "🧂",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "Picante",
+     "precio": 12,
+     "kilo": false,
+     "ref": "Pimentón Ahumado 75g - Carmencita|||Picante||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "pimientos-del-piquillo-con-bonito-del-norte-300gr-ortiz",
+   "nombre": "Pimientos del piquillo con bonito del norte 300gr - Ortiz",
+   "categoria": "Vegetales y Frutas",
+   "emoji": "🐟",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 24,
+     "kilo": false,
+     "ref": "Pimientos del piquillo con bonito del norte 300gr - Ortiz|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "vinagre-balsamico-de-modena-250ml-rioja-vina",
+   "nombre": "Vinagre balsámico de módena 250ml - Rioja Vina",
+   "categoria": "Vinagres",
+   "emoji": "🔹",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 14,
+     "kilo": false,
+     "ref": "Vinagre balsámico de módena 250ml - Rioja Vina|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "vinagre-de-manzana-500ml-sweet-sydey",
+   "nombre": "Vinagre de manzana 500ml - Sweet Sydey",
+   "categoria": "Vinagres",
+   "emoji": "🔹",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 10,
+     "kilo": false,
+     "ref": "Vinagre de manzana 500ml - Sweet Sydey|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "vinagre-de-vino-tinto-1l-rioja-vina",
+   "nombre": "Vinagre de vino tinto 1L - Rioja Vina",
+   "categoria": "Vinagres",
+   "emoji": "🔹",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "",
+     "precio": 8,
+     "kilo": false,
+     "ref": "Vinagre de vino tinto 1L - Rioja Vina|||||"
+    }
+   ],
+   "actualizado": "2026-10-07T15:23:08.642Z"
+  },
+  {
+   "id": "caja-de-robalo-en-filet",
+   "nombre": "Caja de Robalo en Filet",
+   "categoria": "Pescados",
+   "emoji": "🐟",
+   "pregunta": "",
+   "presentaciones": [
+    {
+     "texto": "Aprox. 12-15kg",
+     "precio": 32,
+     "kilo": true
+    }
+   ],
+   "actualizado": "2026-10-08T14:30:15.425Z"
+  }
+ ],
+ "ajustes": {
+  "pie": "🚀 ¡Aproveche hoy el {descuento}% de descuento por pagos a BCV!\n*(los precios ya incluyen el descuento)*",
+  "preguntaVarios": "¿Cuál de estos productos le interesa?",
+  "descuentoBase": 40,
+  "pieDivisas": "Precios exclusivamente para pagos en: Zelle, Banesco Panamá, USDT o cash",
+  "descuentoDivisas": 50
+ },
+ "importacion": {
+  "fecha": "2026-10-07T15:23:08.642Z",
+  "archivo": "catalogo.csv",
+  "productos": 137
+ }
+}
