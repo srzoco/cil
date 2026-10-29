@@ -197,6 +197,7 @@
     if (p[0] === 'tareas') return vistaTareas(r.q);
     if (p[0] === 'balance') return vistaBalance(r.q);
     if (p[0] === 'tarea') return vistaFormTarea(p[1], r.q);
+    if (p[0] === 'persona') return vistaPersona(p[1]);
     if (necesitaCompleto() && !S.data.completo) return pedirCompleto();
     if (p[0] === 'reporte') return vistaReporte(r.q.get('f') || S.hoy);
     if (p[0] === 'historial') return vistaHistorial(Number(r.q.get('d')) || 30);
@@ -235,7 +236,7 @@
     if (!sinNav) {
       var act = ruta().parts[0] || '';
       var tab = function (h, id, ic, txt, clase) {
-        return '<a class="tab ' + (clase || '') + (act === id ? ' activo' : '') + '" href="#' + h + '">' + ic + '<span>' + txt + '</span></a>';
+        return '<a class="tab ' + (clase || '') + (act === id || (id === '' && act === 'persona') ? ' activo' : '') + '" href="#' + h + '">' + ic + '<span>' + txt + '</span></a>';
       };
       var nAlerta = alertasHoy();
       nav = '<nav class="tabs">' +
@@ -562,6 +563,7 @@
       var s = L.asistenciaDe(d, pe.id, hoy);
       return localDe(pe) !== localId && s && s.estado === 'presente' && s.local_id === localId;
     }) : [];
+    h += chipsPersonas(emps, null);
     h += '<section class="bloque"><div class="bloque-head"><h2>Asistencia</h2><small class="muted">' + marcados + ' de ' + trabajan.length + '</small></div><div class="asistencia">' +
       emps.map(function (pe) {
         var e = L.estadoAsistencia(d, pe.id, hoy, ahora), s = L.asistenciaDe(d, pe.id, hoy);
@@ -606,8 +608,8 @@
       if (e === 'libre' && !todas.length) return;
       var min = sumMin(todas), hechas = todas.filter(function (a) { return a.estado === 'hecha'; });
       var disp = Math.round(aj().minutos_jornada * L.capacidad(pe) / 100);
-      h += '<section class="bloque persona-bloque' + (e === 'ausente' || e === 'falta' || L.seFue(d, pe.id, hoy) ? ' falta' : '') + '"><div class="bloque-head"><h2>' + esc(pe.nombre) +
-        (L.capacidad(pe) < 100 ? ' <small class="muted cap">' + L.capacidad(pe) + '%</small>' : '') + '</h2>' +
+      h += '<section class="bloque persona-bloque' + (e === 'ausente' || e === 'falta' || L.seFue(d, pe.id, hoy) ? ' falta' : '') + '"><div class="bloque-head"><h2><a class="ver-persona" href="#/persona/' + esc(pe.id) + '">' + esc(pe.nombre) +
+        (L.capacidad(pe) < 100 ? ' <small class="muted cap">' + L.capacidad(pe) + '%</small>' : '') + ' ›</a></h2>' +
         '<small class="muted">' + hechas.length + ' de ' + todas.length + ' · ' + esc(L.minutosTxt(min)) + '</small></div>' +
         '<div class="carga" title="Minutos asignados frente a su tiempo para tareas (' + esc(L.minutosTxt(disp)) + ')"><span style="width:' + Math.min(100, Math.round(100 * min / disp)) + '%"></span><span class="hecho" style="width:' +
         Math.min(100, Math.round(100 * sumMin(hechas) / disp)) + '%"></span></div>' +
@@ -615,6 +617,64 @@
     });
     if (!emps.length) h += '<p class="vacio muted">Este local no tiene empleados activos. Asígnalos en <a href="#/equipo/personas">Equipo → Personas</a>.</p>';
     return h;
+  }
+
+  // ---------- Gerencia: el día de una persona (para revisar con calma) ----------
+  // Lo hecho hoy por la persona: lo suyo y lo que hizo de otros (rescates, atrasadas de otros días)
+  function hechasHoyDe(id) {
+    return db().asignaciones.filter(function (a) { return a.estado === 'hecha' && a.hecha_por === id && a.hecha_en && L.hoyISO(new Date(a.hecha_en)) === S.hoy; })
+      .sort(function (a, b) { return a.hecha_en < b.hecha_en ? -1 : 1; });
+  }
+  function chipsPersonas(emps, sel) {
+    var d = db(), hoy = S.hoy, ahora = new Date();
+    var lista = emps.filter(function (pe) { var t = L.tareasDe(d, pe.id, hoy); return L.estadoAsistencia(d, pe.id, hoy, ahora) !== 'libre' || t.hoy.length || t.atrasadas.length; });
+    if (!lista.length) return '';
+    return '<nav class="chips-persona" aria-label="Ver el día de una persona"><span class="filtro-tit">Ver el día de</span>' + lista.map(function (pe) {
+      var t = L.tareasDe(d, pe.id, hoy), todas = t.hoy.concat(t.atrasadas), n = todas.filter(function (a) { return a.estado === 'hecha'; }).length;
+      return '<a class="chip-p' + (pe.id === sel ? ' on' : '') + '" href="#/persona/' + esc(pe.id) + '"' + (pe.id === sel ? ' aria-current="page"' : '') + '>' + esc(pe.nombre) +
+        ' <small>' + n + '/' + todas.length + '</small></a>';
+    }).join('') + '</nav>';
+  }
+  function vistaPersona(id) {
+    var pe = persona(id), d = db(), hoy = S.hoy, ahora = new Date();
+    if (!pe) return '<a class="volver" href="#/">‹ Hoy</a><p class="vacio muted">Esa persona ya no está en el equipo.</p>';
+    var loc = localDe(pe), e = L.estadoAsistencia(d, pe.id, hoy, ahora), s = L.asistenciaDe(d, pe.id, hoy);
+    var t = L.tareasDe(d, pe.id, hoy), todas = t.atrasadas.concat(t.hoy);
+    var porHacer = todas.filter(function (a) { return a.estado === 'pendiente'; });
+    var hechas = hechasHoyDe(pe.id), suyas = todas.filter(function (a) { return a.estado === 'hecha'; });
+    var disp = Math.round(aj().minutos_jornada * L.capacidad(pe) / 100), min = sumMin(todas);
+    var porOtro = d.marcadas_por_otro || [];
+    var h = '<a class="volver" href="#/">‹ Hoy</a>' + chipsPersonas(loc ? empleadosDe(loc) : empleados(), pe.id);
+    h += '<h1>' + esc(pe.nombre) + '</h1><p class="fecha-hoy">' + (variosLocales() && loc ? esc(nombreLocal(loc)) + ' · ' : '') +
+      '<span class="pill ' + ESTADO_TONO[e] + '">' + ESTADO_TXT[e] + (s && s.llegada ? ' · ' + esc(L.fmtHora(s.llegada)) : '') + '</span>' +
+      (s && s.salida && s.estado === 'presente' ? ' <span class="pill corregir">Se fue ' + esc(L.fmtHora(s.salida)) + '</span>' : '') + '</p>';
+    h += '<div class="resumen-persona"><div><b>' + suyas.length + ' de ' + todas.length + '</b><span class="muted">hechas</span></div>' +
+      '<div><b>' + porHacer.length + '</b><span class="muted">por hacer</span></div>' +
+      '<div><b>' + esc(L.minutosTxt(min)) + '</b><span class="muted">de ' + esc(L.minutosTxt(disp)) + '</span></div></div>' +
+      '<div class="carga"><span style="width:' + Math.min(100, Math.round(100 * min / (disp || 1))) + '%"></span><span class="hecho" style="width:' + Math.min(100, Math.round(100 * sumMin(suyas) / (disp || 1))) + '%"></span></div>';
+    h += '<section class="bloque"><div class="bloque-head"><h2>Por hacer</h2><small class="muted">' + esc(L.minutosTxt(sumMin(porHacer))) + '</small></div>' +
+      (porHacer.length ? '<div class="lista">' + porHacer.map(filaTareaAdmin).join('') + '</div>' : '<p class="muted vacio-chico">No le queda nada pendiente.</p>') + '</section>';
+    h += '<section class="bloque"><div class="bloque-head"><h2>Hechas hoy</h2><small class="muted">en el orden en que las marcó</small></div>';
+    if (!hechas.length) h += '<p class="muted vacio-chico">Todavía no ha marcado nada.</p>';
+    else {
+      var antes = s && s.llegada ? new Date(s.llegada) : null;
+      h += '<div class="lista">' + hechas.map(function (a) {
+        var cuando = new Date(a.hecha_en), gap = antes ? Math.max(0, Math.round((cuando - antes) / 60000)) : null;
+        antes = cuando;
+        var r = (d.revisiones || []).filter(function (x) { return x.asignacion_id === a.id; })[0] || null;
+        var otro = porOtro.indexOf(a.id) >= 0;
+        var meta = '<span class="extra">' + esc(L.fmtHora(a.hecha_en)) + ' · ' + a.minutos + ' min</span>' +
+          (gap != null ? '<span class="' + (!otro && gap * 2 < a.minutos ? 'pill aprueba' : 'extra') + '" title="Minutos desde lo anterior que marcó (o desde que llegó)">+' + gap + ' min</span>' : '') +
+          (a.asignado_a !== pe.id ? '<span class="pill edita">era de ' + esc(nombreDe(a.asignado_a)) + '</span>' : '') +
+          (a.fecha !== hoy ? '<span class="pill corregir">del ' + esc(L.fmtFecha(a.fecha)) + '</span>' : '') +
+          (otro ? '<span class="pill">la marcó otra persona</span>' : '');
+        var rev = r ? '<button class="btn chico' + (r.calificacion != null ? ' sec' : '') + '" data-acc="ver-revision" data-id="' + esc(r.id) + '">' + (r.calificacion != null ? CALIF[r.calificacion] : 'Calificar') + '</button>'
+          : '<button class="btn chico sec" data-acc="revisar-tarea" data-id="' + esc(a.id) + '">Revisar</button>';
+        return '<div class="item hecha-fila"><button class="item-boton" data-acc="ver-tarea" data-id="' + esc(a.id) + '"><span class="item-cuerpo"><span class="item-titulo">' + tituloHtml(a) + '</span>' +
+          '<span class="item-meta">' + meta + '</span></span></button>' + rev + '</div>';
+      }).join('') + '</div><p class="ayuda">«+N min» es el tiempo desde lo anterior que marcó (la primera, desde que llegó); sale resaltado si es menos de la mitad de lo que dura la tarea. «Revisar» la agrega a tus revisiones de hoy, aparte de las que salen al azar.</p>';
+    }
+    return h + '</section>';
   }
 
   // Imprevisto general (paro, tranca grande): el día no cuenta para la puntualidad de nadie
@@ -1068,7 +1128,7 @@
         return '<li>' + esc(L.fmtFecha(x.fecha)) + (x.motivo ? ' · ' + esc(x.motivo) : '') + ' <button class="btn link" data-acc="sinpunt-quitar" data-id="' + esc(x.id) + '">quitar</button></li>';
       }).join('') + '</ul>';
       h += '<p class="ayuda">' + (aj().mostrar_record ? 'Cada empleado ve su propio récord.' : 'Por ahora solo lo ve gerencia (se cambia en <a href="#/equipo/ajustes">Equipo → Ajustes</a>).') +
-        ' <button class="btn link" data-acc="sinpunt">Marcar un día que no cuenta</button></p></section>';
+        '</p><p class="sin-margen"><button class="btn link" data-acc="sinpunt">Marcar un día que no cuenta</button></p></section>';
     }
     hist.forEach(function (r) {
       h += '<section class="card hist"><div class="rep-head"><h2>' + esc(r.persona.nombre) + (variosLocales() ? ' <small class="muted local-chico">' + esc(nombreLocal(localDe(r.persona))) + '</small>' : '') + '</h2><b class="hist-pct' + (r.cumplimiento !== null && r.cumplimiento < 80 ? ' rojo' : '') + '">' +
@@ -1355,6 +1415,12 @@
     var sinWifi = l.sin_wifi_fecha === S.hoy;
     h += '<div class="tienda-fila"><div><b>¿Se cayó el Wi-Fi?</b><span class="muted">' + (sinWifi ? '<span class="ok-txt">Hoy pueden marcar «Llegué» sin el Wi-Fi</span>' : 'Permite marcar «Llegué» sin el Wi-Fi solo por hoy') + '</span></div>' +
       '<button class="btn ' + (sinWifi ? 'sec' : 'warn') + ' chico" type="button" data-acc="sin-wifi" data-id="' + esc(l.id) + '" data-v="' + (sinWifi ? '0' : '1') + '">' + (sinWifi ? 'Ya volvió' : 'Hoy no hay Wi-Fi') + '</button></div>';
+    var gerencia = S.data.personas.filter(function (x) { return x.rol === 'admin' && x.activo; });
+    if (gerencia.length > 1) {
+      h += '<label class="campo">Revisiones de calidad de este local<select name="revisor"><option value="">Se reparten entre gerencia</option>' + gerencia.map(function (x) {
+        return '<option value="' + esc(x.id) + '"' + (l.revisor === x.id ? ' selected' : '') + '>Solo las revisa ' + esc(x.nombre || x.email) + '</option>';
+      }).join('') + '</select></label>';
+    }
     h += '<div class="acciones"><button class="btn chico" type="submit">Guardar local</button>' +
       (l.principal ? '' : '<button class="btn fantasma rojo chico" type="button" data-acc="borrar-local" data-id="' + esc(l.id) + '">Borrar</button>') + '</div></form>';
     return h;
@@ -1951,6 +2017,9 @@
       });
     }
     else if (acc === 'ver-tarea') abrirModal({ tipo: 'tarea', id: id });
+    else if (acc === 'revisar-tarea') {
+      ejecutar(store.rpc('revisar_tarea', { p_asignacion: id }), null).then(function (rid) { if (rid) abrirModal({ tipo: 'revision', id: rid }); });
+    }
     else if (acc === 'asistencia') abrirModal({ tipo: 'asistencia', id: id });
     else if (acc === 'editar-persona') abrirModal({ tipo: 'persona', id: id });
     else if (acc === 'nueva-persona') abrirModal({ tipo: 'nueva-persona' });
@@ -2101,7 +2170,9 @@
     else if (tipo === 'local') {
       var labL = fd.getAll('lab').map(Number);
       if (!labL.length) { aviso('Marca al menos un día de trabajo.'); return; }
-      ejecutar(store.actualizar('locales', f.getAttribute('data-id'), { nombre: String(fd.get('nombre') || '').trim() || 'Local', dias_laborables: labL, radio_m: Number(fd.get('radio_m')) || 150 }), 'Local guardado.');
+      var patchL = { nombre: String(fd.get('nombre') || '').trim() || 'Local', dias_laborables: labL, radio_m: Number(fd.get('radio_m')) || 150 };
+      if (fd.has('revisor')) patchL.revisor = fd.get('revisor') || null;
+      ejecutar(store.actualizar('locales', f.getAttribute('data-id'), patchL), 'Local guardado.');
     }
     else if (tipo === 'persona') {
       var pid = f.getAttribute('data-id'), soyYo = pid === yo().id;

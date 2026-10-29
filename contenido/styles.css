@@ -472,6 +472,10 @@ ol.ranking li a { flex: 1; min-width: 140px; color: var(--ink); text-decoration:
 @media (min-width: 560px) {
   .fila-accion { flex-direction: row; align-items: center; }
   .fila-accion > .btn, .fila-accion > .pill { align-self: center; flex: none; }
+  /* el botón de al lado va en una columna del mismo ancho, para que todas las tarjetas queden alineadas */
+  .fila-accion > .tarjeta { min-width: 0; }
+  .fila-accion > .btn, .fila-accion > .pill, .fila-accion > .fila-btns { width: 180px; flex: none; justify-content: center; text-align: center; }
+  .fila-accion > .fila-btns { display: flex; flex-direction: column; gap: 6px; }
 }
 
 /* Recorrido de la pieza */

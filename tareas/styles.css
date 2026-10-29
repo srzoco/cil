@@ -659,3 +659,23 @@ html.marco-fijo .desliza:has(~ .tabs) .contenido { padding-bottom: 28px; }
 .temp-res .pill { margin-left: auto; }
 .eq-local { display: flex; align-items: center; gap: 6px; font-size: .84rem; color: var(--muted); white-space: nowrap; }
 .eq-local select { flex: 1; min-width: 0; font: inherit; padding: 4px 8px; border-radius: 8px; border: 1.5px solid var(--line); background: var(--card); color: var(--ink); }
+
+/* Día de una persona (gerencia) */
+.chips-persona { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+.chip-p {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 8px 13px; border: 1.5px solid var(--line); border-radius: 999px;
+  background: var(--card); color: var(--ink); font-weight: 500; font-size: .9rem; text-decoration: none;
+}
+.chip-p small { color: var(--muted); font-weight: 600; }
+.chip-p.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.chip-p.on small { color: inherit; }
+.ver-persona { color: inherit; text-decoration: none; }
+.resumen-persona { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0 0 10px; }
+.resumen-persona > div { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.resumen-persona b { font-size: 1.05rem; overflow-wrap: anywhere; }
+.resumen-persona .muted { font-size: .8rem; }
+.hecha-fila { padding: 0 10px 0 0; gap: 8px; }
+.item-boton { flex: 1; min-width: 0; display: flex; align-items: center; padding: 12px 0 12px 14px; background: none; border: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; min-height: 56px; }
+.hecha-fila .btn { flex: none; }
+.asistencia + .sin-margen { margin-top: 8px; }
+.sin-margen .btn.link { text-align: left; }

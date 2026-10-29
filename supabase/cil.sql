@@ -277,6 +277,10 @@ alter table public.revisiones add column if not exists franja text check (franja
 create index if not exists revisiones_fecha_idx on public.revisiones (fecha);
 -- Quién la hizo (se guarda al elegirla, para que el historial de calidad no se pierda si la mandan a repetir)
 alter table public.revisiones add column if not exists hecho_por uuid references public.personas (id) on delete set null;
+-- Elegida a mano por gerencia (desde el día de una persona): no cuenta en las del azar
+alter table public.revisiones add column if not exists manual boolean not null default false;
+-- Local cuyas revisiones las hace siempre la misma persona de gerencia (no entra en el reparto entre gerencia)
+alter table public.locales add column if not exists revisor uuid references public.personas (id) on delete set null;
 alter table public.asignaciones add column if not exists repetir boolean not null default false;  -- gerencia la mandó a repetir
 -- Lo que otro hizo por alguien que llegó tarde y ya se le compensó (para no compensar dos veces)
 alter table public.asignaciones add column if not exists compensada boolean not null default false;
@@ -1077,14 +1081,14 @@ begin
   perform pg_advisory_xact_lock(hashtext('revisiones:' || public.hoy()::text));
   -- Solo se revisa lo que la persona marcó ella misma (no lo que marcó gerencia por ella, ni su parte de una tarea de
   -- varias personas que marcó otra). Si hoy se eligió una así y no se ha calificado, se quita y se elige otra.
-  delete from revisiones r where r.fecha = public.hoy() and r.calificacion is null
+  delete from revisiones r where r.fecha = public.hoy() and r.calificacion is null and not r.manual
     and not exists (select 1 from tareas_eventos e where e.asignacion_id = r.asignacion_id and e.tipo = 'hecha' and e.autor = r.hecho_por);
   foreach fr in array array['manana', 'tarde'] loop
     continue when (fr = 'manana' and ahora < '12:00') or (fr = 'tarde' and ahora < '16:00');
     meta := case when fr = 'manana' then ceil(n / 2.0)::int else floor(n / 2.0)::int end;
-    select count(*) into ya from revisiones where fecha = public.hoy() and franja = fr;
+    select count(*) into ya from revisiones where fecha = public.hoy() and franja = fr and not manual;
     while ya < meta loop
-      select x.id, x.hecha_por into a from asignaciones x
+      select x.id, x.hecha_por, x.local_id into a from asignaciones x
       where x.estado = 'hecha' and (x.hecha_en at time zone 'America/Caracas')::date = public.hoy()
         and ((fr = 'manana') = ((x.hecha_en at time zone 'America/Caracas')::time < '12:00'))
         and x.hecha_por is not null and not exists (select 1 from revisiones r where r.asignacion_id = x.id)
@@ -1093,16 +1097,38 @@ begin
       order by exists (select 1 from revisiones r where r.fecha = public.hoy() and r.hecho_por = x.hecha_por), random()
       limit 1;
       exit when a.id is null;
+      -- si el local tiene su propia persona de gerencia para revisar, es ella; si no, la que lleva menos hoy
+      select pe.id into quien from locales lo join personas pe on pe.id = lo.revisor and pe.rol = 'admin' and pe.activo where lo.id = a.local_id;
+      if quien is null then
       select pe.id into quien from personas pe
       where pe.rol = 'admin' and pe.activo
       order by (select count(*) from revisiones r where r.revisor = pe.id and r.fecha = public.hoy()), random()
       limit 1;
+      end if;
       insert into revisiones (asignacion_id, fecha, revisor, franja, hecho_por) values (a.id, public.hoy(), quien, fr, a.hecha_por) on conflict do nothing;
       ya := ya + 1; nuevas := nuevas + 1;
-      a := null;
+      a := null; quien := null;
     end loop;
   end loop;
   return nuevas;
+end $$;
+
+-- Gerencia: elegir a mano una tarea hecha para revisarla (desde el día de una persona). Devuelve la revisión.
+create or replace function public.revisar_tarea(p_asignacion uuid) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare a public.asignaciones; v uuid;
+begin
+  if not public.es_admin() then raise exception 'Solo gerencia.'; end if;
+  select id into v from revisiones where asignacion_id = p_asignacion;
+  if v is not null then return v; end if;
+  select * into a from asignaciones where id = p_asignacion;
+  if a.id is null or a.estado <> 'hecha' or a.hecha_en is null then raise exception 'Esa tarea todavía no está hecha.'; end if;
+  insert into revisiones (asignacion_id, fecha, revisor, franja, hecho_por, manual)
+  values (a.id, (a.hecha_en at time zone 'America/Caracas')::date, auth.uid(),
+          case when (a.hecha_en at time zone 'America/Caracas')::time < '12:00' then 'manana' else 'tarde' end, a.hecha_por, true)
+  on conflict (asignacion_id) do nothing
+  returning id into v;
+  return coalesce(v, (select id from revisiones where asignacion_id = p_asignacion));
 end $$;
 
 -- Gerencia: calificar una tarea revisada. p_repetir = la tarea vuelve a la lista de quien la hizo.
@@ -1530,6 +1556,10 @@ begin
     'grupos', (select coalesce(json_agg(x order by x.nombre), '[]'::json) from grupos x),
     'dias_especiales', (select coalesce(json_agg(x order by x.fecha), '[]'::json) from dias_especiales x where x.fecha >= hoy - 400),
     'revisiones', (select coalesce(json_agg(x), '[]'::json) from revisiones x where x.fecha >= v_desde),
+    -- hechas hoy que no marcó quien figura como que la hizo (la marcó gerencia u otra persona por ella); solo gerencia ve eventos
+    'marcadas_por_otro', (select coalesce(json_agg(x.id), '[]'::json) from asignaciones x
+                          where x.estado = 'hecha' and x.hecha_en >= inicio and x.hecha_por is not null
+                            and not exists (select 1 from tareas_eventos e where e.asignacion_id = x.id and e.tipo = 'hecha' and e.autor = x.hecha_por)),
     'dias_sin_puntualidad', (select coalesce(json_agg(x order by x.fecha), '[]'::json) from dias_sin_puntualidad x where x.fecha >= hoy - 70),
     'equipos', (select coalesce(json_agg(x order by x.orden, x.nombre), '[]'::json) from equipos x),
     'salidas_rato', (select coalesce(json_agg(x order by x.salio), '[]'::json) from salidas_rato x where x.fecha >= v_desde),
@@ -2181,7 +2211,7 @@ grant execute on function public.hoy(), public.es_admin(), public.tiene_acceso(t
   public.marcar_hecha(uuid, boolean), public.tomar_del_pool(uuid), public.reasignar(jsonb, text), public.repartir_sin_dueno(uuid),
   public.marcar_asistencia(uuid, text), public.mi_perfil(text, text),
   public.justificar(uuid, text), public.revisar_justificacion(uuid, boolean),
-  public.asignar_revisiones(), public.calificar(uuid, int, text, boolean),
+  public.asignar_revisiones(), public.calificar(uuid, int, text, boolean), public.revisar_tarea(uuid),
   public.marcar_salida(text), public.datos_app(boolean), public.mi_puntualidad(), public.registrar_lecturas(uuid, jsonb),
   public.marcar_fuera(boolean), public.rescatar(uuid),
   public.guardar_suscripcion(text, text, text), public.borrar_suscripcion(text), public.aviso_prueba(uuid), public.cambiar_clave(uuid, text),

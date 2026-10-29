@@ -5,6 +5,12 @@
   function leer() { try { return localStorage.getItem(K); } catch (e) { return null; } }
   function aplicar(t) { if (t === 'claro' || t === 'oscuro') document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme'); }
   aplicar(leer());
+  // Sin zoom: la app ya está hecha a la medida de la pantalla. El iPhone ignora «user-scalable=no» del viewport,
+  // así que se frena el gesto de pellizcar; y los campos van a 16 px como mínimo (con menos, el iPhone se acerca solo al escribir).
+  var st = document.createElement('style');
+  st.textContent = 'html{-webkit-text-size-adjust:100%;text-size-adjust:100%;touch-action:pan-x pan-y}input,select,textarea{font-size:max(16px,1em)}';
+  document.head.appendChild(st);
+  ['gesturestart', 'gesturechange'].forEach(function (ev) { document.addEventListener(ev, function (e) { e.preventDefault(); }, { passive: false }); });
   function actual() {
     var t = document.documentElement.getAttribute('data-theme');
     if (t) return t;

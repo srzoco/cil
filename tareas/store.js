@@ -110,6 +110,10 @@
         grupos: db.grupos || [],
         dias_especiales: db.dias_especiales || [],
         revisiones: adm ? (db.revisiones || []).filter(function (r) { return r.fecha >= desde; }) : [],
+        marcadas_por_otro: adm ? db.asignaciones.filter(function (a) {
+          return a.estado === 'hecha' && a.hecha_por && a.hecha_en && L.hoyISO(new Date(a.hecha_en)) === hoy &&
+            !(db.eventos || []).some(function (e) { return e.asignacion_id === a.id && e.tipo === 'hecha' && e.autor === a.hecha_por; });
+        }).map(function (a) { return a.id; }) : [],
         plantillas: adm ? db.plantillas : [],
         asignaciones: asigs,
         asistencia: db.asistencia.filter(function (s) { return s.fecha >= desde && (adm || s.persona_id === yo.id); }),
@@ -548,14 +552,14 @@
           db.revisiones = db.revisiones || [];
           // igual que el SQL: solo lo que la persona marcó ella misma
           var marcoElla = function (asigId, persona) { return (db.eventos || []).some(function (e) { return e.asignacion_id === asigId && e.tipo === 'hecha' && e.autor === persona; }); };
-          db.revisiones = db.revisiones.filter(function (x) { return !(x.fecha === hoy && x.calificacion == null && !marcoElla(x.asignacion_id, x.hecho_por)); });
+          db.revisiones = db.revisiones.filter(function (x) { return !(x.fecha === hoy && x.calificacion == null && !x.manual && !marcoElla(x.asignacion_id, x.hecho_por)); });
           var now = new Date(), minAhora = now.getHours() * 60 + now.getMinutes();
           var n = db.ajustes.revisiones_dia == null ? 4 : db.ajustes.revisiones_dia;
           var admins = db.personas.filter(function (p) { return p.rol === 'admin' && p.activo; });
           var nuevas = 0;
           [['manana', 720, Math.ceil(n / 2)], ['tarde', 960, Math.floor(n / 2)]].forEach(function (fr) {
             if (minAhora < fr[1]) return;
-            var ya = db.revisiones.filter(function (x) { return x.fecha === hoy && x.franja === fr[0]; }).length;
+            var ya = db.revisiones.filter(function (x) { return x.fecha === hoy && x.franja === fr[0] && !x.manual; }).length;
             while (ya < fr[2]) {
               var revisadas = db.revisiones.map(function (x) { return x.asignacion_id; });
               var conRev = db.revisiones.filter(function (x) { return x.fecha === hoy; }).map(function (x) { return x.hecho_por; });
@@ -575,11 +579,28 @@
               var minC = Math.min.apply(null, admins.map(cuenta));
               var libres = admins.filter(function (p) { return cuenta(p) === minC; });
               var rev = libres[Math.floor(Math.random() * libres.length)];
+              // el local puede tener su propia persona de gerencia para revisar
+              var locR = db.locales.filter(function (l) { return l.id === elegida.local_id; })[0];
+              var fijo = locR && locR.revisor && admins.filter(function (p) { return p.id === locR.revisor; })[0];
+              if (fijo) rev = fijo;
               db.revisiones.push({ id: uuid(), asignacion_id: elegida.id, fecha: hoy, franja: fr[0], hecho_por: elegida.hecha_por, revisor: rev ? rev.id : null, calificacion: null, nota: null, revisado_por: null, revisado_en: null, creado_en: new Date().toISOString() });
               ya++; nuevas++;
             }
           });
           r = nuevas;
+        }
+      } else if (nombre === 'revisar_tarea') {
+        if (!adm) throw errorUsuario('Solo gerencia.');
+        db.revisiones = db.revisiones || [];
+        var yaR = db.revisiones.filter(function (x) { return x.asignacion_id === args.p_asignacion; })[0];
+        if (yaR) r = yaR.id;
+        else {
+          var tr = this._asig(args.p_asignacion);
+          if (!tr || tr.estado !== 'hecha' || !tr.hecha_en) throw errorUsuario('Esa tarea todavía no está hecha.');
+          var dhr = new Date(tr.hecha_en);
+          r = uuid();
+          db.revisiones.push({ id: r, asignacion_id: tr.id, fecha: L.hoyISO(dhr), franja: dhr.getHours() < 12 ? 'manana' : 'tarde', hecho_por: tr.hecha_por, revisor: yo.id, manual: true,
+            calificacion: null, nota: null, revisado_por: null, revisado_en: null, creado_en: new Date().toISOString() });
         }
       } else if (nombre === 'calificar') {
         if (!adm) throw errorUsuario('Solo gerencia.');
@@ -854,7 +875,7 @@
       aj.a_tiempo_hasta = String(aj.a_tiempo_hasta || '08:35').slice(0, 5);
       (d.asignaciones || []).forEach(function (a) { if (a.antes) a.antes = String(a.antes).slice(0, 5); if (a.desde) a.desde = String(a.desde).slice(0, 5); });
       return { completo: !!d.completo, mi_mes: d.mi_mes || null, dias_sin_puntualidad: d.dias_sin_puntualidad || [], equipos: d.equipos || [], lecturas: d.lecturas || [], salidas_rato: d.salidas_rato || [], yo: yo, personas: personas, ajustes: aj, locales: d.locales || [], grupos: d.grupos || [], dias_especiales: d.dias_especiales || [],
-        revisiones: d.revisiones || [], plantillas: d.plantillas || [], asignaciones: d.asignaciones || [], asistencia: d.asistencia || [],
+        revisiones: d.revisiones || [], marcadas_por_otro: d.marcadas_por_otro || [], plantillas: d.plantillas || [], asignaciones: d.asignaciones || [], asistencia: d.asistencia || [],
         companeros: d.companeros || {}, almorzando_grupo: d.almorzando_grupo || [], redes_nuevas: d.redes_nuevas || [], con_avisos: d.con_avisos || null, avisos_tel: d.avisos_tel || {}, reloj: d.reloj || null, consumo: d.consumo || null };
     });
   };
