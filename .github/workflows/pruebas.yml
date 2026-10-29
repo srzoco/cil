@@ -31,6 +31,9 @@ jobs:
       - name: Pruebas del robot de Yobel
         env: { PGPASSWORD: prueba }
         run: psql -h localhost -U postgres -d cil -v ON_ERROR_STOP=1 -q -f pruebas/robot.sql
+      - name: Pruebas del bot (Claude y ManyChat simulados, base de datos real)
+        env: { PGPASSWORD: prueba }
+        run: pruebas/bot/correr.sh
       - name: Prueba de humo
         run: |
           # Usa el Chrome que ya trae la máquina de GitHub (bajar el navegador se quedaba pegado).

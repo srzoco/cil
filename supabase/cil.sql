@@ -3024,6 +3024,9 @@ create table if not exists public.bot_mensajes (
   creado      timestamptz not null default now()
 );
 create index if not exists bot_mensajes_contacto_idx on public.bot_mensajes (contacto, id desc);
+-- traspaso = el bot pasó este chat a una persona (el bot calla en ese chat unas horas: horas_silencio_humano)
+alter table public.bot_mensajes add column if not exists traspaso boolean not null default false;
+create index if not exists bot_mensajes_traspaso_idx on public.bot_mensajes (contacto, creado) where traspaso;
 create index if not exists bot_mensajes_creado_idx on public.bot_mensajes (creado);
 alter table public.bot_mensajes enable row level security;
 revoke all on public.bot_mensajes from anon, authenticated;
@@ -3066,6 +3069,7 @@ insert into public.bot_config (clave, valor, descripcion) values
 ('robot_dias', 'lunes,martes,miercoles,jueves,viernes', 'Días que corre el robot. Los sábados de temporada van en robot_sabados_desde/hasta.'),
 ('robot_sabados_desde', '2026-11-07', 'Temporada navideña: desde este día (AAAA-MM-DD) el robot también corre los sábados.'),
 ('robot_sabados_hasta', '2026-12-31', 'Temporada navideña: hasta este día (AAAA-MM-DD) el robot corre los sábados.'),
+('horas_silencio_humano', '12', 'Horas que el bot calla en un chat después de pasarlo a una persona (aunque respondan desde Business Suite). 0 = no calla.'),
 ('verificar_robot', 'no', 'si = el bot no da precios si el robot se saltó un horario (activar cuando el robot esté instalado).'),
 ('robot_token_hash', '', 'Huella del token del robot (se pone con robot_nuevo_token; no editar a mano).'),
 ('robot_forzar', 'no', 'si = aceptar UNA subida del robot aunque cambien muchos precios o lleguen pocos productos (vuelve sola a no).'),
@@ -3293,6 +3297,8 @@ begin
       from jsonb_array_elements(fila.datos->'productos') with ordinality as x(p, ord)
     ), cand as (
       select pr.*, (select bool_and(position(w in pr.nom) > 0) from unnest(palabras) w) as por_nombre from prods pr
+       -- las cajas al mayor solo salen si el cliente pide caja, bulto o mayor (si no, "tinta" daría también la caja y pasaría a humano)
+       where coalesce(pr.p->>'categoria', '') <> 'Al Mayor' or palabras && array['caja','bulto','mayor','mayoreo']
     )
     select * from cand order by por_nombre desc, usos desc, length(nom) asc, ord asc
   loop

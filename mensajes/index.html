@@ -10,7 +10,7 @@
 <title>Armador de mensajes Barquero</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gloock&family=Montserrat:wght@400;500;600;700&display=swap">
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Gloock&family=Montserrat:wght@400;500;600;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gloock&family=Montserrat:wght@400;500;600;700&display=swap"></noscript>
 <style id="css">
 /* Layout: mostrador de dos paneles. Lista de productos a la izquierda, el mensaje como burbuja de chat a la derecha; en teléfono, un panel a la vez con barra inferior. */
 :root{
@@ -1484,7 +1484,20 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
       renderAll();
       // ¿Es alguien de gerencia con sesión de CIL en este teléfono? Entonces puede editar sin clave.
       try { if (await tokenCil() && (await rpcCil('es_admin')) === true){ S.cil = true; S.owner = true; renderOwner(); renderGh(); renderAll(); } } catch (_){}
-      setInterval(async () => { const before = S.tasas && S.tasas.actualizado; await loadTasas(); aplicarManual(await leerDb()); if ((S.tasas && S.tasas.actualizado) !== before){ renderDisc(); renderPicker(); renderComposer(); renderCatalog(); } else renderDisc(); }, 5 * 60 * 1000);
+      // Cada 5 minutos: descuento, y precio y stock nuevos del robot (si nadie está editando ni revisando un CSV)
+      let verDatos = db && db.actualizado_en;
+      setInterval(async () => {
+        const before = S.tasas && S.tasas.actualizado;
+        await loadTasas();
+        const db2 = await leerDb();
+        aplicarManual(db2);
+        let cambio = (S.tasas && S.tasas.actualizado) !== before;
+        if (db2 && db2.datos && db2.actualizado_en !== verDatos && !S.edit && !S.pending && !S.busy){
+          verDatos = db2.actualizado_en; applyData(db2.datos); S.dbVer = db2.editado_en || db2.actualizado_en; cambio = true;
+          try { localStorage.setItem(LS_CAT, JSON.stringify({ datos: db2.datos, ver2: S.dbVer })); } catch (_){}
+        }
+        if (cambio){ renderDisc(); renderPicker(); renderComposer(); renderCatalog(); } else renderDisc();
+      }, 5 * 60 * 1000);
     })();
     return;
   }
