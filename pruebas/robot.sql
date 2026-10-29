@@ -112,6 +112,17 @@ do $$ begin
   if (select count(*) from bot_avisos where tipo like 'robot_error:%') <> 5 then raise exception 'FALLO: tope de avisos del robot'; end if;
 end $$;
 
+-- 9b. Lo que quedó «stock sin actualizar» no se cotiza (pasa a humano sin precio); lo demás sí
+reset role;
+update armador_datos set datos = jsonb_set(datos, '{productos,10,presentaciones,0,sin_actualizar}', to_jsonb(now())) where id = 1;
+do $$ declare r json; begin
+  r := precios_bot('producto 11', 40);
+  if (r->>'encontrados')::int <> 0 then raise exception 'FALLO: cotizó un producto con stock sin actualizar: %', r; end if;
+  r := precios_bot('producto 10', 40);
+  if (r->>'encontrados')::int <> 1 then raise exception 'FALLO: no cotizó un producto normal: %', r; end if;
+  if not exists (select 1 from bot_avisos where tipo = 'robot_pausados' and urgente) then raise exception 'FALLO: el aviso de lo que no vino no es inmediato'; end if;
+end $$;
+
 -- 10. Producto con ficha que desaparece de Yobel: aviso para pasar la ficha
 do $$ begin
   if not exists (select 1 from bot_avisos where tipo = 'robot_ficha' and texto like '%Producto 11%') then
