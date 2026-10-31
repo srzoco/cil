@@ -1436,11 +1436,12 @@
       ['Activa los avisos', '<p>En tu pantalla de inicio de la app toca <b>«Activar»</b> en la tarjeta «Avisos en el teléfono» y acepta el permiso.' + (so === 'ios' ? ' En iPhone solo funciona si la abriste desde el ícono (paso 1).' : '') + ' Así te avisa cuando te toca algo con hora.</p>'],
       ['Al llegar: «Llegué»', '<p>Conéctate al <b>Wi-Fi del local</b> y toca <b>«Llegué»</b>. Aparece tu lista del día. Desde otra red no funciona.</p>'],
       ['Marca cada tarea al terminarla', '<p>Toca el <b>cuadrito</b> de la tarea. Un toque y listo. Si te equivocaste, tócalo otra vez.</p><p>Si dice <b>«con María»</b>, la hacen entre dos: con que uno la marque, queda hecha para los dos.</p>'],
-      ['Al empezar a almorzar', '<p>Toca <b>«Empiezo a almorzar»</b>. Si alguien de tu grupo está almorzando, espera a que termine: siempre se queda alguien del grupo.</p>'],
       ['Si no hay internet', '<p>Marca igual: se guarda en el teléfono y se envía solo cuando vuelva la conexión.</p>'],
       ['Si te tienes que ir antes', '<p>Toca <b>«Me voy antes de terminar»</b> al final de tu lista. Lo que no hiciste se reparte solo entre tus compañeros.</p>']
     ];
     if (a.usar_salidas && (yo().despacha || yo().rol === 'admin')) pasos.splice(4, 0, ['Si sales a despachar', '<p>Toca <b>«Salí a despachar»</b> y al volver <b>«Volví»</b>. Mientras estás fuera, lo que tenga hora lo puede hacer otra persona sin que cuente en tu contra.</p>']);
+    // solo lo que está prendido en Equipo → Ajustes
+    if (a.usar_almuerzo) pasos.splice(4, 0, ['Al empezar a almorzar', '<p>Toca <b>«Empiezo a almorzar»</b>. Si alguien de tu grupo está almorzando, espera a que termine: siempre se queda alguien del grupo.</p>']);
     pasos.push(['¿Olvidaste tu clave?', '<p>Avísale a gerencia: te da una nueva en persona.</p>']);
     return '<a class="volver" href="#/">‹ Volver</a><h1>Cómo se usa</h1>' +
       '<div class="seg-tabs"><a href="#" data-acc="guia-so" data-v="android" class="' + (so === 'android' ? 'on' : '') + '">Android</a><a href="#" data-acc="guia-so" data-v="ios" class="' + (so === 'ios' ? 'on' : '') + '">iPhone</a></div>' +
