@@ -45,6 +45,7 @@ jobs:
           node pruebas/humo.js
           node pruebas/recorrido.js
           node pruebas/contenido.js
+          node pruebas/contenido-checklist.js
           node pruebas/sesiones.js
           node pruebas/armador.js
           node pruebas/armador-stock.js

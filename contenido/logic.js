@@ -54,6 +54,17 @@
     'Copy aprobado pegado completo'
   ];
 
+  // Checklist que la editora marca antes de mandar a aprobar (lo que gerencia más corrige). Cada punto es comprobable.
+  var CHECKLIST_ENVIO = {
+    video: ['Portada puesta', 'Subtítulos revisados (sin errores)', 'Subtítulos cerca de la cara (no abajo)', 'Textos grandes para enfatizar lo importante',
+      'Clips bien cortados: sin pausas ni partes muertas', 'Sonidos o textos en pantalla que den dinamismo', 'Música más baja que la voz',
+      'Cancelación de ruido aplicada', 'Nombre completo de cada producto en el copy', 'Copy revisado con el corrector'],
+    diseno: ['Portada (slide 1) lista', 'Nombre en cada producto de los slides', 'Nombre completo de cada producto en el copy', 'Copy revisado con el corrector']
+  };
+  // Fase 2: con esta cantidad de aprobaciones seguidas sin correcciones, lo que llega con la checklist completa se aprueba solo
+  var RACHA_AUTO = 5;
+  var MUESTRA_DESPUES = 1 / 3;  // de lo que se aprueba solo, esta parte le sale a gerencia para revisar después de publicar
+
   var TIPOS_EVENTO = ['creada', 'idea', 'iniciada', 'editada', 'envio', 'aprobacion', 'correccion', 'comentario',
     'espera', 'llego', 'fechas', 'publicado', 'vistas', 'archivada', 'reabierta'];
 
@@ -352,10 +363,49 @@
     });
   }
 
-  function accionEnviar(p, datos) {
+  // Aprobaciones seguidas sin correcciones (en todas las piezas, en orden): sube con cada aprobación a la primera
+  // y con cada «bien» de la revisión después de publicar; vuelve a 0 con cada corrección o «mal».
+  function rachaLimpia(eventos) {
+    var n = 0;
+    (eventos || []).slice().sort(function (a, b) { return a.creado_en < b.creado_en ? -1 : 1; }).forEach(function (e) {
+      var d = e.datos || {};
+      if (e.tipo === 'correccion' || (e.tipo === 'comentario' && d.revision === 'mal')) n = 0;
+      else if ((e.tipo === 'aprobacion' && !d.auto && e.version === 1) || (e.tipo === 'comentario' && d.revision === 'bien')) n++;
+    });
+    return n;
+  }
+  // Productos del catálogo que el copy nombra a medias (para el buscador hace falta el nombre completo).
+  // Devuelve los nombres completos sugeridos.
+  var PALABRAS_VACIAS = ['de', 'del', 'la', 'el', 'los', 'las', 'con', 'en', 'y', 'al', 'para', 'por', 'sin', 'un', 'una', 'kg', 'gr', 'ml', 'grs', 'unid'];
+  function normal(t) { return String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9ñ]+/g, ' ').trim(); }
+  function clavesDe(nombre) { return normal(nombre).split(' ').filter(function (w) { return w.length >= 4 && PALABRAS_VACIAS.indexOf(w) < 0 && !/^\d+$/.test(w); }); }
+  function nombresIncompletos(texto, nombres) {
+    var t = ' ' + normal(texto) + ' ', pal = t.split(' ');
+    var completos = (nombres || []).filter(function (n) { return normal(n) && t.indexOf(' ' + normal(n) + ' ') >= 0; });
+    var cubiertas = [];
+    completos.forEach(function (n) { cubiertas = cubiertas.concat(clavesDe(n)); });
+    var out = [];
+    (nombres || []).forEach(function (n) {
+      if (completos.indexOf(n) >= 0 || out.indexOf(n) >= 0) return;
+      var k = clavesDe(n), hits = k.filter(function (w) { return pal.indexOf(w) >= 0; });
+      if (k.length >= 2 && hits.length >= 2 && hits.some(function (w) { return cubiertas.indexOf(w) < 0; })) out.push(n);
+    });
+    return out.slice(0, 6);
+  }
+  function checklistEnvio(p) { return CHECKLIST_ENVIO[etapaNorm(p)] || null; }
+
+  // ctx (opcional): { racha: rachaLimpia(eventos), azar: número de 0 a 1 para sortear la revisión después }
+  function accionEnviar(p, datos, ctx) {
     exigirProduccion(p, 'edita');
-    datos = datos || {};
+    datos = datos || {}; ctx = ctx || {};
     var et = etapaNorm(p);
+    var lista = checklistEnvio(p);
+    if (lista) {
+      var marcados = datos.checklist || [];
+      var faltan = lista.filter(function (x, i) { return marcados.indexOf(i) < 0; });
+      if (faltan.length) throw err('Falta marcar en la lista: ' + faltan.join(', ') + '.');
+      if (!txt(datos.enlace)) throw err(et === 'video' ? 'Pega el enlace de CapCut del video.' : 'Pega el enlace del diseño.');
+    }
     var version = (p.version || 0) + 1;
     var patch = { turno: 'aprueba', version: version, etapa: et, nota_version: limpiar(datos.nota), enlace_version: limpiar(datos.enlace) };
     var ev = {};
@@ -367,10 +417,29 @@
     if (esFinal(p)) copiaRequerida(p, datos, patch, ev);
     if (datos.resueltas && datos.resueltas.length) ev.resueltas = datos.resueltas;
     if (patch.enlace_version) ev.enlace = patch.enlace_version;
-    return {
-      patch: patch, match: matchDe(p),
-      eventos: [{ tipo: 'envio', etapa: et, version: version, texto: patch.nota_version, datos: ev }]
-    };
+    if (lista) ev.checklist = true;
+    if (datos.sensible) ev.sensible = true;
+    var r = { patch: patch, match: matchDe(p), eventos: [{ tipo: 'envio', etapa: et, version: version, texto: patch.nota_version, datos: ev }] };
+    // Fase 2: se aprueba sola si ya se ganó la confianza, la checklist está completa y no lleva precios, promos ni producto nuevo
+    if (lista && esFinal(p) && !datos.sensible && (ctx.racha || 0) >= RACHA_AUTO) {
+      var pa = Object.assign({}, p, patch);
+      var ap = accionAprobar(pa, {});
+      Object.assign(r.patch, ap.patch);
+      ap.eventos[0].datos.auto = true;
+      ap.eventos[0].texto = 'Se aprobó sola: checklist completa y ' + RACHA_AUTO + ' aprobaciones seguidas sin correcciones.';
+      r.patch.revisar_despues = (ctx.azar == null ? Math.random() : ctx.azar) < MUESTRA_DESPUES;
+      r.eventos.push(ap.eventos[0]);
+      r.auto = true;
+    }
+    return r;
+  }
+  // Gerencia revisa después de publicar una pieza que se aprobó sola. «Mal» devuelve a la editora a la fase 1.
+  function accionRevisionDespues(p, ok, chips, texto) {
+    if (!p.revisar_despues) throw err('Esta pieza ya se revisó.');
+    chips = (chips || []).filter(Boolean);
+    if (!ok && !chips.length && !txt(texto)) throw err('Indica qué falló.');
+    return { patch: { revisar_despues: false }, match: { revisar_despues: true },
+      eventos: [{ tipo: 'comentario', texto: limpiar(texto), datos: { revision: ok ? 'bien' : 'mal', chips: chips } }] };
   }
 
   function fechasPatch(p, f) {
@@ -642,10 +711,11 @@
   // ---------- Pendientes por rol ----------
   function pendientes(piezas, eventos, rol, hoy, ajustes) {
     hoy = hoy || hoyISO();
-    var r = { revisar: [], editar: [], publicar: [], programar: [], riesgo: [], vistas: [], espera: [], grabar: [], atrasadas: [], hoy: [], huecos: [] };
+    var r = { revisarDespues: [], revisar: [], editar: [], publicar: [], programar: [], riesgo: [], vistas: [], espera: [], grabar: [], atrasadas: [], hoy: [], huecos: [] };
     var ent = entrega(ajustes);
     piezas.forEach(function (p) {
       if (p.fase === 'archivada') return;
+      if (p.revisar_despues) r.revisarDespues.push(p);
       if (p.en_espera && p.fase !== 'publicada') r.espera.push(p);
       var col = columnaDe(p);
       if (col === 'grabar') r.grabar.push(p);
@@ -689,7 +759,7 @@
     r.publicar.sort(function (a, b) { return a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : 0; });
     r.huecos = huecos(piezas, ajustes, hoy, 7);
     r.total = rol === 'aprueba'
-      ? r.revisar.length + r.programar.length
+      ? r.revisar.length + r.programar.length + r.revisarDespues.length
       : r.editar.length + r.publicar.length + r.vistas.length;
     r.totalBase = r.total;
     return r;
@@ -996,6 +1066,7 @@
     msgEnvio: msgEnvio, msgCorreccion: msgCorreccion, msgAprobacion: msgAprobacion, msgResumenLote: msgResumenLote,
     lunesDe: lunesDe, horaValida: horaValida, momento: momento, fmtHora: fmtHora, grabacionPorDefecto: grabacionPorDefecto, grabacionDeSemana: grabacionDeSemana,
     estadoGrabacion: estadoGrabacion, accionConfirmar: accionConfirmar, accionReagendar: accionReagendar, accionCerrarGrabacion: accionCerrarGrabacion,
-    accionReabrirGrabacion: accionReabrirGrabacion, racha: racha, msgGrabacion: msgGrabacion
+    accionReabrirGrabacion: accionReabrirGrabacion, racha: racha, msgGrabacion: msgGrabacion,
+    CHECKLIST_ENVIO: CHECKLIST_ENVIO, RACHA_AUTO: RACHA_AUTO, rachaLimpia: rachaLimpia, checklistEnvio: checklistEnvio, accionRevisionDespues: accionRevisionDespues, nombresIncompletos: nombresIncompletos
   };
 });

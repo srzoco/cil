@@ -297,6 +297,14 @@
       .then(function (r) { return (r && r[0]) || null; });
   };
 
+  // Nombres de productos del Armador (para revisar que el copy los nombre completos)
+  DemoStore.prototype.catalogo = function () { return Promise.resolve(['Queso manchego curado', 'Pistachos tostados', 'Jamón serrano']); };
+  SupabaseStore.prototype.catalogo = function () {
+    return this._rest('GET', 'armador_datos?id=eq.1&select=datos').then(function (r) {
+      var d = r && r[0] && r[0].datos; return ((d && d.productos) || []).map(function (x) { return x.nombre; }).filter(Boolean);
+    });
+  };
+
   function crearStore(config, semilla) {
     if (config && config.supabaseUrl && config.supabaseKey) return new SupabaseStore(config);
     return new DemoStore(semilla);

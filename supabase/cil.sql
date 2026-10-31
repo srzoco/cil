@@ -2308,6 +2308,9 @@ begin
     return;
   end if;
 
+  -- Pieza que se aprobó sola (fase 2) y le salió a gerencia para revisar después de publicar
+  execute 'alter table public.piezas add column if not exists revisar_despues boolean not null default false';
+
   -- Quien ya estaba en el equipo de Contenido conserva su acceso
   update public.personas p set accesos = array_append(p.accesos, 'contenido')
   where p.id in (select user_id from public.equipo) and not ('contenido' = any (p.accesos));

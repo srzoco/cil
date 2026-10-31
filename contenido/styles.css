@@ -633,3 +633,21 @@ html.marco-fijo .desliza:has(~ .tabs) .contenido { padding-bottom: 28px; }
 .cron-extra .cron-fila { grid-template-columns: 84px 1fr; }
 .motivo-tipo span { font-weight: 600; }
 .fila-btns { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; align-self: flex-end; }
+
+/* Envío con checklist (fase 1) y aprobación sola (fase 2) */
+.nombre-archivo { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin: 0 0 10px; }
+.checklist-envio { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin: 12px 0; display: flex; flex-direction: column; gap: 8px; }
+.checklist-envio legend { font-weight: 700; padding: 0 4px; }
+.checklist-envio .check, .sensible { align-items: flex-start; }
+.racha { margin: 10px 0; font-size: .9rem; color: var(--muted); display: flex; flex-direction: column; gap: 6px; }
+.racha.lista { color: var(--ink); font-weight: 600; }
+.racha-barra { display: block; height: 6px; border-radius: 999px; background: var(--gray-bg); overflow: hidden; }
+.racha-barra span { display: block; height: 100%; background: var(--green); border-radius: inherit; }
+/* Corrector */
+.corrector { margin: -4px 0 12px; }
+.corrector-res:empty { display: none; }
+.corrector-res { margin-top: 8px; font-size: .9rem; }
+.corr-lista { margin: 6px 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+.corr-mal { text-decoration: underline wavy var(--wine); font-weight: 600; }
+.ok-txt { color: var(--green); font-weight: 600; }
+.despues .acciones { margin-top: 8px; }

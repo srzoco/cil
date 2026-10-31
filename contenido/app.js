@@ -341,6 +341,7 @@
       });
       r.atrasadas.forEach(function (x) { acc.push(conBoton(x.pieza, '<span class="rojo">No se publicó</span> · ' + L.PLATAFORMAS[x.plataforma] + ' · era ' + L.fmtFecha(x.fecha), '<div class="fila-btns">' + botonReagendar(x.pieza) + botonPub(x, 'Ya se publicó en', true) + '</div>')); });
       // Cada fila con su botón grande: lo que hay que hacer, a un toque
+      r.revisarDespues.forEach(function (p) { acc.push(conBoton(p, '<b>🔍 Revisar después de publicar</b> · se aprobó sola', '<a class="btn" href="#/p/' + p.id + '">Revisar</a>')); });
       r.riesgo.forEach(function (x) { acc.push(conBoton(x.pieza, '<span class="rojo">Se publica pronto y no está aprobada</span>', '<a class="btn" href="#/p/' + x.pieza.id + '">Revisar</a>')); });
       r.revisar.forEach(function (p) { acc.push(conBoton(p, '<b>Por aprobar</b>', '<a class="btn" href="#/p/' + p.id + '">Revisar</a>')); });
       r.programar.forEach(function (p) { acc.push(conBoton(p, 'Lista sin fecha', '<button class="btn sec" data-act="fechas" data-id="' + p.id + '">📅 Ponerle fecha</button>')); });
@@ -489,12 +490,13 @@
   }
   function archivoAviso(p) {
     var cosa = L.etapaNorm(p) === 'diseno' ? 'El diseño' : 'El video';
-    return '<div class="archivo">📱 ' + cosa + ' llega por WhatsApp.' + (p.enlace_version ? ' <a href="' + url(p.enlace_version) + '" target="_blank" rel="noopener">Abrir enlace</a>' : '') + '</div>';
+    return '<div class="archivo">' + (p.enlace_version ? '<a class="btn sec" href="' + url(p.enlace_version) + '" target="_blank" rel="noopener">▶️ Ver ' + cosa.toLowerCase() + ' en CapCut</a>' : '📱 ' + cosa + ' llega por WhatsApp.') + '</div>';
   }
   function camposCopy(p, ayuda) {
     return L.plataformasDe(p).map(function (pl) {
       return '<label class="campo">Copy de ' + L.PLATAFORMAS[pl] + (ayuda ? ' <small>' + ayuda + '</small>' : '') +
-        '<textarea name="copy_' + pl + '" rows="4">' + esc(p['copy_' + pl]) + '</textarea></label>';
+        '<textarea name="copy_' + pl + '" rows="4" spellcheck="true" lang="es">' + esc(p['copy_' + pl]) + '</textarea></label>' +
+        '<div class="corrector"><button class="btn sec chico" type="button" data-act="ortografia" data-campo="copy_' + pl + '">🔤 Revisar ortografía y nombres</button><div class="corrector-res" data-res="copy_' + pl + '"></div></div>';
     }).join('');
   }
   function formCorregir(p) {
@@ -567,6 +569,7 @@
       '<header class="pieza-head"><div class="tarjeta-top">' + tipoTag(p, true) + badgesPlat(p) + '</div>' +
       '<div class="titulo-fila"><h1>' + esc(p.titulo) + '</h1><button class="btn link chico" data-act="editar" data-id="' + p.id + '" aria-label="Cambiar el nombre">✏️ Cambiar nombre</button></div><div class="pieza-estado">' + pill(p) + limiteChip(p) + '</div>' + stepper(p) + '</header>';
     if (p.fase === 'idea') html += bloqueIdea(p);
+    if (p.revisar_despues && miRol === 'aprueba') html += tarjetaDespues(p);
     if (p.fase === 'produccion') {
       if (p.turno === 'aprueba') {
         html += miRol === 'aprueba' ? tarjetaRevision(p, false)
@@ -606,6 +609,23 @@
       (p.fase === 'archivada' ? '<button class="btn sec" data-act="reabrir" data-id="' + p.id + '">Reabrir</button>' : '<button class="btn fantasma" data-act="archivar" data-id="' + p.id + '">Archivar</button>') +
       '</div></article>';
     return html;
+  }
+  // Fase 2: pieza que se aprobó sola y le tocó a gerencia revisarla después de publicar
+  function tarjetaDespues(p) {
+    var env = eventos().filter(function (e) { return e.pieza_id === p.id && e.tipo === 'envio'; }).pop();
+    var enlace = env && env.datos && env.datos.enlace;
+    var et = L.etapasDe(p)[L.etapasDe(p).length - 1];
+    return '<section class="card ahora despues"><p class="ahora-t">🔍 Se aprobó sola: revísala</p>' +
+      '<p class="muted">' + esc(nombreDe(env && env.autor)) + ' marcó toda la lista. ¿Cómo quedó? Si algo falló, vuelve a necesitar tu aprobación.</p>' +
+      (enlace ? '<p><a class="btn sec" href="' + url(enlace) + '" target="_blank" rel="noopener">▶️ Ver ' + (p.tipo === 'reel' ? 'el video' : 'el diseño') + '</a></p>' : '') +
+      '<form data-form="despues" data-id="' + p.id + '"><div class="acciones"><button class="btn ok" type="button" data-act="despues-bien" data-id="' + p.id + '">👍 Quedó bien</button>' +
+      '<button class="btn warn" type="button" data-act="abrir-despues">👎 Algo falló</button></div>' +
+      '<div class="despues-mal" hidden>' + L.gruposChips(et).map(function (g) {
+        return '<p class="grupo-chips">' + esc(g.titulo) + '</p><div class="chips">' + g.chips.map(function (c) {
+          return '<button type="button" class="chip" data-act="chip" data-valor="' + esc(c) + '" aria-pressed="false">' + esc(c) + '</button>';
+        }).join('') + '</div>';
+      }).join('') + '<label class="campo">Comentario <small>(opcional)</small><textarea name="texto" rows="2"></textarea></label>' +
+      '<button class="btn warn" type="submit">Guardar: algo falló</button></div></form></section>';
   }
   function waParaEnvio(p) {
     var sara = contraparte('aprueba');
@@ -657,8 +677,19 @@
     if (corr) html += '<div class="por-corregir"><p><b>' + esc(nombreDe(corr.autor)) + '</b> pidió (' + L.haceCuanto(corr.creado_en) + '):</p>' + checklistCorreccion(corr) + '</div>';
     html += '<form data-form="enviar" data-id="' + p.id + '">';
     if (et === 'video' || et === 'diseno') {
-      html += '<p class="ayuda">Manda ' + (et === 'video' ? 'el video' : 'el diseño') + ' por WhatsApp como siempre; aquí queda el registro y la aprobación.</p>' +
-        '<label class="campo">Enlace <small>(opcional: Drive, WeTransfer…)</small><input type="url" name="enlace" inputmode="url" placeholder="https://" value="' + esc(p.enlace_version || '') + '"></label>';
+      html += '<div class="nombre-archivo"><span class="muted">Guárdalo en CapCut con este nombre:</span> <b>' + esc(p.titulo) + '</b> <button class="btn link" type="button" data-act="copiar-texto" data-texto="' + esc(p.titulo) + '">Copiar</button></div>' +
+        '<label class="campo">Enlace de CapCut <small>(Compartir → copiar enlace)</small><input type="url" name="enlace" inputmode="url" placeholder="https://" required value="' + esc(p.enlace_version || '') + '"></label>';
+    }
+    var lista = L.checklistEnvio(p);
+    if (lista) {
+      var racha = L.rachaLimpia(eventos()), auto = L.esFinal(p) && racha >= L.RACHA_AUTO;
+      html += '<fieldset class="checklist-envio"><legend>Antes de enviar, revisa</legend>' + lista.map(function (x, i) {
+        return '<label class="check"><input type="checkbox" name="chk" value="' + i + '" required> <span>' + esc(x) + '</span></label>';
+      }).join('') + '</fieldset>';
+      if (L.esFinal(p)) html += '<label class="check sensible"><input type="checkbox" name="sensible"> <span>Lleva precios, una promoción o un producto nuevo</span></label>' +
+        '<p class="racha' + (auto ? ' lista' : '') + '">' + (auto ? '⭐ Con la lista completa se aprueba sola (salvo precios, promociones o productos nuevos).'
+          : '⭐ ' + racha + ' de ' + L.RACHA_AUTO + ' aprobaciones seguidas sin correcciones. Al llegar a ' + L.RACHA_AUTO + ', lo que mandes con la lista completa se aprueba solo.') +
+        '<span class="racha-barra"><span style="width:' + Math.min(100, Math.round(100 * racha / L.RACHA_AUTO)) + '%"></span></span></p>';
     }
     if (et === 'texto') html += '<label class="campo">Texto del carrusel<textarea name="texto_carrusel" rows="9" placeholder="Slide 1: …&#10;Slide 2: …">' + esc(p.texto_carrusel || 'Slide 1: \nSlide 2: \nSlide 3: ') + '</textarea></label>';
     if (L.esFinal(p)) html += camposCopy(p, '');
@@ -1349,12 +1380,62 @@
         S.flash = { titulo: r && r.enviadas ? '🔔 Prueba enviada' : 'No hay dispositivos activos', texto: r && r.enviadas ? 'Debe llegarte en unos segundos.' : 'Activa las notificaciones en este dispositivo.' };
       });
     },
+    'copiar-texto': function (el) { copiarTexto(el.dataset.texto).then(function () { var t = el.textContent; el.textContent = '¡Copiado!'; setTimeout(function () { el.textContent = t; }, 1500); }); },
+    'abrir-despues': function (el) { var d = el.closest('form').querySelector('.despues-mal'); d.hidden = !d.hidden; },
+    'despues-bien': function (el) {
+      var p = pieza(el.dataset.id), r;
+      try { r = L.accionRevisionDespues(p, true); } catch (e) { return aviso(e.message); }
+      accion(function () { return ejecutar(p, r); }, function () { S.flash = { titulo: '👍 Revisada', texto: 'Suma a la racha de ' + nombreRol('edita') + '.' }; });
+    },
+    'ortografia': function (el) { revisarCopy(el); },
+    'aplicar-corr': function (el) { aplicarCorreccion(el); },
     'ocultar-push': function () { try { localStorage.setItem('bf_push_oculto', '1'); } catch (e) { /* nada */ } render(); }
   };
   function abrirModal(m) {
     S.modal = m; pintarCapas();
     var i = document.querySelector('.hoja input[name="producto"]');
     if (i && m.tipo === 'espera') try { i.focus(); } catch (e) { /* nada */ }
+  }
+  // ---------- Corrector del copy: ortografía y gramática (LanguageTool, gratis) y nombres completos de productos ----------
+  var LT_URL = 'https://api.languagetool.org/v2/check';
+  function catalogo() {
+    if (!S.catalogo) S.catalogo = (store.catalogo ? store.catalogo() : Promise.resolve([])).catch(function () { S.catalogo = null; return []; });
+    return S.catalogo;
+  }
+  function revisarCopy(el) {
+    var campo = el.dataset.campo, f = el.closest('form'), ta = f && f.elements[campo];
+    var res = f && f.querySelector('[data-res="' + campo + '"]');
+    if (!ta || !res) return;
+    var texto = ta.value;
+    if (!texto.trim()) { res.innerHTML = '<p class="muted">Escribe el copy primero.</p>'; return; }
+    res.innerHTML = '<p class="muted">Revisando…</p>';
+    var lt = fetch(LT_URL, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ text: texto, language: 'es', enabledOnly: 'false' }).toString() })
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(function (j) { return (j.matches || []).filter(function (m) { var w = texto.substr(m.offset, m.length); return !/^[#@]/.test(w) && !/barquero/i.test(w); }); },
+        function () { return null; });
+    Promise.all([lt, catalogo()]).then(function (x) {
+      if (ta.value !== texto) return;  // cambió mientras se revisaba
+      var errores = x[0], faltan = L.nombresIncompletos(texto, x[1]), h = '';
+      if (errores === null) h += '<p class="rojo">No se pudo revisar la ortografía ahora (¿sin internet?). Las palabras subrayadas en rojo igual son errores.</p>';
+      else if (!errores.length) h += '<p class="ok-txt">✓ Sin errores de ortografía ni gramática.</p>';
+      else h += '<ul class="corr-lista">' + errores.slice(0, 15).map(function (m) {
+        var w = texto.substr(m.offset, m.length);
+        return '<li><span class="corr-mal">' + esc(w) + '</span> <span class="muted">' + esc(m.message) + '</span>' +
+          (m.replacements || []).slice(0, 3).map(function (r) {
+            return ' <button class="btn chico sec" type="button" data-act="aplicar-corr" data-campo="' + esc(campo) + '" data-off="' + m.offset + '" data-len="' + m.length + '" data-val="' + esc(r.value) + '">' + esc(r.value || '(quitar)') + '</button>';
+          }).join('') + '</li>';
+      }).join('') + '</ul>';
+      if (faltan.length) h += '<p class="rojo">Pon el nombre completo para el buscador:</p><ul class="corr-lista">' + faltan.map(function (n) { return '<li><b>' + esc(n) + '</b></li>'; }).join('') + '</ul>';
+      res.innerHTML = h;
+    });
+  }
+  function aplicarCorreccion(el) {
+    var f = el.closest('form'), ta = f && f.elements[el.dataset.campo]; if (!ta) return;
+    var off = +el.dataset.off, len = +el.dataset.len;
+    ta.value = ta.value.slice(0, off) + el.dataset.val + ta.value.slice(off + len);
+    S.sucio = true;
+    revisarCopy(f.querySelector('[data-act="ortografia"][data-campo="' + el.dataset.campo + '"]'));
   }
   function copiarTexto(t) {
     if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(t).catch(function () { return copiarViejo(t); });
@@ -1434,13 +1515,15 @@
     },
     enviar: function (f, btn) {
       var p = pieza(f.dataset.id);
-      var datos = { nota: val(f, 'nota'), enlace: val(f, 'enlace'), texto_carrusel: val(f, 'texto_carrusel'), copy_ig: val(f, 'copy_ig'), copy_tt: val(f, 'copy_tt') };
+      var datos = { nota: val(f, 'nota'), enlace: val(f, 'enlace'), texto_carrusel: val(f, 'texto_carrusel'), copy_ig: val(f, 'copy_ig'), copy_tt: val(f, 'copy_tt'),
+        checklist: [].map.call(f.querySelectorAll('[name="chk"]:checked'), function (c) { return parseInt(c.value, 10); }), sensible: !!(f.elements.sensible && f.elements.sensible.checked) };
       var res = [];
       f.closest('.card').querySelectorAll('[data-resuelta]:checked').forEach(function (c) { res.push(parseInt(c.value, 10)); });
       if (res.length) datos.resueltas = res;
       var r;
-      try { r = L.accionEnviar(p, datos); } catch (e) { return aviso(e.message); }
+      try { r = L.accionEnviar(p, datos, { racha: L.rachaLimpia(eventos()) }); } catch (e) { return aviso(e.message); }
       accion(function () { return ejecutar(p, r); }, function (fila) {
+        if (r.auto) { S.flash = { titulo: '⭐ Se aprobó sola', texto: 'La lista estaba completa. Ya queda lista para publicar.' }; return; }
         var sara = contraparte('aprueba');
         var et = L.etapaNorm(p);
         S.flash = { titulo: '📤 Enviado a aprobar', texto: 'Avísale' + (et === 'video' || et === 'diseno' ? ' y mándale el archivo en el mismo chat.' : '.'),
@@ -1481,6 +1564,12 @@
         S.flash = { titulo: '✏️ Corrección enviada', texto: 'Le aparece a ' + (ed ? ed.nombre : 'edición') + ' como tarea.',
           wa: { href: L.waLink(ed && ed.telefono, L.msgCorreccion(p, r.eventos[0], base())), label: 'Avisar a ' + (ed ? ed.nombre : 'edición') + ' por WhatsApp' } };
       }, btn);
+    },
+    despues: function (f, btn) {
+      var p = pieza(f.dataset.id), chips = [], r;
+      f.querySelectorAll('.chip[aria-pressed="true"]').forEach(function (c) { chips.push(c.dataset.valor); });
+      try { r = L.accionRevisionDespues(p, false, chips, val(f, 'texto')); } catch (e) { return aviso(e.message); }
+      accion(function () { return ejecutar(p, r); }, function () { S.flash = { titulo: 'Anotado', texto: 'Desde ahora ' + nombreRol('edita') + ' vuelve a necesitar tu aprobación hasta juntar ' + L.RACHA_AUTO + ' seguidas sin correcciones.' }; }, btn);
     },
     comentario: function (f, btn) {
       var p = pieza(f.dataset.id), r;
