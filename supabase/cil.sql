@@ -2178,6 +2178,26 @@ begin
   where pe.activo and pe.rol = 'admin' and pe.pend_avisos = 'resumen' and r.n > 0
     and public._ts_hoy(time '08:00') <= ahora and public._ts_hoy(time '08:00') > hace;
 
+  -- 6d) Contenido: lo de hoy se publica entre las 6 y las 8:30 p. m. Recordatorios a quien edita a las 6, 7:45 y 8:15;
+  --     si a las 8:35 algo sigue sin publicarse, le avisa también a quien aprueba.
+  if to_regclass('public.piezas') is not null and to_regclass('public.equipo') is not null then
+    insert into _avisos
+    select eq.user_id, 'pub:' || hoy || ':' || r.hora || ':' || eq.user_id, r.titulo || ' ' || l.lista, r.cuerpo, 'contenido/'
+    from (values (time '18:00', 'edita', '📲 Hoy se publica:', 'Tienes hasta las 8:30 p. m. Al publicar, márcalo en la app.'),
+                 (time '19:45', 'edita', '⏰ Falta publicar:', 'Quedan 45 minutos (hasta las 8:30 p. m.).'),
+                 (time '20:15', 'edita', '🔴 Últimos 15 min para publicar:', 'Publícalo ya y márcalo en la app.'),
+                 (time '20:35', 'aprueba', '🔴 No se publicó a tiempo:', 'Se pasó la ventana de 6 a 8:30 p. m.'),
+                 (time '20:35', 'edita', '🔴 No se publicó a tiempo:', 'Publícalo apenas puedas y márcalo, o reagéndalo.')) as r(hora, rol, titulo, cuerpo)
+    join equipo eq on eq.rol = r.rol
+    join personas pe on pe.id = eq.user_id and pe.activo
+    cross join lateral (
+      select string_agg(x.titulo || ' (' || x.plat || ')', ', ' order by x.titulo) as lista from (
+        select p.titulo, 'IG' as plat from piezas p where p.fase = 'aprobada' and not p.en_espera and p.ig and p.fecha_ig = hoy and p.publicado_ig_en is null
+        union all
+        select p.titulo, 'TikTok' from piezas p where p.fase = 'aprobada' and not p.en_espera and p.tt and p.fecha_tt = hoy and p.publicado_tt_en is null) x) l
+    where l.lista is not null and public._ts_hoy(r.hora) <= ahora and public._ts_hoy(r.hora) > hace;
+  end if;
+
   -- 7) Avisos sueltos (prueba)
   insert into _avisos select c.persona_id, 'cola:' || c.id, c.titulo, c.cuerpo, c.url from avisos_cola c where c.creado_en > now() - interval '1 day';
   delete from avisos_cola where creado_en <= now() - interval '1 day' or id::text in (select substr(clave, 6) from _avisos where clave like 'cola:%');

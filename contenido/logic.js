@@ -63,6 +63,8 @@
   };
   // Fase 2: con esta cantidad de aprobaciones seguidas sin correcciones, lo que llega con la checklist completa se aprueba solo
   var RACHA_AUTO = 5;
+  // Hora de publicar (los recordatorios salen de avisos_pendientes en cil.sql: 6 p. m., 7:45, 8:15 y 8:35 si no se publicó)
+  var VENTANA_PUBLICAR = 'de 6 a 8:30 p. m.';
   var MUESTRA_DESPUES = 1 / 3;  // de lo que se aprueba solo, esta parte le sale a gerencia para revisar después de publicar
 
   var TIPOS_EVENTO = ['creada', 'idea', 'iniciada', 'editada', 'envio', 'aprobacion', 'correccion', 'comentario',
@@ -1067,6 +1069,6 @@
     lunesDe: lunesDe, horaValida: horaValida, momento: momento, fmtHora: fmtHora, grabacionPorDefecto: grabacionPorDefecto, grabacionDeSemana: grabacionDeSemana,
     estadoGrabacion: estadoGrabacion, accionConfirmar: accionConfirmar, accionReagendar: accionReagendar, accionCerrarGrabacion: accionCerrarGrabacion,
     accionReabrirGrabacion: accionReabrirGrabacion, racha: racha, msgGrabacion: msgGrabacion,
-    CHECKLIST_ENVIO: CHECKLIST_ENVIO, RACHA_AUTO: RACHA_AUTO, rachaLimpia: rachaLimpia, checklistEnvio: checklistEnvio, accionRevisionDespues: accionRevisionDespues, nombresIncompletos: nombresIncompletos
+    CHECKLIST_ENVIO: CHECKLIST_ENVIO, VENTANA_PUBLICAR: VENTANA_PUBLICAR, RACHA_AUTO: RACHA_AUTO, rachaLimpia: rachaLimpia, checklistEnvio: checklistEnvio, accionRevisionDespues: accionRevisionDespues, nombresIncompletos: nombresIncompletos
   };
 });

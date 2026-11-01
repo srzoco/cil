@@ -337,7 +337,7 @@
     if (rol() === 'aprueba') {
       r.hoy.forEach(function (x) {
         var listo = x.pieza.fase === 'aprobada' && !L.publicadoEn(x.pieza, x.plataforma);
-        acc.push(conBoton(x.pieza, '<b>Hoy se publica</b> · ' + L.PLATAFORMAS[x.plataforma], listo ? botonPub(x, 'Publicado en') : ''));
+        acc.push(conBoton(x.pieza, '<b>Hoy se publica</b> · ' + L.PLATAFORMAS[x.plataforma] + ' · ' + L.VENTANA_PUBLICAR, listo ? botonPub(x, 'Publicado en') : ''));
       });
       r.atrasadas.forEach(function (x) { acc.push(conBoton(x.pieza, '<span class="rojo">No se publicó</span> · ' + L.PLATAFORMAS[x.plataforma] + ' · era ' + L.fmtFecha(x.fecha), '<div class="fila-btns">' + botonReagendar(x.pieza) + botonPub(x, 'Ya se publicó en', true) + '</div>')); });
       // Cada fila con su botón grande: lo que hay que hacer, a un toque
@@ -346,7 +346,7 @@
       r.revisar.forEach(function (p) { acc.push(conBoton(p, '<b>Por aprobar</b>', '<a class="btn" href="#/p/' + p.id + '">Revisar</a>')); });
       r.programar.forEach(function (p) { acc.push(conBoton(p, 'Lista sin fecha', '<button class="btn sec" data-act="fechas" data-id="' + p.id + '">📅 Ponerle fecha</button>')); });
     } else {
-      r.publicar.forEach(function (x) { acc.push(conBoton(x.pieza, '<b>' + L.PLATAFORMAS[x.plataforma] + '</b>' + (x.atrasada ? ' · era ' + L.fmtFecha(x.fecha) : ''), x.atrasada ? '<div class="fila-btns">' + botonReagendar(x.pieza) + botonPub(x, 'Publicar en') + '</div>' : botonPub(x, 'Publicar en'))); });
+      r.publicar.forEach(function (x) { acc.push(conBoton(x.pieza, '<b>' + L.PLATAFORMAS[x.plataforma] + '</b>' + (x.atrasada ? ' · era ' + L.fmtFecha(x.fecha) : ' · ' + L.VENTANA_PUBLICAR), x.atrasada ? '<div class="fila-btns">' + botonReagendar(x.pieza) + botonPub(x, 'Publicar en') + '</div>' : botonPub(x, 'Publicar en'))); });
       r.editar.forEach(function (p) { acc.push(conBoton(p, p.version > 0 ? resumenCorreccion(L.ultimaCorreccion(eventos(), p)) : 'Por editar', '<a class="btn" href="#/p/' + p.id + '">' + (p.version > 0 ? 'Corregir' : 'Subir versión') + '</a>')); });
       r.vistas.forEach(function (x) { acc.push(conBoton(x.pieza, 'Anotar vistas · ' + L.PLATAFORMAS[x.plataforma], '<button class="btn sec" data-act="vistas" data-id="' + x.pieza.id + '">Anotar</button>')); });
     }
