@@ -2178,16 +2178,20 @@ begin
   where pe.activo and pe.rol = 'admin' and pe.pend_avisos = 'resumen' and r.n > 0
     and public._ts_hoy(time '08:00') <= ahora and public._ts_hoy(time '08:00') > hace;
 
-  -- 6d) Contenido: lo de hoy se publica entre las 6 y las 8:30 p. m. Recordatorios a quien edita a las 6, 7:45 y 8:15;
-  --     si a las 8:35 algo sigue sin publicarse, le avisa también a quien aprueba.
+  -- 6d) Contenido: lo de hoy se publica en la ventana de Ajustes (pub_desde a pub_hasta; por defecto 6 a 8:30 p. m.).
+  --     Recordatorios a quien edita al empezar, 45 y 15 min antes de terminar; 5 min después, si algo sigue sin publicarse,
+  --     a quien edita y a quien aprueba.
   if to_regclass('public.piezas') is not null and to_regclass('public.equipo') is not null then
     insert into _avisos
     select eq.user_id, 'pub:' || hoy || ':' || r.hora || ':' || eq.user_id, r.titulo || ' ' || l.lista, r.cuerpo, 'contenido/'
-    from (values (time '18:00', 'edita', '📲 Hoy se publica:', 'Tienes hasta las 8:30 p. m. Al publicar, márcalo en la app.'),
-                 (time '19:45', 'edita', '⏰ Falta publicar:', 'Quedan 45 minutos (hasta las 8:30 p. m.).'),
-                 (time '20:15', 'edita', '🔴 Últimos 15 min para publicar:', 'Publícalo ya y márcalo en la app.'),
-                 (time '20:35', 'aprueba', '🔴 No se publicó a tiempo:', 'Se pasó la ventana de 6 a 8:30 p. m.'),
-                 (time '20:35', 'edita', '🔴 No se publicó a tiempo:', 'Publícalo apenas puedas y márcalo, o reagéndalo.')) as r(hora, rol, titulo, cuerpo)
+    from (select coalesce((select a.pub_desde from ajustes a where a.id = 1), time '18:00') as d,
+                 coalesce((select a.pub_hasta from ajustes a where a.id = 1), time '20:30') as h) v
+    cross join lateral (values
+                 (v.d, 'edita', '📲 Hoy se publica:', 'Tienes hasta las ' || public._hora_txt(v.h) || ' Al publicar, márcalo en la app.'),
+                 (v.h - interval '45 minutes', 'edita', '⏰ Falta publicar:', 'Quedan 45 minutos (hasta las ' || public._hora_txt(v.h) || ').'),
+                 (v.h - interval '15 minutes', 'edita', '🔴 Últimos 15 min para publicar:', 'Publícalo ya y márcalo en la app.'),
+                 (v.h + interval '5 minutes', 'aprueba', '🔴 No se publicó a tiempo:', 'Se pasó la hora de publicar (hasta las ' || public._hora_txt(v.h) || ').'),
+                 (v.h + interval '5 minutes', 'edita', '🔴 No se publicó a tiempo:', 'Publícalo apenas puedas y márcalo, o reagéndalo.')) as r(hora, rol, titulo, cuerpo)
     join equipo eq on eq.rol = r.rol
     join personas pe on pe.id = eq.user_id and pe.activo
     cross join lateral (
@@ -2330,6 +2334,9 @@ begin
 
   -- Pieza que se aprobó sola (fase 2) y le salió a gerencia para revisar después de publicar
   execute 'alter table public.piezas add column if not exists revisar_despues boolean not null default false';
+  -- Hora de publicar (los recordatorios de avisos_pendientes se calculan con estas dos)
+  execute $p$alter table public.ajustes add column if not exists pub_desde time not null default '18:00'$p$;
+  execute $p$alter table public.ajustes add column if not exists pub_hasta time not null default '20:30'$p$;
 
   -- Quien ya estaba en el equipo de Contenido conserva su acceso
   update public.personas p set accesos = array_append(p.accesos, 'contenido')

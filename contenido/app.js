@@ -337,7 +337,7 @@
     if (rol() === 'aprueba') {
       r.hoy.forEach(function (x) {
         var listo = x.pieza.fase === 'aprobada' && !L.publicadoEn(x.pieza, x.plataforma);
-        acc.push(conBoton(x.pieza, '<b>Hoy se publica</b> · ' + L.PLATAFORMAS[x.plataforma] + ' · ' + L.VENTANA_PUBLICAR, listo ? botonPub(x, 'Publicado en') : ''));
+        acc.push(conBoton(x.pieza, '<b>Hoy se publica</b> · ' + L.PLATAFORMAS[x.plataforma] + ' · ' + L.ventanaPublicar(ajustes()).texto, listo ? botonPub(x, 'Publicado en') : ''));
       });
       r.atrasadas.forEach(function (x) { acc.push(conBoton(x.pieza, '<span class="rojo">No se publicó</span> · ' + L.PLATAFORMAS[x.plataforma] + ' · era ' + L.fmtFecha(x.fecha), '<div class="fila-btns">' + botonReagendar(x.pieza) + botonPub(x, 'Ya se publicó en', true) + '</div>')); });
       // Cada fila con su botón grande: lo que hay que hacer, a un toque
@@ -346,7 +346,7 @@
       r.revisar.forEach(function (p) { acc.push(conBoton(p, '<b>Por aprobar</b>', '<a class="btn" href="#/p/' + p.id + '">Revisar</a>')); });
       r.programar.forEach(function (p) { acc.push(conBoton(p, 'Lista sin fecha', '<button class="btn sec" data-act="fechas" data-id="' + p.id + '">📅 Ponerle fecha</button>')); });
     } else {
-      r.publicar.forEach(function (x) { acc.push(conBoton(x.pieza, '<b>' + L.PLATAFORMAS[x.plataforma] + '</b>' + (x.atrasada ? ' · era ' + L.fmtFecha(x.fecha) : ' · ' + L.VENTANA_PUBLICAR), x.atrasada ? '<div class="fila-btns">' + botonReagendar(x.pieza) + botonPub(x, 'Publicar en') + '</div>' : botonPub(x, 'Publicar en'))); });
+      r.publicar.forEach(function (x) { acc.push(conBoton(x.pieza, '<b>' + L.PLATAFORMAS[x.plataforma] + '</b>' + (x.atrasada ? ' · era ' + L.fmtFecha(x.fecha) : ' · ' + L.ventanaPublicar(ajustes()).texto), x.atrasada ? '<div class="fila-btns">' + botonReagendar(x.pieza) + botonPub(x, 'Publicar en') + '</div>' : botonPub(x, 'Publicar en'))); });
       r.editar.forEach(function (p) { acc.push(conBoton(p, p.version > 0 ? resumenCorreccion(L.ultimaCorreccion(eventos(), p)) : 'Por editar', '<a class="btn" href="#/p/' + p.id + '">' + (p.version > 0 ? 'Corregir' : 'Subir versión') + '</a>')); });
       r.vistas.forEach(function (x) { acc.push(conBoton(x.pieza, 'Anotar vistas · ' + L.PLATAFORMAS[x.plataforma], '<button class="btn sec" data-act="vistas" data-id="' + x.pieza.id + '">Anotar</button>')); });
     }
@@ -1083,6 +1083,9 @@
       '<div class="campo"><span class="label">Grabación semanal por defecto <small>La app la propone sola cada semana</small></span><div class="fila-dos"><select name="grabacion_dia"' + (editable ? '' : ' disabled') + '>' + [1, 2, 3, 4, 5, 6, 0].map(function (i) {
         return '<option value="' + i + '"' + (+(aj.grabacion_dia == null ? 2 : aj.grabacion_dia) === i ? ' selected' : '') + '>' + L.DIAS[i] + '</option>';
       }).join('') + '</select><input type="time" name="grabacion_hora" value="' + esc(aj.grabacion_hora || '11:00') + '"' + (editable ? '' : ' disabled') + '></div></div>' +
+      '<div class="campo"><span class="label">Hora de publicar <small>Los avisos salen al empezar, 45 y 15 min antes de terminar, y 5 min después si no se publicó</small></span><div class="fila-dos">' +
+      '<label class="campo">Desde<input type="time" name="pub_desde" value="' + L.ventanaPublicar(aj).desde + '"' + (editable ? '' : ' disabled') + '></label>' +
+      '<label class="campo">Hasta<input type="time" name="pub_hasta" value="' + L.ventanaPublicar(aj).hasta + '"' + (editable ? '' : ' disabled') + '></label></div></div>' +
       '<div class="fila-dos"><label class="campo">Días mínimos entre IG y TikTok<input type="number" name="dias_minimos" min="0" max="30" value="' + L.minimo(aj) + '"' + (editable ? '' : ' disabled') + '></label>' +
       '<label class="campo">Días de anticipación para entregar<input type="number" name="dias_entrega" min="0" max="14" value="' + L.entrega(aj) + '"' + (editable ? '' : ' disabled') + '></label></div>' +
       (editable ? '<button class="btn" type="submit">Guardar</button>' : '<p class="ayuda">Solo quien aprueba cambia el cronograma.</p>') + '</form>');
@@ -1672,7 +1675,10 @@
       if (isNaN(de) || de < 0 || de > 14) return aviso('Los días de anticipación deben estar entre 0 y 14.');
       var gh = val(f, 'grabacion_hora');
       if (!L.horaValida(gh)) return aviso('Revisa la hora de grabación.');
-      accion(function () { return store.actualizar('ajustes', 1, { cronograma: cron, dias_minimos: dm, dias_entrega: de, grabacion_dia: parseInt(val(f, 'grabacion_dia'), 10), grabacion_hora: gh }, null); }, function () { S.flash = { titulo: 'Ajustes guardados' }; }, btn);
+      var pd = val(f, 'pub_desde'), ph = val(f, 'pub_hasta');
+      if (!L.horaValida(pd) || !L.horaValida(ph)) return aviso('Revisa la hora de publicar.');
+      if (L.momento('2000-01-01', ph) - L.momento('2000-01-01', pd) < 3600000) return aviso('La hora de publicar tiene que durar al menos 1 hora.');
+      accion(function () { return store.actualizar('ajustes', 1, { cronograma: cron, dias_minimos: dm, dias_entrega: de, grabacion_dia: parseInt(val(f, 'grabacion_dia'), 10), grabacion_hora: gh, pub_desde: pd, pub_hasta: ph }, null); }, function () { S.flash = { titulo: 'Ajustes guardados' }; }, btn);
     }
   };
 

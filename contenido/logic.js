@@ -63,8 +63,13 @@
   };
   // Fase 2: con esta cantidad de aprobaciones seguidas sin correcciones, lo que llega con la checklist completa se aprueba solo
   var RACHA_AUTO = 5;
-  // Hora de publicar (los recordatorios salen de avisos_pendientes en cil.sql: 6 p. m., 7:45, 8:15 y 8:35 si no se publicó)
-  var VENTANA_PUBLICAR = 'de 6 a 8:30 p. m.';
+  // Hora de publicar (Ajustes: pub_desde / pub_hasta). Los recordatorios salen de avisos_pendientes en cil.sql:
+  // al empezar, 45 y 15 minutos antes de terminar, y 5 minutos después si no se publicó.
+  function ventanaPublicar(ajustes) {
+    var d = ajustes && horaValida(String(ajustes.pub_desde || '').slice(0, 5)) ? String(ajustes.pub_desde).slice(0, 5) : '18:00';
+    var h = ajustes && horaValida(String(ajustes.pub_hasta || '').slice(0, 5)) ? String(ajustes.pub_hasta).slice(0, 5) : '20:30';
+    return { desde: d, hasta: h, texto: 'de ' + fmtHora(d) + ' a ' + fmtHora(h) };
+  }
   var MUESTRA_DESPUES = 1 / 3;  // de lo que se aprueba solo, esta parte le sale a gerencia para revisar después de publicar
 
   var TIPOS_EVENTO = ['creada', 'idea', 'iniciada', 'editada', 'envio', 'aprobacion', 'correccion', 'comentario',
@@ -928,9 +933,11 @@
     return (n % 12 === 0 ? 12 : n % 12) + (x[1] === '00' ? '' : ':' + x[1]) + (n < 12 ? ' a. m.' : ' p. m.');
   }
   // Propuesta automática de la semana: el día/hora de Ajustes; si ya pasó, el día siguiente a la misma hora (dentro de la semana).
+  // La grabación de la semana se confirma desde el domingo anterior: el domingo ya cuenta la semana que empieza mañana
+  function semanaGrabacion(hoy) { return diaSemana(hoy) === 0 ? addDias(hoy, 1) : lunesDe(hoy); }
   function grabacionPorDefecto(ajustes, ahora) {
     ahora = ahora || new Date();
-    var hoy = hoyISO(ahora), lunes = lunesDe(hoy);
+    var hoy = hoyISO(ahora), lunes = semanaGrabacion(hoy);
     var dia = ajustes && ajustes.grabacion_dia != null ? +ajustes.grabacion_dia : 2;
     var hora = ajustes && horaValida(ajustes.grabacion_hora) ? ajustes.grabacion_hora : '11:00';
     var fecha = addDias(lunes, (dia + 6) % 7);
@@ -939,7 +946,7 @@
     return { semana: lunes, fecha: fecha, hora: hora, estado: 'propuesta', confirmaciones: [] };
   }
   function grabacionDeSemana(grabaciones, hoy) {
-    var l = lunesDe(hoy || hoyISO());
+    var l = semanaGrabacion(hoy || hoyISO());
     return (grabaciones || []).filter(function (g) { return g.semana === l; })[0] || null;
   }
   function estadoGrabacion(g, equipo, ahora) {
@@ -1069,6 +1076,6 @@
     lunesDe: lunesDe, horaValida: horaValida, momento: momento, fmtHora: fmtHora, grabacionPorDefecto: grabacionPorDefecto, grabacionDeSemana: grabacionDeSemana,
     estadoGrabacion: estadoGrabacion, accionConfirmar: accionConfirmar, accionReagendar: accionReagendar, accionCerrarGrabacion: accionCerrarGrabacion,
     accionReabrirGrabacion: accionReabrirGrabacion, racha: racha, msgGrabacion: msgGrabacion,
-    CHECKLIST_ENVIO: CHECKLIST_ENVIO, VENTANA_PUBLICAR: VENTANA_PUBLICAR, RACHA_AUTO: RACHA_AUTO, rachaLimpia: rachaLimpia, checklistEnvio: checklistEnvio, accionRevisionDespues: accionRevisionDespues, nombresIncompletos: nombresIncompletos
+    CHECKLIST_ENVIO: CHECKLIST_ENVIO, ventanaPublicar: ventanaPublicar, semanaGrabacion: semanaGrabacion, RACHA_AUTO: RACHA_AUTO, rachaLimpia: rachaLimpia, checklistEnvio: checklistEnvio, accionRevisionDespues: accionRevisionDespues, nombresIncompletos: nombresIncompletos
   };
 });
