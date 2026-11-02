@@ -1655,6 +1655,34 @@ create table if not exists public.avisos_cola (
   creado_en  timestamptz not null default now()
 );
 alter table public.avisos_cola add column if not exists url text not null default './#/';
+-- Bandeja de avisos (menú de CIL): todo lo que se le avisó a cada persona en los últimos 14 días.
+-- urgente = sonó en el teléfono al momento; si no, espera al resumen de las 8:45 a. m. o de las 5:10 p. m.
+create table if not exists public.avisos_log (
+  id          uuid primary key default gen_random_uuid(),
+  persona_id  uuid not null references public.personas (id) on delete cascade,
+  titulo      text not null,
+  cuerpo      text not null default '',
+  url         text not null default './',
+  urgente     boolean not null default true,
+  creado_en   timestamptz not null default now(),
+  leido_en    timestamptz,
+  resumido_en timestamptz
+);
+create index if not exists avisos_log_persona_idx on public.avisos_log (persona_id, creado_en desc);
+alter table public.avisos_log enable row level security;
+revoke all on public.avisos_log from anon, authenticated;
+-- Mis avisos de los últimos 7 días (y quedan como leídos si p_leer)
+create or replace function public.mis_avisos(p_leer boolean default false) returns json
+language plpgsql security definer set search_path = public as $$
+declare r json;
+begin
+  if auth.uid() is null then raise exception 'Inicia sesión.'; end if;
+  select coalesce(json_agg(json_build_object('titulo', l.titulo, 'cuerpo', l.cuerpo, 'url', l.url, 'urgente', l.urgente,
+                                             'creado_en', l.creado_en, 'nuevo', l.leido_en is null) order by l.creado_en desc), '[]'::json)
+    into r from (select * from avisos_log where persona_id = auth.uid() and creado_en > now() - interval '7 days' order by creado_en desc limit 100) l;
+  if p_leer then update avisos_log set leido_en = now() where persona_id = auth.uid() and leido_en is null; end if;
+  return r;
+end $$;
 
 -- El teléfono guarda su suscripción (cada quien solo la suya)
 create or replace function public.guardar_suscripcion(p_endpoint text, p_p256dh text, p_auth text) returns void
@@ -2030,7 +2058,7 @@ begin
   perform public.generar_dia(hoy);
   perform set_config('cil.interno', '', true);
   perform public.repartir_faltas();
-  create temp table if not exists _avisos (persona_id uuid, clave text, titulo text, cuerpo text, url text) on commit drop;
+  create temp table if not exists _avisos (persona_id uuid, clave text, titulo text, cuerpo text, url text, urgente boolean not null default true) on commit drop;
   delete from _avisos where true;
 
   -- 1) Te toca ahora: tareas con «desde», para quien la tiene
@@ -2094,12 +2122,12 @@ begin
   where ad.activo and ad.rol = 'admin' and c.n > 0
     and public._ts_hoy(time '17:10') <= ahora and public._ts_hoy(time '17:10') > hace;
 
-  -- 4c) Gerencia: resumen de la semana anterior, los lunes a las 9:00 a. m.
-  if extract(isodow from hoy) = 1 and public._ts_hoy(time '09:00') <= ahora and public._ts_hoy(time '09:00') > hace then
-    insert into _avisos
+  -- 4c) Gerencia: resumen de la semana anterior, los lunes (va en el resumen de las 8:45 a. m.)
+  if extract(isodow from hoy) = 1 and public._ts_hoy(time '08:40') <= ahora and public._ts_hoy(time '08:40') > hace then
+    insert into _avisos (persona_id, clave, titulo, cuerpo, url, urgente)
     select ad.id, 'semana:' || hoy || ':' || ad.id, 'Semana pasada: ' || coalesce(w.pct, 0) || ' % de tareas hechas',
            w.tardes || case when w.tardes = 1 then ' llegada tarde' else ' llegadas tarde' end || ' · ' ||
-           w.faltas || case when w.faltas = 1 then ' falta' else ' faltas' end || '. Detalle en Reporte → Historial.', './#/historial'
+           w.faltas || case when w.faltas = 1 then ' falta' else ' faltas' end || '. Detalle en Reporte → Historial.', './#/historial', false
     from personas ad,
          (select (select round(100.0 * count(*) filter (where a.estado = 'hecha') / nullif(count(*), 0))::int
                   from asignaciones a where a.fecha between hoy - 7 and hoy - 1 and not a.oculta) as pct,
@@ -2113,13 +2141,13 @@ begin
     where ad.activo and ad.rol = 'admin';
   end if;
 
-  -- 4d) Consumibles que se están acabando (una vez al día, desde las 9 a. m.): a gerencia y al encargado del local.
+  -- 4d) Consumibles que se están acabando (una vez al día, va en el resumen de las 8:45 a. m.): a gerencia y al encargado del local.
   --     Bajo = llegó al mínimo, o lo que queda alcanza para menos de 7 días (con al menos 2 semanas de datos).
   --     Todo en un solo aviso por persona (lo que se acabe más tarde sale al día siguiente).
-  insert into _avisos
+  insert into _avisos (persona_id, clave, titulo, cuerpo, url, urgente)
   select y.id, 'stock:' || hoy || ':' || y.id,
          case when count(*) = 1 then 'Se está acabando: ' || min(y.nombre) else 'Se están acabando ' || count(*) || ' cosas' end,
-         string_agg(y.nombre || ' (quedan ' || y.queda || ')', ', ' order by y.nombre) || '.', './#/equipo/consumibles'
+         string_agg(y.nombre || ' (quedan ' || y.queda || ')', ', ' order by y.nombre) || '.', './#/equipo/consumibles', false
   from (
   select x.id, c.nombre, trim(to_char(c.stock, 'FM999990.##')) || ' ' || c.unidad || coalesce(', unos ' || k.dias || ' días', '') as queda
   from consumibles c
@@ -2129,14 +2157,14 @@ begin
           from consumibles_mov m where m.consumible_id = c.id and m.tipo in ('entrega', 'uso')) z) k
   join personas x on x.activo and (x.rol = 'admin' or (x.entrega_consumibles and x.local_id = c.local_id))
   where c.activo and ((c.minimo is not null and c.stock <= c.minimo) or (k.dias is not null and k.dias < 7))
-    and public._ts_hoy(time '09:00') <= ahora) y
+    and public._ts_hoy(time '08:40') <= ahora) y
   group by y.id;
 
-  -- 4e) Consumo alto, los lunes a las 9 a. m.: la semana pasada gastó más de 30 % sobre el promedio de las 4 anteriores
-  if extract(isodow from hoy) = 1 and public._ts_hoy(time '09:00') <= ahora and public._ts_hoy(time '09:00') > hace then
-    insert into _avisos
+  -- 4e) Consumo alto, los lunes (va en el resumen de las 8:45 a. m.): la semana pasada gastó más de 30 % sobre el promedio de las 4 anteriores
+  if extract(isodow from hoy) = 1 and public._ts_hoy(time '08:40') <= ahora and public._ts_hoy(time '08:40') > hace then
+    insert into _avisos (persona_id, clave, titulo, cuerpo, url, urgente)
     select y.id, 'consumo:' || hoy || ':' || y.id, 'Consumo alto la semana pasada',
-           string_agg(y.nombre || ' +' || y.pct || ' %', ', ' order by y.pct desc) || ' sobre el promedio.', './#/equipo/consumibles'
+           string_agg(y.nombre || ' +' || y.pct || ' %', ', ' order by y.pct desc) || ' sobre el promedio.', './#/equipo/consumibles', false
     from (
     select ad.id, c.nombre, round(100 * (z.sem / (z.prev / 4.0) - 1)) as pct
     from consumibles c
@@ -2163,11 +2191,17 @@ begin
   end if;
 
   -- 5) Gerencia: temperatura fuera de rango
+  --    Un solo aviso por ronda (todos los equipos fuera de rango de esa toma)
   insert into _avisos
-  select ad.id, 'temp:' || l.id || ':' || ad.id, 'Temperatura fuera de rango: ' || e.nombre,
-         coalesce(l.temperatura::text || ' °C', '') || coalesce(' (rango ' || e.temp_min || ' a ' || e.temp_max || ')', '') || coalesce('. «' || l.nota || '»', ''), './#/'
-  from lecturas l join equipos e on e.id = l.equipo_id, personas ad
-  where l.fuera_rango and l.registrado_en > hace and ad.activo and ad.rol = 'admin';
+  select ad.id, 'temp:' || x.asignacion_id || ':' || ad.id,
+         case when count(*) = 1 then 'Temperatura fuera de rango: ' || min(x.nombre) else count(*) || ' equipos fuera de rango' end,
+         string_agg(x.detalle, ' · ' order by x.nombre), './#/temperaturas'
+  from (select l.asignacion_id, e.nombre,
+               e.nombre || ': ' || coalesce(l.temperatura::text || ' °C', l.estado) || coalesce(' (rango ' || e.temp_min || ' a ' || e.temp_max || ')', '') || coalesce(' «' || l.nota || '»', '') as detalle
+        from lecturas l join equipos e on e.id = l.equipo_id
+        where l.fuera_rango and l.registrado_en > hace) x, personas ad
+  where ad.activo and ad.rol = 'admin'
+  group by ad.id, x.asignacion_id;
 
   -- 6) Gerencia: alguien se fue antes
   insert into _avisos
@@ -2224,13 +2258,32 @@ begin
   insert into _avisos select c.persona_id, 'cola:' || c.id, c.titulo, c.cuerpo, c.url from avisos_cola c where c.creado_en > now() - interval '1 day';
   delete from avisos_cola where creado_en <= now() - interval '1 day' or id::text in (select substr(clave, 6) from _avisos where clave like 'cola:%');
 
-  -- Solo los que no se han mandado; se marcan como mandados y se devuelven con cada teléfono de esa persona
+  -- 8) Resumen de lo que no es urgente (quedó en la bandeja sin sonar): a las 8:45 a. m. y a las 5:10 p. m.
+  --    (ventana de 3 minutos: así un aviso que llega justo después no queda marcado como resumido sin mandarse)
+  if (public._ts_hoy(time '08:45') <= ahora and public._ts_hoy(time '08:45') > ahora - interval '3 minutes')
+     or (public._ts_hoy(time '17:10') <= ahora and public._ts_hoy(time '17:10') > ahora - interval '3 minutes') then
+    insert into _avisos
+    select l.persona_id, 'bandeja:' || hoy || ':' || to_char(ahora at time zone 'America/Caracas', 'HH24') || ':' || l.persona_id,
+           case when count(*) = 1 then min(l.titulo) else '🔔 ' || count(*) || ' avisos para ti' end,
+           string_agg(l.titulo, ' · ' order by l.creado_en), './?bandeja'
+    from avisos_log l where not l.urgente and l.resumido_en is null group by l.persona_id;
+    update avisos_log set resumido_en = now() where not urgente and resumido_en is null;
+  end if;
+
+  -- Solo los que no se han mandado: se marcan como mandados, se guardan en la bandeja y los urgentes
+  -- se devuelven con cada teléfono de esa persona (los demás esperan al resumen)
   return query
   with nuevos as (
     insert into avisos_enviados (clave) select v.clave from _avisos v on conflict (clave) do nothing returning avisos_enviados.clave
+  ), bandeja as (
+    insert into avisos_log (persona_id, titulo, cuerpo, url, urgente)
+    select v.persona_id, v.titulo, v.cuerpo, v.url, v.urgente from _avisos v join nuevos n on n.clave = v.clave where v.clave not like 'bandeja:%'
+    returning 1
   )
   select v.persona_id, su.endpoint, su.p256dh, su.auth, v.titulo, v.cuerpo, v.url
-  from _avisos v join nuevos n on n.clave = v.clave join suscripciones su on su.persona_id = v.persona_id;
+  from _avisos v join nuevos n on n.clave = v.clave join suscripciones su on su.persona_id = v.persona_id
+  where v.urgente;
+  delete from avisos_log where creado_en < now() - interval '14 days';
   delete from avisos_enviados where enviado_en < now() - interval '3 days';
 end $$;
 
@@ -2321,7 +2374,7 @@ grant execute on function public.hoy(), public.es_admin(), public.tiene_acceso(t
   public.marcar_salida(text), public.datos_app(boolean), public.mi_puntualidad(), public.registrar_lecturas(uuid, jsonb),
   public.marcar_fuera(boolean), public.rescatar(uuid),
   public.guardar_suscripcion(text, text, text), public.borrar_suscripcion(text), public.aviso_prueba(uuid), public.cambiar_clave(uuid, text),
-  public.crear_persona(text, text, text, uuid, text[], text), public.menu_pendientes(), public.aprobar_oculta(uuid, uuid), public.reprogramar_oculta(uuid, date),
+  public.crear_persona(text, text, text, uuid, text[], text), public.menu_pendientes(), public.mis_avisos(boolean), public.aprobar_oculta(uuid, uuid), public.reprogramar_oculta(uuid, date),
   public.marcar_almuerzo(uuid, boolean, boolean), public.mi_grupo_almorzando(),
   -- las llama datos_app, que corre con los permisos de quien entra
   public._companeros(date), public._con_avisos(), public._avisos_tel(), public._reloj(), public.repartir_faltas() to authenticated;

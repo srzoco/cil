@@ -53,3 +53,16 @@ a { color: var(--accent); }
 /* Gerencia: el reloj de avisos se detuvo */
 .hub-reloj { display: flex; flex-direction: column; gap: 4px; margin: 0 0 16px; padding: 14px 16px; border-radius: 14px; border: 1px solid var(--wine); background: var(--wine-bg); color: var(--wine); text-decoration: none; }
 .hub-reloj span { font-size: .9rem; }
+.hub-reloj[hidden], .bandeja[hidden] { display: none; }
+/* Bandeja de avisos */
+.bandeja { margin: 4px 0 18px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); }
+.bandeja summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 16px; cursor: pointer; min-height: 48px; list-style: none; }
+.bandeja summary::-webkit-details-marker { display: none; }
+.bandeja-n { background: var(--wine); color: var(--sobre); border-radius: 999px; padding: 2px 10px; font-size: .82rem; font-weight: 700; }
+.bandeja ul { list-style: none; margin: 0; padding: 0 0 6px; max-height: 60vh; overflow-y: auto; }
+.bandeja li { border-top: 1px solid var(--line); }
+.bandeja li a, .bandeja li div { display: flex; flex-direction: column; gap: 2px; padding: 10px 16px; color: var(--ink); text-decoration: none; }
+.bandeja li span { color: var(--muted); font-size: .88rem; overflow-wrap: anywhere; }
+.bandeja li small { color: var(--muted); font-size: .76rem; }
+.bandeja li.nuevo b::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--wine); margin-right: 6px; vertical-align: middle; }
+.bandeja .muted { color: var(--muted); font-size: .88rem; }

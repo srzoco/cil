@@ -80,12 +80,13 @@
     // (se recuerda en el teléfono: la próxima vez index.html salta directo, sin esperar al menú)
     var directo = !admin && mios.length === 1 ? mios[0].href : null;
     try { if (directo) localStorage.setItem('barquero_directo', directo); else localStorage.removeItem('barquero_directo'); } catch (e) { /* nada */ }
-    if (directo && !sessionStorage.getItem('barquero_en_menu') && !/avisos/.test(location.search)) { location.replace(directo); return; }
+    if (directo && !sessionStorage.getItem('barquero_en_menu') && !/avisos|bandeja/.test(location.search)) { location.replace(directo); return; }
     var nombre = (p.nombre || '').split(' ')[0] || (p.email || '').split('@')[0];
     var h = new Date().getHours(), saludo = h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
     var html = '<div class="hub"><header class="hub-top"><a class="hub-marca" href="./"><span class="hub-logo">CIL</span><b>CIL</b></a>' +
       (window.BarqueroTema ? BarqueroTema.boton() : '') + '<button class="hub-salir" id="salir">Salir</button></header>' +
-      '<h1 class="hub-hola">' + esc(saludo) + (nombre ? ', ' + esc(nombre) : '') + '</h1>' + (admin ? '<a class="hub-reloj" id="hub-reloj" href="tareas/#/" hidden></a>' : '');
+      '<h1 class="hub-hola">' + esc(saludo) + (nombre ? ', ' + esc(nombre) : '') + '</h1>' + (admin ? '<a class="hub-reloj" id="hub-reloj" href="tareas/#/" hidden></a>' : '') +
+      '<div id="hub-bandeja"></div>';
     if (!mios.length) {
       html += '<p class="hub-sub">' + (p.activo ? 'Todavía no tienes acceso a ningún módulo. Avísale a gerencia.' : 'Tu usuario está desactivado. Habla con gerencia.') + '</p>';
     } else {
@@ -102,6 +103,7 @@
     html += '<p class="hub-ayuda"><a href="tareas/#/ayuda">¿Cómo se usa la app?</a></p></div>';
     $.innerHTML = html;
     pintarAvisos();
+    pintarBandeja();
     try { sessionStorage.setItem('barquero_en_menu', '1'); } catch (e) { /* nada */ }
     // Lo pendiente de cada módulo llega después: el menú no lo espera
     token().then(function (t) {
@@ -119,6 +121,39 @@
     document.getElementById('salir').addEventListener('click', function () {
       var s = leer(); olvidar(); if (s) auth('logout', {}, s.access_token).catch(function () { /* da igual */ }); login();
     });
+  }
+
+  // ---------- Bandeja: los avisos de los últimos 7 días (lo que no es urgente no suena: llega en el resumen) ----------
+  function rpcJson(nombre, cuerpo) {
+    return token().then(function (t) {
+      return fetch(URL_SB + '/rest/v1/rpc/' + nombre, { method: 'POST', headers: { apikey: KEY, Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo || {}) });
+    }).then(function (r) { if (!r.ok) throw new Error('Error ' + r.status); return r.json(); });
+  }
+  // Los avisos de Tareas vienen como «./#/…» (igual que en sw.js)
+  function enlaceAviso(u) { u = String(u || './'); return u.indexOf('./#/') === 0 ? 'tareas/' + u.slice(2) : (u === './' || u.indexOf('./?') === 0 ? '' : u); }
+  function cuandoTxt(ts) {
+    var d = new Date(ts), hoy = new Date(), ayer = new Date(Date.now() - 864e5);
+    var h = d.toLocaleTimeString('es-VE', { hour: 'numeric', minute: '2-digit' });
+    if (d.toDateString() === hoy.toDateString()) return h;
+    if (d.toDateString() === ayer.toDateString()) return 'ayer ' + h;
+    return d.toLocaleDateString('es-VE', { weekday: 'short', day: 'numeric' }) + ' ' + h;
+  }
+  function pintarBandeja() {
+    var c = document.getElementById('hub-bandeja'); if (!c) return;
+    rpcJson('mis_avisos', { p_leer: false }).then(function (lista) {
+      if (!lista || !lista.length) { c.innerHTML = ''; return; }
+      var nuevos = lista.filter(function (x) { return x.nuevo; }).length;
+      c.innerHTML = '<details class="bandeja"' + (/bandeja/.test(location.search) ? ' open' : '') + '><summary><b>🔔 Avisos</b>' +
+        (nuevos ? '<span class="bandeja-n">' + nuevos + (nuevos === 1 ? ' nuevo' : ' nuevos') + '</span>' : '<span class="muted">al día</span>') + '</summary><ul>' +
+        lista.map(function (x) {
+          var href = enlaceAviso(x.url);
+          var cuerpo = '<b>' + esc(x.titulo) + '</b>' + (x.cuerpo ? '<span>' + esc(x.cuerpo) + '</span>' : '') + '<small>' + esc(cuandoTxt(x.creado_en)) + (x.urgente ? '' : ' · en el resumen') + '</small>';
+          return '<li class="' + (x.nuevo ? 'nuevo' : '') + '">' + (href ? '<a href="' + esc(href) + '">' + cuerpo + '</a>' : '<div>' + cuerpo + '</div>') + '</li>';
+        }).join('') + '</ul></details>';
+      var d = c.querySelector('details');
+      var leer = function () { if (d.open && nuevos) { nuevos = 0; rpcJson('mis_avisos', { p_leer: true }).catch(function () { /* nada */ }); } };
+      d.addEventListener('toggle', leer); leer();
+    }).catch(function () { /* sin bandeja: el menú funciona igual */ });
   }
 
   // ---------- Avisos en el teléfono: uno solo para todos los módulos (Tareas y Contenido) ----------
