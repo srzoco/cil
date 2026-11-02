@@ -771,6 +771,9 @@ create table if not exists public.redes_nuevas (
   creado_en  timestamptz not null default now(),
   unique (ip, fecha, persona_id)
 );
+-- El aviso a gerencia sale agrupado desde avisos_pendientes (uno solo con todos los nombres); avisado = ya se avisó
+alter table public.redes_nuevas add column if not exists avisado boolean not null default true;
+alter table public.redes_nuevas alter column avisado set default false;
 alter table public.redes_nuevas enable row level security;
 revoke all on public.redes_nuevas from anon, authenticated;
 grant select, delete on public.redes_nuevas to authenticated;
@@ -822,15 +825,10 @@ begin
   v := public._ubicar(auth.uid(), p_lat, p_lng, p_precision);
   if v is null then
     if p_lat is null and (select usar_gps from tareas_ajustes where id = 1) then raise exception 'NO_TIENDA: Falta tu ubicación'; end if;
-    -- Red desconocida: se anota para gerencia (una vez por red y día) y se devuelve el error sin deshacer ese registro
+    -- Red desconocida: se anota para gerencia y se devuelve el error sin deshacer ese registro.
+    -- El aviso sale después, uno solo con todos los que no pudieron (avisos_pendientes, 4f).
     if v_ip is not null then
-      insert into redes_nuevas (persona_id, ip) values (auth.uid(), v_ip) on conflict do nothing returning id into nuevo;
-      if nuevo is not null and not exists (select 1 from redes_nuevas r where r.ip = v_ip and r.fecha = public.hoy() and r.id <> nuevo) then
-        select coalesce(nullif(nombre, ''), email) into nom from personas where id = auth.uid();
-        insert into avisos_cola (persona_id, titulo, cuerpo, url)
-        select ad.id, nom || ' no pudo marcar «Llegué»', 'Lo intentó desde una red que la app no conoce. Si es el Wi-Fi del local, regístrala en Equipo → Locales.', './#/equipo/locales'
-        from personas ad where ad.activo and ad.rol = 'admin';
-      end if;
+      insert into redes_nuevas (persona_id, ip) values (auth.uid(), v_ip) on conflict do nothing;
     end if;
     return json_build_object('error', 'No se pudo marcar tu llegada. Si el problema sigue, avísale a gerencia.');
   end if;
@@ -2117,9 +2115,13 @@ begin
 
   -- 4d) Consumibles que se están acabando (una vez al día, desde las 9 a. m.): a gerencia y al encargado del local.
   --     Bajo = llegó al mínimo, o lo que queda alcanza para menos de 7 días (con al menos 2 semanas de datos).
+  --     Todo en un solo aviso por persona (lo que se acabe más tarde sale al día siguiente).
   insert into _avisos
-  select x.id, 'stock:' || c.id || ':' || hoy || ':' || x.id, 'Se está acabando: ' || c.nombre,
-         'Quedan ' || trim(to_char(c.stock, 'FM999990.##')) || ' (' || c.unidad || ')' || coalesce(' · alcanza para unos ' || k.dias || ' días', '') || '.', './#/equipo/consumibles'
+  select y.id, 'stock:' || hoy || ':' || y.id,
+         case when count(*) = 1 then 'Se está acabando: ' || min(y.nombre) else 'Se están acabando ' || count(*) || ' cosas' end,
+         string_agg(y.nombre || ' (quedan ' || y.queda || ')', ', ' order by y.nombre) || '.', './#/equipo/consumibles'
+  from (
+  select x.id, c.nombre, trim(to_char(c.stock, 'FM999990.##')) || ' ' || c.unidad || coalesce(', unos ' || k.dias || ' días', '') as queda
   from consumibles c
   cross join lateral (
     select case when z.s28 > 0 and z.primero < ahora - interval '14 days' then floor(greatest(c.stock, 0) / (z.s28 / 28.0))::int end as dias
@@ -2127,13 +2129,16 @@ begin
           from consumibles_mov m where m.consumible_id = c.id and m.tipo in ('entrega', 'uso')) z) k
   join personas x on x.activo and (x.rol = 'admin' or (x.entrega_consumibles and x.local_id = c.local_id))
   where c.activo and ((c.minimo is not null and c.stock <= c.minimo) or (k.dias is not null and k.dias < 7))
-    and public._ts_hoy(time '09:00') <= ahora;
+    and public._ts_hoy(time '09:00') <= ahora) y
+  group by y.id;
 
   -- 4e) Consumo alto, los lunes a las 9 a. m.: la semana pasada gastó más de 30 % sobre el promedio de las 4 anteriores
   if extract(isodow from hoy) = 1 and public._ts_hoy(time '09:00') <= ahora and public._ts_hoy(time '09:00') > hace then
     insert into _avisos
-    select ad.id, 'consumo:' || c.id || ':' || hoy || ':' || ad.id, 'Consumo alto: ' || c.nombre,
-           'La semana pasada se gastó ' || round(100 * (z.sem / (z.prev / 4.0) - 1)) || ' % más que el promedio.', './#/equipo/consumibles'
+    select y.id, 'consumo:' || hoy || ':' || y.id, 'Consumo alto la semana pasada',
+           string_agg(y.nombre || ' +' || y.pct || ' %', ', ' order by y.pct desc) || ' sobre el promedio.', './#/equipo/consumibles'
+    from (
+    select ad.id, c.nombre, round(100 * (z.sem / (z.prev / 4.0) - 1)) as pct
     from consumibles c
     cross join lateral (
       select coalesce(sum(m.cantidad) filter (where m.creado_en >= ahora - interval '7 days'), 0) as sem,
@@ -2141,7 +2146,20 @@ begin
              min(m.creado_en) as primero
       from consumibles_mov m where m.consumible_id = c.id and m.tipo in ('entrega', 'uso')) z
     join personas ad on ad.activo and ad.rol = 'admin'
-    where c.activo and z.prev > 0 and z.primero < ahora - interval '21 days' and z.sem > 1.3 * z.prev / 4.0;
+    where c.activo and z.prev > 0 and z.primero < ahora - interval '21 days' and z.sem > 1.3 * z.prev / 4.0) y
+    group by y.id;
+  end if;
+
+  -- 4f) No pudieron marcar «Llegué» (red desconocida): un solo aviso con todos, cuando lleva 5 minutos sin nuevos intentos
+  if exists (select 1 from redes_nuevas where not avisado and fecha = hoy)
+     and not exists (select 1 from redes_nuevas where not avisado and fecha = hoy and creado_en > ahora - interval '5 minutes') then
+    insert into _avisos
+    select ad.id, 'redes:' || hoy || ':' || extract(epoch from ahora)::bigint || ':' || ad.id,
+           'No pudieron marcar «Llegué»: ' || (select string_agg(distinct coalesce(nullif(pe.nombre, ''), pe.email), ', ')
+                                               from redes_nuevas r join personas pe on pe.id = r.persona_id where not r.avisado and r.fecha = hoy),
+           'Lo intentaron desde una red que la app no conoce. Si es el Wi-Fi del local, regístrala en Equipo → Locales.', './#/equipo/locales'
+    from personas ad where ad.activo and ad.rol = 'admin';
+    update redes_nuevas set avisado = true where not avisado and fecha = hoy;
   end if;
 
   -- 5) Gerencia: temperatura fuera de rango
