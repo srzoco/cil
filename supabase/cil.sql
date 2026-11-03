@@ -2957,15 +2957,24 @@ end $$;
 
 create or replace function public.pend_editar(p_id uuid, p_titulo text, p_vence date, p_hora time, p_repite text) returns void
 language plpgsql security definer set search_path = public as $$
-declare x public.pendientes := public._pend_mio(p_id); t text := trim(coalesce(p_titulo, ''));
+declare x public.pendientes := public._pend_mio(p_id); t text := trim(coalesce(p_titulo, '')); cambios text;
 begin
-  if x.creado_por <> auth.uid() then raise exception 'Solo quien lo creó lo puede cambiar.'; end if;
+  -- Lo pueden cambiar las dos personas (quien lo pidió y a quien se lo pidieron); queda anotado en la conversación
   if t = '' then raise exception 'Escribe qué es.'; end if;
   if char_length(t) > 200 then raise exception 'El título es muy largo (máximo 200 letras).'; end if;
   if coalesce(p_repite, '') not in ('', 'diaria', 'semanal', 'semanas2', 'semanas3', 'mensual') then raise exception 'Repetición no válida.'; end if;
   if coalesce(p_repite, '') <> '' and p_vence is null then raise exception 'Para que se repita, ponle una fecha.'; end if;
   if p_hora is not null and p_vence is null then raise exception 'Para ponerle hora, ponle también una fecha.'; end if;
   update pendientes set titulo = t, vence = p_vence, hora = p_hora, repite = coalesce(p_repite, ''), actividad_en = now() where id = x.id;
+  cambios := concat_ws(' · ',
+    case when t <> x.titulo then 'nombre: «' || x.titulo || '» → «' || t || '»' end,
+    case when p_vence is distinct from x.vence or p_hora is distinct from x.hora then
+      'fecha: ' || coalesce(to_char(x.vence, 'DD/MM') || coalesce(' ' || to_char(x.hora, 'HH24:MI'), ''), 'sin fecha') || ' → ' ||
+      coalesce(to_char(p_vence, 'DD/MM') || coalesce(' ' || to_char(p_hora, 'HH24:MI'), ''), 'sin fecha') end);
+  if cambios <> '' and x.creado_por <> x.para then
+    insert into pendientes_mensajes (pendiente_id, autor, texto) values (x.id, auth.uid(), '✏️ Cambió ' || cambios);
+    perform public._pend_avisar(x, public._pend_nombre(auth.uid()) || ' cambió: ' || t, '✏️ ' || cambios);
+  end if;
 end $$;
 
 -- Escribir en la conversación (texto y/o foto ya subida a la carpeta del pendiente)

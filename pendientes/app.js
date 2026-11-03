@@ -175,6 +175,11 @@
       return '<option value="' + esc(p.id) + '"' + (sel === p.id ? ' selected' : '') + '>Pedírselo a ' + esc(p.nombre) + '</option>';
     }).join('');
   }
+  function formEditar(x) {
+    return '<form class="pendientes-form card" data-form="editar" data-id="' + esc(x.id) + '" hidden><label class="campo">¿Qué es?<input name="titulo" maxlength="200" required value="' + esc(x.titulo) + '"></label>' + camposFecha(x) +
+      (propio(x) ? '' : '<p class="ayuda">El cambio queda anotado en la conversación y le avisa a la otra persona.</p>') +
+      '<div class="acciones"><button class="btn" type="submit">Guardar</button></div></form>';
+  }
   function camposFecha(x) {
     return '<div class="fila-dos"><label class="campo">Fecha límite <small>(opcional)</small><input type="date" name="vence" value="' + esc((x && x.vence) || '') + '"></label>' +
       '<label class="campo">Hora <small>(opcional)</small><input type="time" name="hora" value="' + esc((x && x.hora) || '') + '"></label></div>' +
@@ -211,12 +216,12 @@
     }
     if (mio) {
       h += '<div class="acciones-detalle">' + (x.estado === 'abierto' ? (x.hecho_en && !propio(x) ? '' : '<button class="btn ok" data-acc="cerrar" data-id="' + esc(id) + '">Cerrar: ya está resuelto</button>') : '<button class="btn sec" data-acc="reabrir" data-id="' + esc(id) + '">Reabrir</button>') +
-        '<button class="btn sec" data-acc="editar">Cambiar</button>' + (!propio(x) && x.estado === 'abierto' ? botonWA(x) : '') +
+        '<button class="btn sec" data-acc="editar">✏️ Editar</button>' + (!propio(x) && x.estado === 'abierto' ? botonWA(x) : '') +
         '<button class="btn fantasma rojo" type="button" data-acc="borrar">Borrar</button></div>' +
         (S.borrando ? '<div class="confirmar-borrar">¿Borrar este pendiente con toda su conversación? No se puede deshacer.<div class="acciones-detalle"><button class="btn warn" type="button" data-acc="borrar-si" data-id="' + esc(id) + '">Sí, borrar</button><button class="btn sec" type="button" data-acc="borrar-no">No</button></div></div>' : '');
-      h += '<form class="pendientes-form card" data-form="editar" data-id="' + esc(id) + '" hidden><label class="campo">¿Qué es?<input name="titulo" maxlength="200" required value="' + esc(x.titulo) + '"></label>' + camposFecha(x) +
-        '<div class="acciones"><button class="btn" type="submit">Guardar</button></div></form>';
+      h += formEditar(x);
     } else if (x.estado === 'abierto') {
+      h += '<div class="acciones-detalle"><button class="btn sec" data-acc="editar">✏️ Editar</button></div>' + formEditar(x);
       h += x.hecho_en
         ? '<div class="card"><p>Marcaste que ya lo hiciste. ' + esc(nombre(x.creado_por)) + ' lo confirma y lo cierra.</p><button class="btn sec chico" data-acc="no-hecho" data-id="' + esc(id) + '">Deshacer</button></div>'
         : '<div class="acciones-detalle"><button class="btn ok" data-acc="hecho" data-id="' + esc(id) + '">Ya lo hice</button></div>' +
@@ -334,7 +339,11 @@
     if (acc === 'ya-visto') { S.nuevoId = null; pintar(); return; }
     if (S.ocupado) return;
     var p = null;
-    if (acc === 'cerrar') p = rpc('pend_cerrar', { p_id: id }).then(function (nid) { return cargar().then(function () { aviso(nid ? 'Cerrado. Ya salió el de la próxima vez.' : 'Cerrado.', true); }); });
+    if (acc === 'cerrar') p = rpc('pend_cerrar', { p_id: id }).then(function (nid) {
+      // de vuelta a la lista de pendientes (no a «Cerrados»)
+      var x = pend(id), lista = x && x.para === S.d.yo ? 'mi' : 'pedi';
+      return cargar().then(function () { location.hash = '#/' + lista; aviso(nid ? 'Cerrado. Ya salió el de la próxima vez.' : 'Cerrado.', true); });
+    });
     else if (acc === 'hecho') p = rpc('pend_hecho', { p_id: id, p_si: true }).then(cargar).then(function () { aviso('Listo: le avisamos a ' + nombre(pend(id).creado_por) + ' para que lo confirme.', true); });
     else if (acc === 'no-hecho') p = rpc('pend_hecho', { p_id: id, p_si: false }).then(cargar);
     else if (acc === 'reabrir') p = rpc('pend_reabrir', { p_id: id }).then(cargar).then(function () { aviso('Reabierto.', true); });

@@ -1,9 +1,9 @@
 /* CIL — guarda la app en el teléfono para que abra al instante (menú y módulos).
    Los datos (Supabase) nunca se guardan aquí: siempre se piden a internet.
    Al publicar una versión nueva, se sube el número de VERSION y el ?v= de index.html. */
-var VERSION = 'cil-v79';
+var VERSION = 'cil-v80';
 var ARCHIVOS = ['./', 'index.html', 'comun/tema.css?v=3', 'comun/tema.js?v=2', 'comun/hub.css?v=8', 'comun/hub.js?v=14',
-  'tareas/', 'tareas/styles.css?v=33', 'tareas/logic.js?v=26', 'tareas/store.js?v=42', 'tareas/app.js?v=58', 'pendientes/', 'pendientes/styles.css?v=3', 'pendientes/app.js?v=6',
+  'tareas/', 'tareas/styles.css?v=33', 'tareas/logic.js?v=26', 'tareas/store.js?v=42', 'tareas/app.js?v=58', 'pendientes/', 'pendientes/styles.css?v=3', 'pendientes/app.js?v=7',
   'mensajes/', 'contenido/', 'contenido/styles.css?v=7', 'contenido/logic.js?v=6', 'contenido/demo.js?v=1', 'contenido/store.js?v=3', 'contenido/app.js?v=10',
   'manifest.webmanifest', 'icon-192.png'];
 
