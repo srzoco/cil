@@ -143,6 +143,8 @@ alter table public.tareas_ajustes add column if not exists mostrar_record boolea
 alter table public.tareas_ajustes add column if not exists usar_salidas boolean not null default false;
 -- Botón de almuerzo: apagado hasta que gerencia decida empezar a usarlo
 alter table public.tareas_ajustes add column if not exists usar_almuerzo boolean not null default false;
+-- Premio del mes por compañerismo (Reporte → Historial y «Cómo se usa»): apagado hasta que gerencia lo prenda
+alter table public.tareas_ajustes add column if not exists usar_companerismo boolean not null default false;
 -- Revisiones de calidad al azar por día, repartidas entre gerencia
 alter table public.tareas_ajustes add column if not exists revisiones_dia int not null default 4 check (revisiones_dia between 0 and 20);
 

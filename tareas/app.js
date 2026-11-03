@@ -1112,7 +1112,7 @@
     // Compañerismo del mes (el reconocimiento): quién más ayuda a los demás
     var comp = empleados().map(function (pe) { return { pe: pe, c: L.companerismoMes(db(), pe.id, S.hoy) }; })
       .sort(function (a, b) { return b.c.veces - a.c.veces || b.c.minutos - a.c.minutos || (a.pe.nombre < b.pe.nombre ? -1 : 1); });
-    if (empleados().length) {
+    if (empleados().length && aj().usar_companerismo) {
       var top = comp[0] && comp[0].c.veces > 0 ? comp[0].c.veces : 0;
       h += '<section class="card"><h2>🤝 Compañerismo de ' + MESES_L[Number(S.hoy.slice(5, 7)) - 1] + '</h2>' +
         '<p class="ayuda sin-margen">Veces que tocó «La hago yo» por un compañero y la terminó (o tomó una tarea del pool). Lo que la app le pasó sola por una falta no cuenta.</p>' +
@@ -1314,6 +1314,7 @@
     h += '<div class="campo"><span>Tiempo para tareas fijas cada día <small>(% de la jornada; el resto queda para pedidos y despachos)</small></span><div class="dias-pct">' +
       [1, 2, 3, 4, 5, 6, 0].map(function (dd) { return '<label><span>' + L.DIAS_CORTOS[dd] + '</span><input type="number" name="cd_' + dd + '" min="0" max="100" step="5" value="' + esc(cd[String(dd)] == null ? 100 : cd[String(dd)]) + '" inputmode="numeric"></label>'; }).join('') +
       '</div><small class="ayuda">Sirve para el balance de carga: avisa cuando un día pasa de ese tiempo. Por ejemplo, jueves y viernes menos porque salen más pedidos.</small></div>';
+    h += '<label class="check"><input type="checkbox" name="usar_companerismo"' + (a.usar_companerismo ? ' checked' : '') + '><span>Premio del mes por compañerismo <small class="muted">— cuenta las veces que cada uno toca «La hago yo» por un compañero (lo ve solo gerencia, en Reporte → Historial). Encendido, se les explica en «Cómo se usa».</small></span></label>';
     h += '<label class="check"><input type="checkbox" name="usar_almuerzo"' + (a.usar_almuerzo ? ' checked' : '') + '><span>Botón «Empiezo a almorzar» <small class="muted">— apagado, nadie lo ve. Encendido, dos personas del mismo grupo no almuerzan a la vez.</small></span></label>';
     h += '<label class="campo">Duración del almuerzo (minutos) <small>— mientras alguien de un grupo almuerza, los demás de ese grupo no pueden empezar</small><input type="number" name="minutos_almuerzo" min="10" max="180" step="5" value="' + esc(a.minutos_almuerzo || 60) + '" inputmode="numeric"></label>';
     h += '<label class="campo">Jornada (horas)<input type="number" name="jornada" min="1" max="15" step="0.5" value="' + (a.minutos_jornada / 60) + '" required inputmode="decimal"></label>';
@@ -1451,6 +1452,7 @@
     ];
     if (a.usar_salidas && (yo().despacha || yo().rol === 'admin')) pasos.splice(4, 0, ['Si sales a despachar', '<p>Toca <b>«Salí a despachar»</b> y al volver <b>«Volví»</b>. Mientras estás fuera, lo que tenga hora lo puede hacer otra persona sin que cuente en tu contra.</p>']);
     // solo lo que está prendido en Equipo → Ajustes
+    if (a.usar_companerismo) pasos.splice(4, 0, ['Ayuda a tus compañeros', '<p>Si a alguien se le está pasando una tarea, te sale con el botón <b>«La hago yo»</b>. Tócalo y hazla: cada vez que ayudas así cuenta para el <b>premio del mes por compañerismo</b>.</p>']);
     if (a.usar_almuerzo) pasos.splice(4, 0, ['Al empezar a almorzar', '<p>Toca <b>«Empiezo a almorzar»</b>. Si alguien de tu grupo está almorzando, espera a que termine: siempre se queda alguien del grupo.</p>']);
     pasos.push(['¿Olvidaste tu clave?', '<p>Avísale a gerencia: te da una nueva en persona.</p>']);
     return '<a class="volver" href="#/">‹ Volver</a><h1>Cómo se usa</h1>' +
@@ -2167,7 +2169,7 @@
         msgAj = sinConfig.length ? 'Guardado. Ojo: ' + sinConfig.map(function (l) { return l.nombre; }).join(', ') + ' no tiene Wi-Fi registrado: allí nadie puede marcar «Llegué» hasta que lo registres en Equipo → Locales.' : null;
       }
       if (String(fd.get('a_tiempo_hasta')) > String(fd.get('hora_limite'))) { aviso('«A tiempo hasta» tiene que ser antes de la hora límite.'); return; }
-      ejecutar(store.actualizar('ajustes', 1, { usar_salidas: !!fd.get('usar_salidas'), usar_almuerzo: !!fd.get('usar_almuerzo'), mostrar_record: !!fd.get('mostrar_record'), a_tiempo_hasta: fd.get('a_tiempo_hasta'), hora_limite: fd.get('hora_limite'), pool_activo: !!fd.get('pool'), minutos_jornada: Math.round(horas * 60), solo_en_tienda: solo,
+      ejecutar(store.actualizar('ajustes', 1, { usar_salidas: !!fd.get('usar_salidas'), usar_almuerzo: !!fd.get('usar_almuerzo'), usar_companerismo: !!fd.get('usar_companerismo'), mostrar_record: !!fd.get('mostrar_record'), a_tiempo_hasta: fd.get('a_tiempo_hasta'), hora_limite: fd.get('hora_limite'), pool_activo: !!fd.get('pool'), minutos_jornada: Math.round(horas * 60), solo_en_tienda: solo,
         usar_gps: !!fd.get('usar_gps'), revisiones_dia: Number(fd.get('revisiones_dia')),
         minutos_almuerzo: Math.max(10, Math.min(180, Number(fd.get('minutos_almuerzo')) || 60)),
         carga_dias: [0, 1, 2, 3, 4, 5, 6].reduce(function (o, dd) { var v = Number(fd.get('cd_' + dd)); o[dd] = isNaN(v) ? 100 : Math.max(0, Math.min(100, v)); return o; }, {}) }), msgAj || 'Ajustes guardados.');
