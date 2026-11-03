@@ -2407,6 +2407,9 @@ begin
 
   -- Pieza que se aprobó sola (fase 2) y le salió a gerencia para revisar después de publicar
   execute 'alter table public.piezas add column if not exists revisar_despues boolean not null default false';
+  -- Historias (3/11/2026): tercer tipo de pieza, mismo camino que un reel; no ocupa el puesto del plan
+  execute 'alter table public.piezas drop constraint if exists piezas_tipo_check';
+  execute $p$alter table public.piezas add constraint piezas_tipo_check check (tipo in ('reel', 'carrusel', 'historia'))$p$;
   -- Hora de publicar (los recordatorios de avisos_pendientes se calculan con estas dos)
   execute $p$alter table public.ajustes add column if not exists pub_desde time not null default '18:00'$p$;
   execute $p$alter table public.ajustes add column if not exists pub_hasta time not null default '20:30'$p$;

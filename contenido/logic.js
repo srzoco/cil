@@ -10,9 +10,12 @@
   // ---------- Constantes ----------
   var PLATAFORMAS = { ig: 'Instagram', tt: 'TikTok' };
   var PLAT_CORTO = { ig: 'IG', tt: 'TikTok' };
-  var TIPOS = { reel: 'Reel', carrusel: 'Carrusel' };
+  var TIPOS = { reel: 'Reel', carrusel: 'Carrusel', historia: 'Historia' };
   // Reel: una sola revisión (video + copy). Carrusel: texto → diseño + copy. ('copy' solo existe en datos viejos.)
-  var ETAPAS = { reel: ['video'], carrusel: ['texto', 'diseno'] };
+  var ETAPAS = { reel: ['video'], carrusel: ['texto', 'diseno'], historia: ['video'] };
+  // Historia: mismo camino que un reel (grabar → edición → aprobación, y se aprueba sola con la racha),
+  // pero no ocupa el puesto de un reel o carrusel del plan: se le pone el día a mano y puede ir cualquier día.
+  function esHistoria(p) { return !!p && p.tipo === 'historia'; }
   var ETAPA_LABEL = { video: 'Video y copy', texto: 'Texto', diseno: 'Diseño y copy', copy: 'Copy' };
   var TIPO_DIA = { reel: 'Reel', carrusel: 'Carrusel', cualquiera: 'Reel o carrusel', historias: 'Solo historias', descanso: 'Descanso' };
   var DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
@@ -141,7 +144,7 @@
   function fechaLimite(p, ajustes) {
     if (p.fase !== 'idea' && p.fase !== 'produccion') return null;
     var f = proximaFecha(p);
-    return f ? addDias(f, -entrega(ajustes)) : null;
+    return f ? addDias(f, esHistoria(p) ? 0 : -entrega(ajustes)) : null;  // la historia se entrega el mismo día
   }
   function columnaDe(p) {
     if (p.fase === 'idea') return p.grabacion_id ? 'grabar' : 'ideas';
@@ -166,7 +169,7 @@
       ? ['Idea', 'Texto', 'Aprobación del texto', 'Diseño y copy', 'Aprobación final', 'Lista', 'Publicada']
       : ['Idea', 'Grabación', 'Edición', 'Aprobación', 'Lista', 'Publicada'];
     var i = 0, terminado = false;
-    if (p.fase === 'idea') i = (p.tipo === 'reel' && p.grabacion_id) ? 1 : 0;
+    if (p.fase === 'idea') i = (p.tipo !== 'carrusel' && p.grabacion_id) ? 1 : 0;
     else if (p.fase === 'produccion') {
       var et = etapaNorm(p);
       if (p.tipo === 'carrusel') i = et === 'texto' ? (p.turno === 'aprueba' ? 2 : 1) : (p.turno === 'aprueba' ? 4 : 3);
@@ -194,7 +197,7 @@
   // pero no sale como hueco ni se sugiere (no pasa todas las semanas). cronograma.extra = { ig: { '3': 'carrusel' } }
   function slotExtra(ajustes, plat, iso) { var e = (cron(ajustes).extra || {})[plat]; return (e && e[String(diaSemana(iso))]) || null; }
   function cabePrincipal(ajustes, plat, iso, tipo) { var t = slotTipo(ajustes, plat, iso); return t === tipo || (t === 'cualquiera' && !!tipo); }
-  function cabe(ajustes, plat, iso, tipo) { return cabePrincipal(ajustes, plat, iso, tipo) || (!!tipo && slotExtra(ajustes, plat, iso) === tipo); }
+  function cabe(ajustes, plat, iso, tipo) { return tipo === 'historia' || cabePrincipal(ajustes, plat, iso, tipo) || (!!tipo && slotExtra(ajustes, plat, iso) === tipo); }
   function diaCfg(ajustes, iso) { return { tipo: slotTipo(ajustes, 'ig', iso) }; } // tipo del día en Instagram (para mostrar)
   function minimo(ajustes) { var m = ajustes && ajustes.dias_minimos; return (m == null || isNaN(m)) ? 3 : +m; }
   function enBanco(p) {
@@ -227,7 +230,7 @@
   // ---------- Calendario y sugerencia de fechas ----------
   function ocupado(piezas, plat, iso, excluirId) {
     return piezas.some(function (p) {
-      return p.id !== excluirId && ocupa(p) && p[plat] && fechaDe(p, plat) === iso;
+      return p.id !== excluirId && ocupa(p) && !esHistoria(p) && p[plat] && fechaDe(p, plat) === iso;
     });
   }
   function slotLibre(piezas, ajustes, plat, tipo, desde, excluirId, limite) {
@@ -247,6 +250,11 @@
     var min = minimo(ajustes);
     var res = { primero: null, fecha_ig: null, fecha_tt: null };
     if (!pend.length) return res;
+    if (esHistoria(p)) {  // cualquier día, las dos plataformas el mismo día
+      plataformasDe(p).forEach(function (pl) { res['fecha_' + pl] = publicadoEn(p, pl) ? fechaDe(p, pl) : desde; });
+      res.primero = pend.length === 2 ? (primeroPreferido === 'tt' ? 'tt' : 'ig') : (plataformasDe(p).filter(function (pl) { return publicadoEn(p, pl); })[0] || pend[0]);
+      return res;
+    }
     if (pend.length === 1) {
       var pl = pend[0], otra = pl === 'ig' ? 'tt' : 'ig';
       var base = desde;
@@ -285,10 +293,10 @@
       if (!cabe(ajustes, pl, f, p.tipo)) {
         avisos.push(PLAT_CORTO[pl] + ': el ' + nombreDia.toLowerCase() + ' es día de ' + TIPO_DIA[st].toLowerCase() + ' en ' + PLATAFORMAS[pl] + '.');
       }
-      var otra = piezas.filter(function (q) { return q.id !== p.id && ocupa(q) && q[pl] && fechaDe(q, pl) === f; })[0];
+      var otra = esHistoria(p) ? null : piezas.filter(function (q) { return q.id !== p.id && ocupa(q) && !esHistoria(q) && q[pl] && fechaDe(q, pl) === f; })[0];
       if (otra) avisos.push(PLAT_CORTO[pl] + ': ese día ya está «' + otra.titulo + '».');
     });
-    if (p.ig && p.tt) {
+    if (p.ig && p.tt && !esHistoria(p)) {
       var fi = publicadoEn(p, 'ig') ? String(publicadoEn(p, 'ig')).slice(0, 10) : fechas.fecha_ig;
       var ft = publicadoEn(p, 'tt') ? String(publicadoEn(p, 'tt')).slice(0, 10) : fechas.fecha_tt;
       if (fi && ft) {
@@ -316,7 +324,7 @@
   var ORDEN_COL = { lista: 0, aprobar: 1, editar: 2, grabar: 3, ideas: 4 };
   function candidatosHueco(piezas, hueco) {
     return piezas.filter(function (p) {
-      return ['idea', 'produccion', 'aprobada'].indexOf(p.fase) >= 0 && !p.en_espera &&
+      return ['idea', 'produccion', 'aprobada'].indexOf(p.fase) >= 0 && !p.en_espera && !esHistoria(p) &&
         (p.tipo === hueco.tipo || hueco.tipo === 'cualquiera') && p[hueco.plataforma] &&
         !publicadoEn(p, hueco.plataforma) && !fechaDe(p, hueco.plataforma);
     }).sort(function (a, b) { return ORDEN_COL[columnaDe(a)] - ORDEN_COL[columnaDe(b)]; });
@@ -331,7 +339,7 @@
     opciones = opciones || {};
     var titulo = txt(datos.titulo);
     if (!titulo) throw err('Ponle un título a la pieza.');
-    var tipo = datos.tipo === 'carrusel' ? 'carrusel' : 'reel';
+    var tipo = TIPOS[datos.tipo] ? datos.tipo : 'reel';
     var ig = !!datos.ig, tt = !!datos.tt;
     var esIdea = !!datos.idea || !!datos.grabacion_id;
     if (!ig && !tt) {
@@ -644,7 +652,7 @@
   function accionIniciar(p, datos) {
     if (p.fase !== 'idea') throw err('Esta pieza ya empezó.');
     datos = datos || {};
-    var tipo = datos.tipo === 'carrusel' ? 'carrusel' : datos.tipo === 'reel' ? 'reel' : p.tipo;
+    var tipo = TIPOS[datos.tipo] ? datos.tipo : p.tipo;
     var ig = datos.ig != null ? !!datos.ig : p.ig, tt = datos.tt != null ? !!datos.tt : p.tt;
     if (!ig && !tt) throw err('Elige al menos una plataforma.');
     var patch = { fase: 'produccion', tipo: tipo, ig: ig, tt: tt, etapa: ETAPAS[tipo][0], turno: 'edita', version: 0 };
@@ -688,7 +696,7 @@
       var v = limpiar(datos[k]);
       if ((v || null) !== (p[k] || null)) { patch[k] = v; cambios.push(k); }
     });
-    if (datos.tipo && datos.tipo !== p.tipo) {
+    if (datos.tipo && datos.tipo !== p.tipo && TIPOS[datos.tipo]) {
       if (!puedeCambiarTipo(p)) throw err('El tipo ya no se puede cambiar en esta etapa.');
       patch.tipo = datos.tipo;
       if (p.fase === 'produccion') patch.etapa = ETAPAS[datos.tipo][0];
@@ -1054,7 +1062,7 @@
   }
 
   return {
-    PLATAFORMAS: PLATAFORMAS, PLAT_CORTO: PLAT_CORTO, TIPOS: TIPOS, ETAPAS: ETAPAS, ETAPA_LABEL: ETAPA_LABEL, TIPO_DIA: TIPO_DIA,
+    PLATAFORMAS: PLATAFORMAS, PLAT_CORTO: PLAT_CORTO, TIPOS: TIPOS, esHistoria: esHistoria, ETAPAS: ETAPAS, ETAPA_LABEL: ETAPA_LABEL, TIPO_DIA: TIPO_DIA,
     DIAS: DIAS, DIAS_CORTOS: DIAS_CORTOS, CRONOGRAMA_BASE: CRONOGRAMA_BASE, AJUSTES_BASE: AJUSTES_BASE,
     CHIPS: CHIPS, UBICACION: UBICACION, OBJETIVOS: OBJETIVOS, CHECKLIST_PUBLICAR: CHECKLIST_PUBLICAR, TIPOS_EVENTO: TIPOS_EVENTO,
     hoyISO: hoyISO, addDias: addDias, diaSemana: diaSemana, diffDias: diffDias, fmtFecha: fmtFecha, fmtFechaLarga: fmtFechaLarga,

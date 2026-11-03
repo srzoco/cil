@@ -47,6 +47,7 @@ jobs:
           node pruebas/red-movil.js
           node pruebas/contenido.js
           node pruebas/contenido-checklist.js
+          node pruebas/contenido-historias.js
           node pruebas/sesiones.js
           node pruebas/armador.js
           node pruebas/armador-stock.js

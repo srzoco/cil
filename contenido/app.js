@@ -72,6 +72,7 @@
     ajustes: '<svg viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2.2"/><circle cx="9" cy="17" r="2.2"/></svg>',
     reel: '<svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="3"/><path d="M10.5 9.5v5l4-2.5z"/></svg>',
     carrusel: '<svg viewBox="0 0 24 24"><rect x="7" y="5" width="11" height="14" rx="2"/><path d="M4 7v10M21 7v10"/></svg>',
+    historia: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" stroke-dasharray="4 2.6"/><path d="M10.5 9.5v5l4-2.5z"/></svg>',
     wa: '<svg viewBox="0 0 24 24"><path d="M4.5 19.5l1.2-3.6A8 8 0 1 1 8.3 18.4z"/><path d="M9 9.5c.3 2.3 2.2 4.4 4.6 5l1-1.1 1.8.8-.4 1.6c-3.7.2-7.3-3.2-7.4-7l1.6-.5.8 1.8z"/></svg>'
   };
 
@@ -224,7 +225,7 @@
 
   // ---------- Fragmentos de pieza ----------
   function tipoTag(p, grande) {
-    return '<span class="tipo-tag ' + p.tipo + (grande ? ' grande' : '') + '">' + ICON[p.tipo] + (p.tipo === 'reel' ? 'Reel' : 'Carrusel') + '</span>';
+    return '<span class="tipo-tag ' + p.tipo + (grande ? ' grande' : '') + '">' + (ICON[p.tipo] || ICON.reel) + (L.TIPOS[p.tipo] || 'Reel') + '</span>';
   }
   function badgesPlat(p) {
     return L.plataformasDe(p).map(function (pl) {
@@ -403,7 +404,7 @@
     var html = '<div class="tablero-head"><h1>Tablero</h1><a class="btn link" href="#/tablero' + (verArch ? '' : '?f=archivadas') + '">' + (verArch ? '‹ Volver al tablero' : 'Archivadas') + '</a></div>';
     html += '<div class="filtros-tablero">' +
       '<input type="search" class="buscar" placeholder="Buscar por título o producto" data-buscar-en=".tablero" value="' + esc(T.q) + '" aria-label="Buscar">' +
-      '<div class="seg-tabs chico" role="group" aria-label="Tipo">' + [['todos', 'Todos'], ['reel', 'Reels'], ['carrusel', 'Carruseles']].map(function (x) {
+      '<div class="seg-tabs chico" role="group" aria-label="Tipo">' + [['todos', 'Todos'], ['reel', 'Reels'], ['carrusel', 'Carruseles'], ['historia', 'Historias']].map(function (x) {
         return '<button type="button" data-act="filtro-tipo" data-val="' + x[0] + '" class="' + (T.tipo === x[0] ? 'on' : '') + '">' + x[1] + '</button>';
       }).join('') + '</div>' +
       '<button type="button" class="filtro' + (T.espera ? ' on' : '') + '" data-act="filtro-espera">📦 En espera</button></div>';
@@ -617,7 +618,7 @@
     var et = L.etapasDe(p)[L.etapasDe(p).length - 1];
     return '<section class="card ahora despues"><p class="ahora-t">🔍 Se aprobó sola: revísala</p>' +
       '<p class="muted">' + esc(nombreDe(env && env.autor)) + ' marcó toda la lista. ¿Cómo quedó? Si algo falló, vuelve a necesitar tu aprobación.</p>' +
-      (enlace ? '<p><a class="btn sec" href="' + url(enlace) + '" target="_blank" rel="noopener">▶️ Ver ' + (p.tipo === 'reel' ? 'el video' : 'el diseño') + '</a></p>' : '') +
+      (enlace ? '<p><a class="btn sec" href="' + url(enlace) + '" target="_blank" rel="noopener">▶️ Ver ' + (p.tipo !== 'carrusel' ? 'el video' : 'el diseño') + '</a></p>' : '') +
       '<form data-form="despues" data-id="' + p.id + '"><div class="acciones"><button class="btn ok" type="button" data-act="despues-bien" data-id="' + p.id + '">👍 Quedó bien</button>' +
       '<button class="btn warn" type="button" data-act="abrir-despues">👎 Algo falló</button></div>' +
       '<div class="despues-mal" hidden>' + L.gruposChips(et).map(function (g) {
@@ -639,7 +640,7 @@
     if (enEsta) html += '<p class="muted">Planificada para la grabación del ' + esc(L.fmtFechaLarga(g.fecha)) + ', ' + esc(L.fmtHora(g.hora)) + '.</p>';
     else if (gAnt) html += '<p class="rojo">Estaba planificada para la grabación del ' + esc(L.fmtFecha(gAnt.fecha)) + ' y no se grabó.</p>';
     html += '<div class="acciones">' +
-      '<button class="btn" data-act="grabado" data-id="' + p.id + '">' + (p.tipo === 'reel' ? '🎬 Ya se grabó → a edición' : '▶️ Empezar el texto') + '</button>' +
+      '<button class="btn" data-act="grabado" data-id="' + p.id + '">' + (p.tipo !== 'carrusel' ? '🎬 Ya se grabó → a edición' : '▶️ Empezar el texto') + '</button>' +
       (g && !enEsta && g.estado !== 'cancelada' && g.estado !== 'hecha' ? '<button class="btn sec" data-act="a-grabacion" data-id="' + p.id + '" data-grab="' + g.id + '">🎬 Grabar en la sesión de esta semana</button>' : '') +
       (p.grabacion_id ? '<button class="btn sec" data-act="no-grabo-video" data-id="' + p.id + '">No se grabó</button><button class="btn fantasma" data-act="a-grabacion" data-id="' + p.id + '" data-grab="">Quitar de la grabación</button>' : '') +
       '</div></section>';
@@ -841,7 +842,7 @@
     p = p || {};
     var tipo = p.tipo || 'reel';
     return '<label class="campo">Título<input name="titulo" required autocomplete="off" value="' + esc(p.titulo || '') + '" placeholder="Ej. Acompáñame a recibir el pulpo"></label>' +
-      (conTipo === false ? '' : '<div class="campo"><span class="label">Tipo</span><div class="seg grande tipo-sel">' + ['reel', 'carrusel'].map(function (t) {
+      (conTipo === false ? '' : '<div class="campo"><span class="label">Tipo</span><div class="seg grande tipo-sel">' + ['reel', 'carrusel', 'historia'].map(function (t) {
         return '<label class="op-' + t + '"><input type="radio" name="tipo" value="' + t + '"' + (tipo === t ? ' checked' : '') + '> ' + ICON[t] + ' ' + L.TIPOS[t] + '</label>';
       }).join('') + '</div></div>') +
       '<div class="campo"><span class="label">Plataformas</span><div class="seg grande">' + ['ig', 'tt'].map(function (pl) {
@@ -902,7 +903,8 @@
             (riesgo ? ' <small>(' + esc(L.estadoDe(p, S.hoy).texto.split(' · ')[0].toLowerCase()) + ')</small>' : '') +
             (!L.cabe(ajustes(), pl, d, p.tipo) ? ' <small class="muted">(en día de ' + esc(L.TIPO_DIA[st].toLowerCase()) + ')</small>' : ex && p.tipo === ex && !L.cabePrincipal(ajustes(), pl, d, p.tipo) ? ' <small class="muted">(extra)</small>' : '') + '</a>';
         }).join('');
-        if (!en.length && slot) cont = d >= S.hoy ? '<button class="cal-hueco" data-act="hueco" data-fecha="' + d + '" data-plat="' + pl + '" data-tipo="' + st + '">' + esc(L.TIPO_DIA[st] || 'Hueco') + ' · llenar</button>' : '<span class="cal-vacio">Sin publicación</span>';
+        var enPlan = en.filter(function (p) { return !L.esHistoria(p); });
+        if (!enPlan.length && slot) cont += d >= S.hoy ? '<button class="cal-hueco" data-act="hueco" data-fecha="' + d + '" data-plat="' + pl + '" data-tipo="' + st + '">' + esc(L.TIPO_DIA[st] || 'Hueco') + ' · llenar</button>' : '<span class="cal-vacio">Sin publicación</span>';
         // Extra opcional: un botón discreto, solo si todavía no hay una pieza de ese tipo ese día
         if (ex && d >= S.hoy && !en.some(function (p) { return p.tipo === ex; })) cont += '<button class="cal-hueco cal-extra" data-act="hueco" data-fecha="' + d + '" data-plat="' + pl + '" data-tipo="' + ex + '">+ ' + esc(L.TIPO_DIA[ex].toLowerCase()) + ' extra (opcional)</button>';
         return '<div class="cal-fila"><span class="plat ' + pl + '">' + L.PLAT_CORTO[pl] + '</span><div class="cal-items">' + cont + '</div></div>';
@@ -916,7 +918,7 @@
         '<div class="cal-dia-head"><b>' + L.fmtFecha(d) + '</b></div>' + filaG +
         (filas || '<p class="cal-libre">Día libre</p>') + '</div>';
     });
-    return html + '</div><p class="ayuda leyenda"><span class="dot-ley reel"></span> Reel · <span class="dot-ley carrusel"></span> Carrusel<br>✅ publicada · 🟢 lista · 👀 por aprobar · ✂️ en edición · 🎬 por grabar · 💡 idea · ⚠️ pasó sin publicar</p>';
+    return html + '</div><p class="ayuda leyenda"><span class="dot-ley reel"></span> Reel · <span class="dot-ley carrusel"></span> Carrusel · <span class="dot-ley historia"></span> Historia (no ocupa puesto del plan)<br>✅ publicada · 🟢 lista · 👀 por aprobar · ✂️ en edición · 🎬 por grabar · 💡 idea · ⚠️ pasó sin publicar</p>';
   }
 
   // ---------- Grabación semanal ----------
@@ -965,7 +967,7 @@
         return '<div class="fila-accion">' + tarjeta(p) + (listo ? '<span class="pill ok">Grabado</span>' : '<div class="fila-btns"><button class="btn sec" data-act="no-grabo-video" data-id="' + p.id + '">No se grabó</button><button class="btn ok" data-act="grabado" data-id="' + p.id + '">Grabado ✓</button></div>') + '</div>';
       }).join('') + '</div>' : '<p class="muted">Todavía no hay videos planificados.</p>') +
       (abierta ? '<form data-form="titulo-grab" data-id="' + g.id + '" class="agregar-titulo"><input name="titulo" placeholder="Título del video" autocomplete="off" required>' +
-        '<select name="tipo" aria-label="Tipo"><option value="reel">Reel</option><option value="carrusel">Carrusel</option></select>' +
+        '<select name="tipo" aria-label="Tipo"><option value="reel">Reel</option><option value="carrusel">Carrusel</option><option value="historia">Historia</option></select>' +
         '<select name="plats" aria-label="Plataformas"><option value="ambas">IG + TikTok</option><option value="tt">Solo TikTok</option><option value="ig">Solo IG</option></select>' +
         '<button class="btn chico" type="submit">Agregar</button></form>' : '') + '</section>';
     if (abierta && g.estado !== 'hecha') {
@@ -1332,7 +1334,7 @@
     'grabado': function (el) {
       var p = pieza(el.dataset.id), r;
       try { r = L.accionIniciar(p, {}); } catch (e) { return aviso(e.message); }
-      accion(function () { return ejecutar(p, r); }, function () { S.flash = { titulo: p.tipo === 'reel' ? '🎬 Grabado' : '▶️ En producción', texto: '«' + p.titulo + '» pasó a edición.' }; });
+      accion(function () { return ejecutar(p, r); }, function () { S.flash = { titulo: p.tipo !== 'carrusel' ? '🎬 Grabado' : '▶️ En producción', texto: '«' + p.titulo + '» pasó a edición.' }; });
     },
     'a-revision': function (el) {
       var p = pieza(el.dataset.id), r;

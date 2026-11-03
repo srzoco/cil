@@ -25,6 +25,8 @@
   --reel-bg: #e2f2f3;
   --carr: #6658c4;
   --carr-bg: #efedfb;
+  --hist: #a3346f;
+  --hist-bg: #f8e6ef;
   --shadow: 0 1px 2px rgba(20, 30, 60, .05), 0 4px 14px rgba(20, 30, 60, .05);
   --radius: 14px;
   --serif: "Gloock", Georgia, "Times New Roman", serif;
@@ -38,7 +40,7 @@
     --wine: #F29AA7; --wine-bg: #3A1D29; --amber: #F2BE72; --amber-bg: #3A2C17;
     --blue: #9CC0F0; --blue-bg: #18294A; --green: #86D6A6; --green-bg: #15312A;
     --purple: #d6bd91; --purple-bg: #2f2a20; --gray-bg: #1A2747; --wa: #3CC472;
-    --reel: #7fd0d6; --reel-bg: #173235; --carr: #b9b1f2; --carr-bg: #262445;
+    --reel: #7fd0d6; --reel-bg: #173235; --carr: #b9b1f2; --carr-bg: #262445; --hist: #f2a5cb; --hist-bg: #3a1f2d;
     --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 6px 18px rgba(0, 0, 0, .25);
     color-scheme: dark;
   }
@@ -49,7 +51,7 @@
   --wine: #F29AA7; --wine-bg: #3A1D29; --amber: #F2BE72; --amber-bg: #3A2C17;
   --blue: #9CC0F0; --blue-bg: #18294A; --green: #86D6A6; --green-bg: #15312A;
   --purple: #d6bd91; --purple-bg: #2f2a20; --gray-bg: #1A2747; --wa: #3CC472;
-  --reel: #7fd0d6; --reel-bg: #173235; --carr: #b9b1f2; --carr-bg: #262445;
+  --reel: #7fd0d6; --reel-bg: #173235; --carr: #b9b1f2; --carr-bg: #262445; --hist: #f2a5cb; --hist-bg: #3a1f2d;
   color-scheme: dark;
 }
 
@@ -442,6 +444,7 @@ ol.ranking li a { flex: 1; min-width: 140px; color: var(--ink); text-decoration:
 .tipo-tag svg { width: 15px; height: 15px; stroke-width: 2.2; }
 .tipo-tag.reel { background: var(--reel-bg); color: var(--reel); }
 .tipo-tag.carrusel { background: var(--carr-bg); color: var(--carr); }
+.tipo-tag.historia { background: var(--hist-bg); color: var(--hist); }
 .tipo-tag.grande { font-size: .8rem; padding: 4px 10px 4px 7px; }
 .tipo-tag.grande svg { width: 18px; height: 18px; }
 
@@ -453,6 +456,7 @@ ol.ranking li a { flex: 1; min-width: 140px; color: var(--ink); text-decoration:
 }
 .tarjeta.t-reel { border-left-color: var(--reel); }
 .tarjeta.t-carrusel { border-left-color: var(--carr); }
+.tarjeta.t-historia { border-left-color: var(--hist); }
 .tarjeta:hover .tarjeta-titulo { color: var(--accent); }
 .tarjeta.en-espera { background: repeating-linear-gradient(135deg, var(--card), var(--card) 10px, var(--purple-bg) 10px, var(--purple-bg) 12px); }
 .tarjeta-top, .tarjeta-pie { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: .8rem; }
@@ -498,6 +502,7 @@ ol.ranking li a { flex: 1; min-width: 140px; color: var(--ink); text-decoration:
 .ahora-t { font: 650 1.1rem var(--serif); margin: 0 0 4px; }
 .card.revision.t-reel { border-top: 4px solid var(--reel); }
 .card.revision.t-carrusel { border-top: 4px solid var(--carr); }
+.card.revision.t-historia { border-top: 4px solid var(--hist); }
 .grupo-chips { font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 10px 0 6px; }
 
 /* Tablero */
@@ -535,9 +540,10 @@ button.filtro { cursor: pointer; font-family: var(--sans); }
 .btn.link.gris { color: var(--muted); }
 .mas-detalles { margin: 4px 0 14px; }
 .mas-detalles summary { cursor: pointer; color: var(--accent); font-weight: 600; margin-bottom: 10px; }
-.tipo-sel label { justify-content: center; }
+.tipo-sel label { justify-content: center; flex-basis: 90px; }
 .tipo-sel .op-reel:has(input:checked) { border-color: var(--reel); background: var(--reel-bg); color: var(--reel); }
 .tipo-sel .op-carrusel:has(input:checked) { border-color: var(--carr); background: var(--carr-bg); color: var(--carr); }
+.tipo-sel .op-historia:has(input:checked) { border-color: var(--hist); background: var(--hist-bg); color: var(--hist); }
 .fechas-card .pub-filas { margin-bottom: 4px; }
 .agregar-titulo { grid-template-columns: 1fr 96px 120px auto !important; }
 @media (max-width: 520px) { .agregar-titulo { grid-template-columns: 1fr 1fr !important; } .agregar-titulo input { grid-column: 1 / -1; } .agregar-titulo .btn { grid-column: 1 / -1; } }
@@ -547,6 +553,7 @@ button.filtro { cursor: pointer; font-family: var(--sans); }
 .cal-pieza .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; align-self: center; }
 .cal-pieza.t-reel .dot, .dot-ley.reel { background: var(--reel); }
 .cal-pieza.t-carrusel .dot, .dot-ley.carrusel { background: var(--carr); }
+.cal-pieza.t-historia .dot, .dot-ley.historia { background: var(--hist); }
 .cal-pieza.riesgo { color: var(--amber); font-style: normal; }
 .cal-pieza small { color: var(--muted); }
 .dot-ley { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: middle; }
@@ -651,3 +658,4 @@ html.marco-fijo .desliza:has(~ .tabs) .contenido { padding-bottom: 28px; }
 .corr-mal { text-decoration: underline wavy var(--wine); font-weight: 600; }
 .ok-txt { color: var(--green); font-weight: 600; }
 .despues .acciones { margin-top: 8px; }
+@media (max-width: 400px) { .seg-tabs.chico { gap: 2px; } .seg-tabs.chico button { padding: 7px 5px; font-size: .78rem; } }
