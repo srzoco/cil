@@ -396,6 +396,16 @@
   function estaPresente(estado) { return estado === 'presente' || estado === 'tarde'; }
   // Igual que _puntualidad en supabase.sql: días que contaban este mes y cuántos llegó a tiempo.
   function sinPuntualidad(db, f) { return (db.dias_sin_puntualidad || []).some(function (x) { return x.fecha === f; }); }
+  // Compañerismo del mes: tareas de otros que la persona terminó por su cuenta («La hago yo» en un rescate,
+  // o tomada del pool). Lo que le asignó la app o gerencia (faltas, compensación) no cuenta.
+  function companerismoMes(db, personaId, hoy) {
+    var mes = String(hoy).slice(0, 7), r = { veces: 0, minutos: 0 };
+    db.asignaciones.forEach(function (a) {
+      if (a.estado !== 'hecha' || a.hecha_por !== personaId || a.asignado_a !== personaId || String(a.fecha).slice(0, 7) !== mes) return;
+      if ((a.motivo === 'rescate' && a.rescatada_de && a.rescatada_de !== personaId) || a.motivo === 'tomada') { r.veces++; r.minutos += a.minutos || 0; }
+    });
+    return r;
+  }
   function puntualidadMes(db, personaId, hoy) {
     var pe = persona(db, personaId), aj = db.ajustes || AJUSTES_BASE, r = { dias: 0, a_tiempo: 0 };
     if (!pe) return r;
@@ -846,7 +856,7 @@
     TOLERANCIA: TOLERANCIA, DIAS: DIAS, DIAS_CORTOS: DIAS_CORTOS, AJUSTES_BASE: AJUSTES_BASE,
     hoyISO: hoyISO, addDias: addDias, difDias: difDias, dow: dow, lunesDe: lunesDe, fmtFecha: fmtFecha, fmtFechaLarga: fmtFechaLarga,
     fmtHora: fmtHora, fmtHoraTxt: fmtHoraTxt, minutosTxt: minutosTxt, pasoLimite: pasoLimite, llegoTarde: llegoTarde,
-    aTiempoHasta: aTiempoHasta, pasoATiempo: pasoATiempo, puntualidadMes: puntualidadMes, sinPuntualidad: sinPuntualidad,
+    aTiempoHasta: aTiempoHasta, pasoATiempo: pasoATiempo, puntualidadMes: puntualidadMes, companerismoMes: companerismoMes, sinPuntualidad: sinPuntualidad,
     toca: toca, distanciaM: distanciaM, estadoHora: estadoHora, antesDeHora: antesDeHora, listaDesde: listaDesde,
     equiposDe: equiposDe, fueraDeRango: fueraDeRango, rangoTxt: rangoTxt, esUrgente: esUrgente, excusado: excusado, estaFuera: estaFuera, fueraEn: fueraEn, hhmm: hhmm, tituloCompleto: tituloCompleto,
     localDe: localDe, localPrincipal: localPrincipal, labDe: labDe, laborable: laborable, laborableFn: laborableFn, trabaja: trabaja, libreDe: libreDe, especial: especial, localDePersona: localDePersona, frecuenciaTxt: frecuenciaTxt, proximas: proximas, siguienteLaborable: siguienteLaborable,

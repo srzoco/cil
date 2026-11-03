@@ -1109,7 +1109,17 @@
     var MESES_L = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
     var punt = empleados().map(function (pe) { return { pe: pe, p: L.puntualidadMes(db(), pe.id, S.hoy) }; }).filter(function (x) { return x.p.dias > 0; })
       .sort(function (a, b) { return (b.p.a_tiempo / b.p.dias) - (a.p.a_tiempo / a.p.dias) || (a.pe.nombre < b.pe.nombre ? -1 : 1); });
+    // Compañerismo del mes (el reconocimiento): quién más ayuda a los demás
+    var comp = empleados().map(function (pe) { return { pe: pe, c: L.companerismoMes(db(), pe.id, S.hoy) }; })
+      .sort(function (a, b) { return b.c.veces - a.c.veces || b.c.minutos - a.c.minutos || (a.pe.nombre < b.pe.nombre ? -1 : 1); });
     if (empleados().length) {
+      var top = comp[0] && comp[0].c.veces > 0 ? comp[0].c.veces : 0;
+      h += '<section class="card"><h2>🤝 Compañerismo de ' + MESES_L[Number(S.hoy.slice(5, 7)) - 1] + '</h2>' +
+        '<p class="ayuda sin-margen">Veces que tocó «La hago yo» por un compañero y la terminó (o tomó una tarea del pool). Lo que la app le pasó sola por una falta no cuenta.</p>' +
+        (top ? '<ul class="rep-lista">' + comp.map(function (x) {
+          return '<li>' + esc(x.pe.nombre) + ' <b>' + plural(x.c.veces, 'vez', 'veces') + '</b>' + (x.c.minutos ? ' <small class="muted">' + esc(L.minutosTxt(x.c.minutos)) + '</small>' : '') +
+            (x.c.veces === top ? ' <span class="pill ok">🏆 va ganando</span>' : '') + '</li>';
+        }).join('') + '</ul>' : '<p class="muted">Este mes nadie ha ayudado todavía con «La hago yo».</p>') + '</section>';
       h += '<section class="card"><h2>Puntualidad de ' + MESES_L[Number(S.hoy.slice(5, 7)) - 1] + '</h2><p class="ayuda sin-margen">A tiempo = marcó «Llegué» hasta las ' + esc(L.fmtHoraTxt(L.aTiempoHasta(aj()))) + ' Una falta también cuenta como no a tiempo.</p>' +
         (punt.length ? '' : '<p class="muted">Todavía no hay días contados este mes.</p>') + '<ul class="rep-lista">' +
         punt.map(function (x) {
