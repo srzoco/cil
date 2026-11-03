@@ -1939,6 +1939,32 @@
     document.getElementById('capa-toast').innerHTML = S.toast ? '<div class="toast ' + (S.toast.tipo === 'ok' ? 'ok' : '') + '" role="status">' + esc(S.toast.texto) + '</div>' : '';
     document.getElementById('capa-ocupado').innerHTML = S.ocupado ? '<div class="ocupado"><div class="spinner"></div></div>' : '';
   }
+  // Antes de registrar una red: ¿es de datos móviles? (esas direcciones las comparten muchos clientes en toda la ciudad)
+  // Pregunta la compañía a ipinfo.io; si no responde, sigue sin avisar. propio = la red de este teléfono (Android dice si va por datos).
+  var MOVILES = /digitel|movistar|telef[oó]nica|movilnet/i;
+  function companiaDe(ip) {
+    if (!ip || !window.fetch) return Promise.resolve('');
+    var ctl = window.AbortController ? new AbortController() : null;
+    var t = setTimeout(function () { if (ctl) ctl.abort(); }, 4000);
+    return fetch('https://ipinfo.io/' + encodeURIComponent(String(ip).replace(/\/\d+$/, '')) + '/json', ctl ? { signal: ctl.signal } : {})
+      .then(function (r) { return r.ok ? r.json() : {}; })
+      .then(function (j) { clearTimeout(t); return String((j && j.org) || ''); }, function () { clearTimeout(t); return ''; });
+  }
+  function revisarDatosMoviles(ip, propio, fn) {
+    var cn = propio && navigator.connection && navigator.connection.type;
+    if (S.ocupado) return;
+    S.ocupado = true; pintarCapas();
+    companiaDe(ip).then(function (org) {
+      S.ocupado = false; pintarCapas();
+      var m = org.match(MOVILES);
+      if (!m && cn !== 'cellular') { fn(); return; }
+      var cia = m ? m[0].charAt(0).toUpperCase() + m[0].slice(1).toLowerCase() : 'una compañía de teléfonos';
+      confirmar('⚠️ Esta red parece de datos móviles (' + cia + '), no del Wi-Fi del local. Si la registras, cualquiera con ' + cia +
+        ' podría marcar «Llegué» desde otra parte.' + (propio ? ' Revisa que el teléfono esté conectado al Wi-Fi del local y toca ↻ arriba.' : '') + ' ¿Registrarla igual?',
+        'Registrar igual', fn);
+    });
+  }
+
   function confirmar(texto, boton, fn) { S.confirmFn = fn; abrirModal({ tipo: 'confirmar', texto: texto, boton: boton }); }
   function abrirModal(m) {
     S.modal = m; S.eventos = null; pintarCapas();
@@ -2085,13 +2111,18 @@
     }
     else if (acc === 'aceptar-red') {
       var locR = el.getAttribute('data-local');
-      ejecutar(store.rpc('aceptar_red', { p_red: id, p_local: locR }), 'Red registrada en «' + nombreLocal(locR) + '». Ya pueden marcar «Llegué».');
+      var ipR = (((S.data && S.data.redes_nuevas) || []).filter(function (x) { return x.id === id; })[0] || {}).ip;
+      revisarDatosMoviles(ipR, false, function () {
+        ejecutar(store.rpc('aceptar_red', { p_red: id, p_local: locR }), 'Red registrada en «' + nombreLocal(locR) + '». Ya pueden marcar «Llegué».', true);
+      });
     }
     else if (acc === 'ignorar-red') {
       ejecutar(Promise.all(id.split(',').map(function (x) { return store.borrar('redes_nuevas', x); })), 'Listo: esa red no se registró.');
     }
     else if (acc === 'registrar-red') {
-      ejecutar(store.rpc('registrar_red', { p_local: id }), 'Listo: esta red quedó registrada como Wi-Fi de «' + nombreLocal(id) + '».').then(function () { S.red = null; render(); });
+      revisarDatosMoviles((S.red || {}).ip, true, function () {
+        ejecutar(store.rpc('registrar_red', { p_local: id }), 'Listo: esta red quedó registrada como Wi-Fi de «' + nombreLocal(id) + '».', true).then(function () { S.red = null; render(); });
+      });
     }
     else if (acc === 'guardar-ubicacion') {
       S.ocupado = true; pintarCapas();

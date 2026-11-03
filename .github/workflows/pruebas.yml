@@ -44,6 +44,7 @@ jobs:
           sleep 1
           node pruebas/humo.js
           node pruebas/recorrido.js
+          node pruebas/red-movil.js
           node pruebas/contenido.js
           node pruebas/contenido-checklist.js
           node pruebas/sesiones.js
