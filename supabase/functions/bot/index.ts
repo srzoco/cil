@@ -4,7 +4,7 @@
 // 1. ManyChat envía cada mensaje del cliente → se guarda y se responde "ok" al instante.
 // 2. En segundo plano se espera a que el cliente termine de escribir (silencio) y un mínimo de tiempo.
 // 3. Solo la invocación del último mensaje responde, una sola vez (bot_tomar_turno).
-// 4. Claude redacta con el estilo de Barquero; precios y fichas salen de la base de datos.
+// 4. El modelo (Gemini o Claude) redacta con el estilo de Barquero; precios y fichas salen de la base de datos.
 //    Los precios NUNCA los escribe Claude: pone una marca [[PRECIOS_n]] y aquí se reemplaza por el texto exacto.
 // 5. La respuesta se envía por la API de ManyChat; si hace falta un humano se pone la etiqueta bot_humano.
 //
@@ -17,7 +17,11 @@
 //  - "¿Eres un bot?" tiene su propio motivo: es lo único que se responde al pasar a humano sin datos.
 //  - Todo lo que escribió el cliente va marcado como texto del cliente (no solo el último mensaje).
 //
-// Secretos (Edge Functions → Secrets): ANTHROPIC_API_KEY, BOT_TOKEN, MANYCHAT_API_KEY
+// Cambios 4 nov 2026: también funciona con Gemini (Google). bot_config: proveedor = gemini | claude,
+//  modelo_gemini / modelo_gemini_respaldo (o modelo / modelo_respaldo para Claude).
+//
+// Secretos (Edge Functions → Secrets): GEMINI_API_KEY (o ANTHROPIC_API_KEY), BOT_TOKEN, MANYCHAT_API_KEY
+// En Settings de la función, «Verify JWT» debe estar APAGADO (la protección es x-bot-token).
 // =====================================================================
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -178,6 +182,91 @@ async function claude(body: unknown) {
   }
 }
 
+// ---------- Gemini (Google) ----------
+async function gemini(modelo: string, body: unknown) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelo)}:generateContent`;
+  for (let intento = 0; intento < 3; intento++) {
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "x-goog-api-key": Deno.env.get("GEMINI_API_KEY")!, "content-type": "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (r.ok) return await r.json();
+    const txt = (await r.text()).slice(0, 300);
+    if ((r.status === 429 || r.status >= 500) && intento < 2) { await dormir(1500 * (intento + 1)); continue; }
+    throw new Error(`gemini ${r.status}: ${txt}`);
+  }
+}
+
+// Un "motor" esconde las diferencias entre proveedores. Cada ronda: pedir() → textos y llamadas a herramientas;
+// responder(resultados) → agrega lo que devolvieron las herramientas para la ronda siguiente.
+type Llamada = { id: string; name: string; input: Any };
+type Ronda = { textos: string[]; llamadas: Llamada[]; cortada: boolean };
+type Herramienta = { name: string; description: string; input_schema: Any };
+interface Motor { pedir(): Promise<Ronda>; responder(res: { id: string; name: string; content: string }[]): void }
+
+function motorClaude(modelo: string, fijo: string, variable: string, tools: Herramienta[], conv: Msg[]): Motor {
+  const msgs: Any[] = conv.map((m) => ({ ...m }));
+  return {
+    async pedir() {
+      const out = await claude({
+        model: modelo, max_tokens: 700,
+        system: [{ type: "text", text: fijo, cache_control: { type: "ephemeral" } }, { type: "text", text: variable }],
+        tools, messages: msgs,
+      });
+      const bloques: Any[] = out?.content ?? [];
+      msgs.push({ role: "assistant", content: bloques });
+      const llamadas = bloques.filter((b) => b.type === "tool_use").map((b) => ({ id: b.id, name: b.name, input: b.input }));
+      return {
+        textos: bloques.filter((b) => b.type === "text" && b.text?.trim()).map((b) => b.text.trim()),
+        llamadas: out?.stop_reason === "tool_use" ? llamadas : [],
+        cortada: out?.stop_reason === "max_tokens",
+      };
+    },
+    responder(res) { msgs.push({ role: "user", content: res.map((r) => ({ type: "tool_result", tool_use_id: r.id, content: r.content })) }); },
+  };
+}
+
+// Esquema JSON → esquema de Gemini (tipos en mayúscula)
+function esquemaGemini(x: Any): Any {
+  if (Array.isArray(x)) return x.map(esquemaGemini);
+  if (!x || typeof x !== "object") return x;
+  const o: Any = {};
+  for (const [k, v] of Object.entries(x)) o[k] = k === "type" && typeof v === "string" ? v.toUpperCase() : esquemaGemini(v);
+  return o;
+}
+
+function motorGemini(modelo: string, fijo: string, variable: string, tools: Herramienta[], conv: Msg[]): Motor {
+  const contents: Any[] = conv.map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: String(m.content) }] }));
+  const declaraciones = tools.map((t) => ({ name: t.name, description: t.description, parameters: esquemaGemini(t.input_schema) }));
+  return {
+    async pedir() {
+      const out = await gemini(modelo, {
+        systemInstruction: { parts: [{ text: fijo + "\n\n" + variable }] },
+        contents,
+        tools: [{ functionDeclarations: declaraciones }],
+        generationConfig: { maxOutputTokens: 2048, temperature: 0.4 },
+      });
+      const cand = out?.candidates?.[0];
+      const parts: Any[] = cand?.content?.parts ?? [];
+      // se devuelve tal cual (incluye las firmas de pensamiento que Gemini exige en la ronda siguiente)
+      if (parts.length) contents.push({ role: "model", parts });
+      const fin = String(cand?.finishReason ?? (out?.promptFeedback?.blockReason ? "BLOCKED" : ""));
+      const llamadas = parts.filter((p) => p.functionCall).map((p, i) => ({ id: p.functionCall.id ?? `${p.functionCall.name}-${i}`, name: p.functionCall.name, input: p.functionCall.args ?? {} }));
+      return {
+        textos: parts.filter((p) => typeof p.text === "string" && p.text.trim() && !p.thought).map((p) => p.text.trim()),
+        llamadas,
+        // cortada: por largo, por filtros de seguridad o sin respuesta → nunca se envía a medias
+        cortada: !cand || (fin !== "STOP" && fin !== "" && !llamadas.length) || (!parts.length),
+      };
+    },
+    responder(res) {
+      contents.push({ role: "user", parts: res.map((r) => ({ functionResponse: { name: r.name, ...(r.id && !r.id.startsWith(r.name + "-") ? { id: r.id } : {}), response: { resultado: r.content } } })) });
+    },
+  };
+}
+
 // =====================================================================
 // Recepción
 // =====================================================================
@@ -314,8 +403,11 @@ async function responder(contacto: string, mensaje: string, nombre: string, cana
     await alertar("tope_total", `El bot llegó a ${delDia} respuestas hoy: todo pasa a humanos hasta mañana.`);
     return;
   }
-  const principal = (cfg.modelo || "claude-sonnet-5-5").trim();
-  const modelo = delDia < num(cfg.tope_principal, 500) ? principal : (cfg.modelo_respaldo || "claude-haiku-5-5").trim();
+  // Proveedor: "gemini" (Google) o "claude" (Anthropic). Se cambia en bot_config sin tocar el código.
+  const proveedor = (cfg.proveedor || "gemini").trim().toLowerCase() === "claude" ? "claude" : "gemini";
+  const principal = proveedor === "claude" ? (cfg.modelo || "claude-sonnet-5-5").trim() : (cfg.modelo_gemini || "gemini-2.5-flash").trim();
+  const respaldo = proveedor === "claude" ? (cfg.modelo_respaldo || "claude-haiku-5-5").trim() : (cfg.modelo_gemini_respaldo || "gemini-2.5-flash-lite").trim();
+  const modelo = delDia < num(cfg.tope_principal, 500) ? principal : respaldo;
 
   // 4) Hora, horario y cuándo responde el equipo
   const minutos = t.hora * 60 + t.minuto;
@@ -383,7 +475,7 @@ async function responder(contacto: string, mensaje: string, nombre: string, cana
       : "Descuento BCV de hoy confirmado; buscar_precios ya lo aplica.",
   ].join("\n");
 
-  const tools = [
+  const tools: Herramienta[] = [
     {
       name: "buscar_precios",
       description: "Precios de hoy desde el catálogo, con descuento aplicado. Devuelve una marca [[PRECIOS_n]] para poner en tu respuesta. Úsala siempre que pregunten precio o costo.",
@@ -415,7 +507,7 @@ async function responder(contacto: string, mensaje: string, nombre: string, cana
     },
   ];
 
-  // 8) Conversación con Claude
+  // 8) Conversación con el modelo (Gemini o Claude)
   let humano = false, motivo = "", huboDatos = false, esBot = false;
   let forzarHumano = "";
   const alertasPendientes: [string, string][] = [];
@@ -424,23 +516,17 @@ async function responder(contacto: string, mensaje: string, nombre: string, cana
   // todo lo del cliente va marcado (no solo el último mensaje)
   const msgs: Msg[] = conv.map((m) => m.role === "user" ? { role: "user", content: `<cliente>${limpiarCliente(String(m.content))}</cliente>` } : m);
 
+  const motor = (proveedor === "claude" ? motorClaude : motorGemini)(modelo, fijo, variable, tools, msgs);
   for (let ronda = 0; ronda < 4; ronda++) {
     if (Date.now() > limite - 15_000) { forzarHumano = "sin_tiempo"; partes.length = 0; break; }
-    const out = await claude({
-      model: modelo,
-      max_tokens: 700,
-      system: [{ type: "text", text: fijo, cache_control: { type: "ephemeral" } }, { type: "text", text: variable }],
-      tools,
-      messages: msgs,
-    });
-    if (out?.stop_reason === "max_tokens") { forzarHumano = "respuesta_cortada"; partes.length = 0; break; }
-    const bloques: Any[] = out?.content ?? [];
-    for (const b of bloques) if (b.type === "text" && b.text?.trim()) partes.push(b.text.trim());
-    const usos = bloques.filter((b) => b.type === "tool_use");
-    if (out?.stop_reason !== "tool_use" || !usos.length) break;
+    const out = await motor.pedir();
+    if (out.cortada) { forzarHumano = "respuesta_cortada"; partes.length = 0; break; }
+    partes.push(...out.textos);
+    const usos = out.llamadas;
+    if (!usos.length) break;
     if (ronda === 3) { forzarHumano = "demasiadas_herramientas"; break; }
 
-    const resultados = await Promise.all(usos.map(async (u: Any) => {
+    const resultados = await Promise.all(usos.map(async (u: Llamada) => {
       let c = "";
       if (u.name === "pasar_a_humano") {
         humano = true; motivo = String(u.input?.motivo ?? "otro");
@@ -472,10 +558,9 @@ async function responder(contacto: string, mensaje: string, nombre: string, cana
         c = error ? "ERROR al buscar la ficha." : "FICHAS: " + JSON.stringify(data ?? []);
         if (!error && Array.isArray(data) && data.some((f: Any) => String(f?.ficha ?? "").trim() || String(f?.usos ?? "").trim())) huboDatos = true;
       } else c = "Herramienta desconocida.";
-      return { type: "tool_result", tool_use_id: u.id, content: c };
+      return { id: u.id, name: u.name, content: c };
     }));
-    msgs.push({ role: "assistant", content: bloques });
-    msgs.push({ role: "user", content: resultados });
+    motor.responder(resultados);
   }
 
   if (forzarHumano && !humano) { humano = true; motivo = forzarHumano; }   // red de seguridad: no depende de que Claude lo recuerde
