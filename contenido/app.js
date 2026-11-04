@@ -594,9 +594,13 @@
       html += '<section class="card"><div class="bloque-head"><h2>Texto del carrusel</h2><button class="btn link" data-act="copiar" data-id="' + p.id + '" data-campo="texto_carrusel">Copiar</button></div><div class="texto-largo">' + nl2br(p.texto_carrusel) + '</div></section>';
     }
     if (!(enForm && L.esFinal(p))) {
-      L.plataformasDe(p).forEach(function (pl) {
-        if (p['copy_' + pl]) html += '<section class="card"><div class="bloque-head"><h2>Copy de ' + L.PLATAFORMAS[pl] + '</h2><button class="btn link" data-act="copiar" data-id="' + p.id + '" data-campo="copy_' + pl + '">Copiar</button></div><div class="texto-largo">' + nl2br(p['copy_' + pl]) + '</div></section>';
-      });
+      // El copy se puede escribir o cambiar en cualquier estado (al enviar a aprobar ya sale puesto)
+      var hayCopy = L.plataformasDe(p).some(function (pl) { return p['copy_' + pl]; });
+      html += '<section class="card bloque-copy"><div class="bloque-head"><h2>Copy</h2><button class="btn link" data-act="editar-copy" data-id="' + p.id + '">✏️ ' + (hayCopy ? 'Editar copy' : 'Escribir copy') + '</button></div>' +
+        (hayCopy ? L.plataformasDe(p).map(function (pl) {
+          return '<div class="copy-plat"><div class="bloque-head"><h3>' + L.PLATAFORMAS[pl] + '</h3>' + (p['copy_' + pl] ? '<button class="btn link" data-act="copiar" data-id="' + p.id + '" data-campo="copy_' + pl + '">Copiar</button>' : '') + '</div>' +
+            (p['copy_' + pl] ? '<div class="texto-largo">' + nl2br(p['copy_' + pl]) + '</div>' : '<p class="muted">Sin copy todavía.</p>') + '</div>';
+        }).join('') : '<p class="muted">Sin copy todavía. Lo puedes adelantar desde ya.</p>') + '</section>';
     }
     html += '<section class="card"><div class="bloque-head"><h2>Brief</h2><button class="btn link" data-act="editar" data-id="' + p.id + '">Editar</button></div>' +
       ([['Producto', p.producto], ['Gancho', p.gancho], ['Objetivo', p.objetivo]].filter(function (x) { return x[1]; }).map(function (x) {
@@ -1131,6 +1135,9 @@
       cuerpo = '<h2>En espera de mercancía</h2><p class="muted">Se le quitan las fechas. Cuando llegue, marcas «Llegó» y la vuelves a programar.</p>' +
         '<form data-form="espera" data-id="' + p.id + '"><label class="campo">¿Qué mercancía?<input name="producto" required list="lista-productos" value="' + esc(p.producto || '') + '" autocomplete="off"></label>' + datalistProductos() +
         '<button class="btn grande" type="submit">Poner en espera</button></form>';
+    } else if (m.tipo === 'copy' && p) {
+      cuerpo = '<h2>Copy</h2><form data-form="copy" data-id="' + p.id + '">' + camposCopy(p, '') +
+        '<p class="ayuda">Queda guardado en la pieza y anotado en el historial. Al enviar a aprobar sale puesto.</p><button class="btn grande" type="submit">Guardar</button></form>';
     } else if (m.tipo === 'editar' && p) {
       cuerpo = '<h2>Editar</h2><form data-form="editar" data-id="' + p.id + '">' + camposBrief(p, L.puedeCambiarTipo(p)) +
         (L.puedeCambiarTipo(p) ? '' : '<p class="ayuda">El tipo ya no se puede cambiar en esta etapa.</p>') + '<button class="btn grande" type="submit">Guardar</button></form>';
@@ -1301,6 +1308,8 @@
     'vistas': function (el) { abrirModal({ tipo: 'vistas', id: el.dataset.id }); },
     'espera': function (el) { abrirModal({ tipo: 'espera', id: el.dataset.id }); },
     'editar': function (el) { abrirModal({ tipo: 'editar', id: el.dataset.id }); },
+    'editar-copy': function (el) { abrirModal({ tipo: 'copy', id: el.dataset.id }); },
+    'es-nombre': function (el) { palabraPropia(el.dataset.val); var f = el.closest('form'); revisarCopy(f.querySelector('[data-act="ortografia"][data-campo="' + el.dataset.campo + '"]')); },
     'fechas': function (el) { abrirModal({ tipo: 'fechas', id: el.dataset.id }); },
     'hueco': function (el) { abrirModal({ tipo: 'hueco', fecha: el.dataset.fecha, plat: el.dataset.plat, tipoPieza: el.dataset.tipo }); },
     'cerrar-modal': function () { S.modal = null; S.sucio = false; pintarCapas(); },
@@ -1407,6 +1416,14 @@
     if (!S.catalogo) S.catalogo = (store.catalogo ? store.catalogo() : Promise.resolve([])).catch(function () { S.catalogo = null; return []; });
     return S.catalogo;
   }
+  // Palabras que la persona marcó como nombre (producto nuevo, marca): el corrector ya no las marca en este teléfono
+  var CLAVE_PALABRAS = 'bfcontenido_palabras';
+  function palabrasPropias() { try { return JSON.parse(localStorage.getItem(CLAVE_PALABRAS) || '[]'); } catch (e) { return []; } }
+  function palabraPropia(w) {
+    var n = L.normal(w); if (!n) return;
+    var l = palabrasPropias(); if (l.indexOf(n) < 0) l.push(n);
+    try { localStorage.setItem(CLAVE_PALABRAS, JSON.stringify(l.slice(-300))); } catch (e) { /* nada */ }
+  }
   function revisarCopy(el) {
     var campo = el.dataset.campo, f = el.closest('form'), ta = f && f.elements[campo];
     var res = f && f.querySelector('[data-res="' + campo + '"]');
@@ -1421,7 +1438,10 @@
         function () { return null; });
     Promise.all([lt, catalogo()]).then(function (x) {
       if (ta.value !== texto) return;  // cambió mientras se revisaba
-      var errores = x[0], faltan = L.nombresIncompletos(texto, x[1]), h = '';
+      var faltan = L.nombresIncompletos(texto, x[1]), h = '';
+      var conocidas = L.palabrasCatalogo(x[1]), propias = palabrasPropias();
+      // Un nombre del catálogo o una palabra marcada como nombre no es un error de ortografía
+      var errores = x[0] && x[0].filter(function (m) { var w = L.normal(texto.substr(m.offset, m.length)); return !(w && (conocidas[w] || propias.indexOf(w) >= 0)); });
       if (errores === null) h += '<p class="rojo">No se pudo revisar la ortografía ahora (¿sin internet?). Las palabras subrayadas en rojo igual son errores.</p>';
       else if (!errores.length) h += '<p class="ok-txt">✓ Sin errores de ortografía ni gramática.</p>';
       else h += '<ul class="corr-lista">' + errores.slice(0, 15).map(function (m) {
@@ -1429,9 +1449,9 @@
         return '<li><span class="corr-mal">' + esc(w) + '</span> <span class="muted">' + esc(m.message) + '</span>' +
           (m.replacements || []).slice(0, 3).map(function (r) {
             return ' <button class="btn chico sec" type="button" data-act="aplicar-corr" data-campo="' + esc(campo) + '" data-off="' + m.offset + '" data-len="' + m.length + '" data-val="' + esc(r.value) + '">' + esc(r.value || '(quitar)') + '</button>';
-          }).join('') + '</li>';
+          }).join('') + (/^\S+$/.test(w) ? ' <button class="btn chico fantasma" type="button" data-act="es-nombre" data-campo="' + esc(campo) + '" data-val="' + esc(w) + '">Es un nombre</button>' : '') + '</li>';
       }).join('') + '</ul>';
-      if (faltan.length) h += '<p class="rojo">Pon el nombre completo para el buscador:</p><ul class="corr-lista">' + faltan.map(function (n) { return '<li><b>' + esc(n) + '</b></li>'; }).join('') + '</ul>';
+      if (faltan.length) h += '<p class="muted">¿Hablas de alguno de estos? Para el buscador conviene el nombre completo. Si es un producto nuevo que todavía no está en el catálogo, ignora esto.</p><ul class="corr-lista">' + faltan.map(function (n) { return '<li><b>' + esc(n) + '</b></li>'; }).join('') + '</ul>';
       res.innerHTML = h;
     });
   }
@@ -1603,6 +1623,11 @@
       var p = pieza(f.dataset.id), r;
       try { r = L.accionEspera(p, val(f, 'producto'), S.hoy); } catch (e) { return aviso(e.message); }
       accion(function () { return ejecutar(p, r); }, function () { S.modal = null; S.flash = { titulo: '📦 En espera', texto: 'Aparece en «En espera de mercancía» hasta que marques que llegó.' }; }, btn);
+    },
+    copy: function (f, btn) {
+      var p = pieza(f.dataset.id), r;
+      try { r = L.accionCopy(p, { copy_ig: f.elements.copy_ig ? f.elements.copy_ig.value : null, copy_tt: f.elements.copy_tt ? f.elements.copy_tt.value : null }); } catch (e) { return aviso(e.message); }
+      accion(function () { return ejecutar(p, r); }, function () { S.modal = null; S.flash = { titulo: 'Copy guardado' }; }, btn);
     },
     editar: function (f, btn) {
       var p = pieza(f.dataset.id), r;

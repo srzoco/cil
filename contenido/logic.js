@@ -723,6 +723,26 @@
     return { patch: patch, match: {}, eventos: [{ tipo: 'editada', texto: cambios.join(', '), datos: { cambios: cambios } }] };
   }
 
+  // Copy de IG / TikTok desde la ficha, en cualquier estado de la pieza (lo escribe quien edita; queda en el historial)
+  function accionCopy(p, datos) {
+    var patch = {}, cambios = [], ev = {};
+    plataformasDe(p).forEach(function (pl) {
+      var k = 'copy_' + pl;
+      if (!datos || datos[k] == null) return;
+      var v = limpiar(datos[k]);
+      if ((v || null) !== (p[k] || null)) { patch[k] = v; ev[k] = v; cambios.push('copy de ' + PLATAFORMAS[pl]); }
+    });
+    if (!cambios.length) throw err('No hay cambios que guardar.');
+    ev.cambios = cambios;
+    return { patch: patch, match: {}, eventos: [{ tipo: 'editada', texto: cambios.join(', '), datos: ev }] };
+  }
+  // Palabras de los nombres del catálogo (para que el corrector no marque marcas ni nombres de productos como error)
+  function palabrasCatalogo(nombres) {
+    var out = {};
+    (nombres || []).forEach(function (n) { normal(n).split(' ').forEach(function (w) { if (w) out[w] = 1; }); });
+    return out;
+  }
+
   // ---------- Pendientes por rol ----------
   function pendientes(piezas, eventos, rol, hoy, ajustes) {
     hoy = hoy || hoyISO();
@@ -1084,6 +1104,6 @@
     lunesDe: lunesDe, horaValida: horaValida, momento: momento, fmtHora: fmtHora, grabacionPorDefecto: grabacionPorDefecto, grabacionDeSemana: grabacionDeSemana,
     estadoGrabacion: estadoGrabacion, accionConfirmar: accionConfirmar, accionReagendar: accionReagendar, accionCerrarGrabacion: accionCerrarGrabacion,
     accionReabrirGrabacion: accionReabrirGrabacion, racha: racha, msgGrabacion: msgGrabacion,
-    CHECKLIST_ENVIO: CHECKLIST_ENVIO, ventanaPublicar: ventanaPublicar, semanaGrabacion: semanaGrabacion, RACHA_AUTO: RACHA_AUTO, rachaLimpia: rachaLimpia, checklistEnvio: checklistEnvio, accionRevisionDespues: accionRevisionDespues, nombresIncompletos: nombresIncompletos
+    CHECKLIST_ENVIO: CHECKLIST_ENVIO, ventanaPublicar: ventanaPublicar, semanaGrabacion: semanaGrabacion, RACHA_AUTO: RACHA_AUTO, rachaLimpia: rachaLimpia, checklistEnvio: checklistEnvio, accionRevisionDespues: accionRevisionDespues, nombresIncompletos: nombresIncompletos, accionCopy: accionCopy, palabrasCatalogo: palabrasCatalogo, normal: normal
   };
 });

@@ -659,3 +659,5 @@ html.marco-fijo .desliza:has(~ .tabs) .contenido { padding-bottom: 28px; }
 .ok-txt { color: var(--green); font-weight: 600; }
 .despues .acciones { margin-top: 8px; }
 @media (max-width: 400px) { .seg-tabs.chico { gap: 2px; } .seg-tabs.chico button { padding: 7px 5px; font-size: .78rem; } }
+.bloque-copy .copy-plat { margin-top: 10px; }
+.bloque-copy .copy-plat h3 { margin: 0; font: 600 .95rem var(--sans); }
