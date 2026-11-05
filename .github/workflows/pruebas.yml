@@ -31,6 +31,9 @@ jobs:
       - name: Pruebas del robot de Yobel
         env: { PGPASSWORD: prueba }
         run: psql -h localhost -U postgres -d cil -v ON_ERROR_STOP=1 -q -f pruebas/robot.sql
+      - name: Medidas del precio (el bot dice «el gramo»)
+        env: { PGPASSWORD: prueba }
+        run: psql -h localhost -U postgres -d cil -v ON_ERROR_STOP=1 -q -f pruebas/medidas.sql
       - name: Pruebas del bot (Claude y ManyChat simulados, base de datos real)
         env: { PGPASSWORD: prueba }
         run: pruebas/bot/correr.sh
@@ -52,6 +55,7 @@ jobs:
           node pruebas/sesiones.js
           node pruebas/armador.js
           node pruebas/armador-stock.js
+          node pruebas/armador-medidas.js
           PGPASSWORD=prueba PSQL="psql -h localhost -U postgres -d cil" node pruebas/pendientes.js
 
   # Si las pruebas pasan y es la rama principal, instala cil.sql en Supabase (no borra datos).

@@ -3391,7 +3391,7 @@ language plpgsql immutable set search_path = public, extensions as $$
 declare
   vacias text[] := array['cuanto','cuesta','cuestan','precio','precios','vale','valen','tienen','tiene','hay',
     'el','la','los','las','de','del','un','una','unos','unas','me','por','para','con','favor','quiero','quisiera',
-    'busco','y','o','a','en','que','al','su','sus','dolar','dolares','divisa','divisas','bs','bolivares','kilo','kg'];
+    'busco','y','o','a','en','que','al','su','sus','dolar','dolares','divisa','divisas','bs','bolivares','kilo','kg','kilos','gramo','gramos','gr','litro','litros'];
   w text; r text[] := '{}';
 begin
   foreach w in array regexp_split_to_array(public.bot_norm(trim(coalesce(q, ''))), '[^a-z0-9ñ]+') loop
@@ -3497,7 +3497,10 @@ begin
       continue when v ? 'sin_actualizar' and not r.bajo_pedido;   -- no vino de Yobel: no se da precio
       lineas := lineas || E'\n' || coalesce(nullif(r.p->>'emoji', ''), '🔹') || ' $'
                 || trim_scale(round((v->>'precio')::numeric * (1 - descu / 100), 2))::text
-                || case when (v->>'kilo')::boolean then ' el kilo' else '' end
+                -- medida del precio (Armador): v.medida manda; los datos viejos solo tienen v.kilo
+                || case coalesce(v->>'medida', case when (v->>'kilo')::boolean then 'kg' else '' end)
+                     when 'kg' then ' el kilo' when 'g' then ' el gramo' when '100g' then ' los 100 g' when 'l' then ' el litro'
+                     when 'u' then ' la unidad' when 'docena' then ' la docena' when 'paquete' then ' el paquete' when 'caja' then ' la caja' else '' end
                 || case when coalesce(trim(v->>'texto'), '') <> '' then ' ' || trim(v->>'texto') else '' end;
     end loop;
     continue when lineas = '';

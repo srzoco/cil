@@ -184,6 +184,7 @@ legend{font-weight:700;font-size:13px;padding:0 6px}
 .v-price input:focus{outline:none}
 .v-price:focus-within{outline:2px solid var(--accent);outline-offset:1px}
 .v-kilo{display:flex;gap:6px;align-items:center;font-size:13.5px;white-space:nowrap;cursor:pointer}
+.v-medida{width:auto;min-width:0;max-width:150px;padding:10px 8px}
 .v-del{border:0;background:transparent;color:var(--muted);font-size:22px;line-height:1;cursor:pointer;padding:4px 8px;border-radius:6px}
 .emojis{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
 .emojis button{font-size:18px;border:1px solid var(--line);background:var(--surface);border-radius:8px;width:36px;height:36px;cursor:pointer;padding:0}
@@ -355,11 +356,15 @@ body.usd #usd-badge{display:inline-block}
 
   /* Actualiza los productos existentes con los precios del CSV y agrega los nuevos.
      Las presentaciones sin "ref" (agregadas a mano) no se tocan. */
+  function medidaDe(v){ return v && v.medida != null ? String(v.medida) : (v && v.kilo ? 'kg' : ''); }
   function importCSV(text, productos, ahora){
     var R = records(text);
     if (R.error) return { error: R.error };
     ahora = ahora || new Date().toISOString();
     var validas = [], piezas = 0, raros = [], inactivas = 0;
+    // Precio de $1 o menos suele ser un error del archivo, salvo en lo que se vende por gramo o por 100 g
+    var porPeso = {};
+    (productos || []).forEach(function(p){ (p.presentaciones || []).forEach(function(v){ if (v.ref && ['g', '100g'].indexOf(medidaDe(v)) >= 0) porPeso[v.ref] = 1; }); });
     R.recs.forEach(function(r){
       if (!r.producto) return;
       if (r.estado && norm(r.estado) !== 'activa'){ inactivas++; return; }
@@ -367,7 +372,7 @@ body.usd #usd-badge{display:inline-block}
       var p = price(r.precio);
       var st = r.stock != null && r.stock !== '' ? price(r.stock) : NaN;
       var item = { ref: refOf(r), r: r, precio: p, kilo: norm(r.unidad) === 'kg', texto: textoOf(r), stock: st };
-      if (!(p > 1)){ raros.push({ producto: r.producto, texto: item.texto, precio: r.precio }); return; }
+      if (!(p > 1) && !(p > 0 && porPeso[item.ref])){ raros.push({ producto: r.producto, texto: item.texto, precio: r.precio }); return; }
       validas.push(item);
     });
     var porRef = {};
@@ -386,11 +391,13 @@ body.usd #usd-badge{display:inline-block}
           return;
         }
         usadas[v.ref] = 1;
-        if (n.precio !== v.precio || n.kilo !== !!v.kilo){
-          cambios.push({ nombre: p.nombre, texto: v.texto, antes: v.precio, despues: n.precio, kilo: n.kilo });
+        // Si gerencia eligió la medida a mano (por gramo, por unidad…), el archivo no la cambia
+        var aMano = ['', 'kg'].indexOf(medidaDe(v)) < 0;
+        if (n.precio !== v.precio || (!aMano && n.kilo !== !!v.kilo)){
+          cambios.push({ nombre: p.nombre, texto: v.texto, antes: v.precio, despues: n.precio, kilo: aMano ? medidaDe(v) === 'kg' : n.kilo, medida: aMano ? v.medida : undefined });
           toco = true;
         }
-        var o = Object.assign({}, v, { precio: n.precio, kilo: n.kilo });
+        var o = Object.assign({}, v, aMano ? { precio: n.precio } : { precio: n.precio, kilo: n.kilo, medida: n.kilo ? 'kg' : '' });
         delete o.sin_actualizar;
         if (isFinite(n.stock)) o.stock = n.stock;
         pres.push(o);
@@ -529,8 +536,13 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
     if (Number(v.stock) <= 0) return '<span class="tag off">Agotado</span>';
     return numero ? '<span class="tag">Stock ' + esc(num(Number(v.stock))) + '</span>' : '';
   }
+  // Medidas del precio ("$x el gramo"). v.medida manda; los datos viejos solo tienen v.kilo.
+  function medidas(){ return [['', 'sin medida', '', ''], ['kg', 'por kilo', ' el kilo', '/kg'], ['g', 'por gramo', ' el gramo', '/g'], ['100g', 'por 100 g', ' los 100 g', '/100 g'],
+    ['l', 'por litro', ' el litro', '/l'], ['u', 'por unidad', ' la unidad', '/u'], ['docena', 'por docena', ' la docena', '/docena'], ['paquete', 'por paquete', ' el paquete', '/paq.'], ['caja', 'por caja', ' la caja', '/caja']]; }
+  function medidaDe(v){ return v && v.medida != null ? String(v.medida) : (v && v.kilo ? 'kg' : ''); }
+  function medidaTxt(v, corto){ var m = medidas().find(function(x){ return x[0] === medidaDe(v); }); return m ? m[corto ? 3 : 2] : ''; }
   function lineFor(p, v, d){
-    return (p.emoji || '🔹') + ' ' + money(priceToday(v, d)) + (v.kilo ? ' el kilo' : '') + (v.texto ? ' ' + v.texto.trim() : '');
+    return (p.emoji || '🔹') + ' ' + money(priceToday(v, d)) + medidaTxt(v) + (v.texto ? ' ' + v.texto.trim() : '');
   }
   function selEntries(){
     const out = [];
@@ -857,7 +869,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
             </div>
             <fieldset>
               <legend>Presentaciones</legend>
-              <p class="hint" style="margin:0">Precio de la web, sin descuento. Marca «por kilo» para que salga «$x el kilo».</p>
+              <p class="hint" style="margin:0">Precio de la web, sin descuento. Elige la medida (por kilo, por gramo…) para que salga «$x el kilo» o «$x el gramo».</p>
               <div id="vrows" style="display:grid;gap:12px"></div>
               <div><button type="button" class="btn ghost small" id="add-v">Agregar presentación</button></div>
             </fieldset>
@@ -969,7 +981,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
     if (!items.length){ list.innerHTML = `<p class="empty">Ningún producto coincide con «${esc(S.q)}».</p>`; return; }
     list.innerHTML = items.map(p => {
       const on = S.sel.has(p.id);
-      const lines = p.presentaciones.map(v => `<span${agotado(p, v) ? ' class="sin"' : ''}><span class="price">${money(priceToday(v, d))}${v.kilo ? ' el kilo' : ''}</span> ${esc(v.texto)}${stockTag(p, v, false)}</span>`).join('');
+      const lines = p.presentaciones.map(v => `<span${agotado(p, v) ? ' class="sin"' : ''}><span class="price">${money(priceToday(v, d))}${medidaTxt(v)}</span> ${esc(v.texto)}${stockTag(p, v, false)}</span>`).join('');
       return `<button type="button" class="prod" data-id="${esc(p.id)}" aria-pressed="${on}">
         <span class="tick" aria-hidden="true"></span>
         <span class="prod-main">
@@ -987,7 +999,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
     $('#selected').innerHTML = e.length ? e.map(({ p }) => {
       const set = S.sel.get(p.id);
       const chips = p.presentaciones.length > 1
-        ? `<div class="vchips">${p.presentaciones.map((v, i) => `<button type="button" class="vchip" data-act="v" data-i="${i}" aria-pressed="${set.has(i)}">${money(priceToday(v, d))}${v.kilo ? ' el kilo' : ''} ${esc(v.texto)}${agotado(p, v) ? ' · agotado' : ''}</button>`).join('')}</div>`
+        ? `<div class="vchips">${p.presentaciones.map((v, i) => `<button type="button" class="vchip" data-act="v" data-i="${i}" aria-pressed="${set.has(i)}">${money(priceToday(v, d))}${medidaTxt(v)} ${esc(v.texto)}${agotado(p, v) ? ' · agotado' : ''}</button>`).join('')}</div>`
         : '';
       return `<div class="sitem" data-id="${esc(p.id)}"><div class="sitem-top"><span class="sname">${esc(p.nombre)}</span><button type="button" class="x" data-act="rm" aria-label="Quitar ${esc(p.nombre)}">×</button></div>${chips}</div>`;
     }).join('') : '<p class="empty small">Aún no has elegido productos.</p>';
@@ -1030,7 +1042,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
       for (const p of items){
         const c = p.categoria || 'Sin categoría';
         if (c !== last){ html += `<h3 class="cgroup">${esc(c)}</h3>`; last = c; }
-        const vars = p.presentaciones.map(v => `<li><span class="web">${money(v.precio)}${v.kilo ? '/kg' : ''} web</span>${d != null ? ` → <span class="hoy">${money(priceToday(v, d))}${v.kilo ? ' el kilo' : ''}</span>` : ''} ${esc(v.texto)}${stockTag(p, v, true)}</li>`).join('');
+        const vars = p.presentaciones.map(v => `<li><span class="web">${money(v.precio)}${medidaTxt(v, true)} web</span>${d != null ? ` → <span class="hoy">${money(priceToday(v, d))}${medidaTxt(v)}</span>` : ''} ${esc(v.texto)}${stockTag(p, v, true)}</li>`).join('');
         html += `<article class="crow"><div class="crow-main"><p class="cname">${esc(p.emoji)} ${esc(p.nombre)}</p><p class="cmeta">${p.actualizado ? 'Precio actualizado ' + esc(shortDate(p.actualizado)) : 'Sin fecha de actualización'}${p.ficha ? ' · Con ficha' : ''}${p.usos ? ' · Con usos' : ''}</p><ul class="cvars">${vars}</ul></div><button type="button" class="btn ghost small owner-only" data-edit="${esc(p.id)}">Editar</button></article>`;
       }
       list.innerHTML = items.length ? html : `<p class="empty">Ningún producto coincide con «${esc(S.cq)}».</p>`;
@@ -1060,7 +1072,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
         <span class="pill">${inf.eliminadas.length === 1 ? '1 no vino en el archivo' : inf.eliminadas.length + ' no vinieron en el archivo'}</span>
         ${inf.raros.length ? `<span class="pill alert">${inf.raros.length === 1 ? '1 con precio sospechoso' : inf.raros.length + ' con precio sospechoso'}</span>` : ''}
       </div>
-      ${sec('Precios que cambian', inf.cambios.map(c => `${esc(c.nombre)}${c.texto ? ' · ' + esc(c.texto) : ''}: ${money(c.antes)} → <strong>${money(c.despues)}</strong>${c.kilo ? ' el kilo' : ''}`), true)}
+      ${sec('Precios que cambian', inf.cambios.map(c => `${esc(c.nombre)}${c.texto ? ' · ' + esc(c.texto) : ''}: ${money(c.antes)} → <strong>${money(c.despues)}</strong>${medidaTxt(c)}`), true)}
       ${sec('Productos nuevos', inf.nuevos.map(esc))}
       ${sec('No vinieron en el archivo: no se borran, quedan con «stock sin actualizar» (revísalos en Yobel)', inf.eliminadas.map(x => esc(x.nombre) + (x.texto ? ' · ' + esc(x.texto) : '')))}
       ${sec('No se cargaron por precio sospechoso (revísalos en la web)', inf.raros.map(x => esc(x.producto) + (x.texto ? ' · ' + esc(x.texto) : '') + ': $' + esc(x.precio)), true)}
@@ -1076,8 +1088,8 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
   function openEditor(id){
     const p = id ? S.products.find(x => x.id === id) : null;
     const draft = p
-      ? { presentaciones: p.presentaciones.map(v => ({ texto: v.texto, precio: num(v.precio), kilo: !!v.kilo, ref: v.ref || null, stock: v.stock })) }
-      : { presentaciones: [{ texto: '', precio: '', kilo: false, ref: null }] };
+      ? { presentaciones: p.presentaciones.map(v => ({ texto: v.texto, precio: num(v.precio), medida: medidaDe(v), ref: v.ref || null, stock: v.stock })) }
+      : { presentaciones: [{ texto: '', precio: '', medida: '', ref: null }] };
     S.edit = { id: p ? p.id : null, draft };
     $('#ed-title').textContent = p ? 'Editar producto' : 'Nuevo producto';
     $('#f-nombre').value = p ? p.nombre : '';
@@ -1101,7 +1113,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
     $('#vrows').innerHTML = rows.map((v, i) => `<div class="vrow" data-i="${i}">
       <input id="v-texto-${i}" class="field v-texto" data-k="texto" type="text" value="${esc(v.texto)}" placeholder="${i === 0 ? 'de la barra completa (aprox. 3kg)' : 'de la media barra (aprox. 1.5kg)'}" aria-label="Descripción de la presentación ${i + 1}">
       <span class="v-price"><span aria-hidden="true">$</span><input id="v-precio-${i}" data-k="precio" type="text" inputmode="decimal" value="${esc(v.precio)}" placeholder="0" aria-label="Precio en la web, presentación ${i + 1}"></span>
-      <label class="v-kilo" for="v-kilo-${i}"><input id="v-kilo-${i}" data-k="kilo" type="checkbox" ${v.kilo ? 'checked' : ''}> por kilo</label>
+      <select id="v-medida-${i}" class="field v-medida" data-k="medida" aria-label="Medida del precio, presentación ${i + 1}">${medidas().map(m => `<option value="${m[0]}"${medidaDe(v) === m[0] ? ' selected' : ''}>${m[1]}</option>`).join('')}</select>
       <button type="button" class="v-del" data-del="${i}" aria-label="Quitar presentación ${i + 1}" ${rows.length < 2 ? 'disabled' : ''}>×</button>
     </div>`).join('');
   }
@@ -1115,7 +1127,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
       ficha: $('#f-ficha').value.trim(),
       usos: $('#f-usos').value.trim(),
       presentaciones: S.edit.draft.presentaciones
-        .map(v => { const o = { texto: String(v.texto || '').trim(), precio: parseNum(v.precio), kilo: !!v.kilo }; if (v.ref) o.ref = v.ref; if (v.stock != null && v.stock !== '') o.stock = v.stock; return o; })
+        .map(v => { const md = medidaDe(v), o = { texto: String(v.texto || '').trim(), precio: parseNum(v.precio), kilo: md === 'kg', medida: md }; if (v.ref) o.ref = v.ref; if (v.stock != null && v.stock !== '') o.stock = v.stock; return o; })
         .filter(v => v.texto || isFinite(v.precio))
     };
   }
@@ -1387,7 +1399,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
   function onVrow(e){
     const row = e.target.closest('.vrow'); if (!row || !S.edit) return;
     const v = S.edit.draft.presentaciones[Number(row.dataset.i)], k = e.target.dataset.k;
-    if (k === 'kilo') v.kilo = e.target.checked; else if (k) v[k] = e.target.value;
+    if (k) v[k] = e.target.value;
     renderEdPreview();
   }
   $('#vrows').addEventListener('input', onVrow);
@@ -1402,7 +1414,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
   $('#add-v').addEventListener('click', () => {
     const rows = S.edit.draft.presentaciones;
     const prev = rows[rows.length - 1];
-    rows.push({ texto: '', precio: '', kilo: prev ? prev.kilo : false, ref: null });
+    rows.push({ texto: '', precio: '', medida: prev ? medidaDe(prev) : '', ref: null });
     renderVrows(); renderEdPreview();
     $('#v-texto-' + (rows.length - 1)).focus();
   });
