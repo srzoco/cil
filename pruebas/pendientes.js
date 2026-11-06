@@ -120,6 +120,13 @@ sql(`insert into auth.users (id, email) values ('${JAVIER}', 'javier@x.com') on 
   if (sql(`select pend_avisos from personas where id = '${SARA}'`).trim() !== 'resumen') fallas.push('No se guardó la preferencia de avisos');
   for (const t of ['#/pedi', '#/personas', '#/cerrados', '#/p/no-existe', '#/nuevo?para=' + JAVIER]) { donde = 'Sara ' + t; await p.goto(BASE + '/pendientes/' + t); await p.waitForTimeout(300); await revisar(); }
 
+  // «+ Nuevo pendiente» fijo abajo: se ve sin bajar aunque la lista sea larga
+  donde = 'Sara botón fijo';
+  sql(`insert into pendientes (titulo, creado_por, para) select 'Relleno ' || g, '${SARA}', '${SARA}' from generate_series(1, 15) g`);
+  await p.goto(BASE + '/pendientes/#/cerrados'); await p.goto(BASE + '/pendientes/#/mi'); await p.reload(); await p.waitForTimeout(700);
+  const caja = await p.locator('.nuevo-fijo a').boundingBox();
+  if (!caja || caja.y + caja.height > 760 || caja.y < 500) fallas.push('«+ Nuevo pendiente» no queda fijo abajo: ' + JSON.stringify(caja));
+  if (process.env.FOTOS) await p.screenshot({ path: process.env.FOTOS + '/fijo.png' });
   if (process.env.FOTOS) { await p.goto(BASE + '/pendientes/#/cerrados'); await p.waitForTimeout(400); await p.screenshot({ path: process.env.FOTOS + '/lista.png' });
     await p.locator('a.item').first().click(); await p.waitForTimeout(900); await p.screenshot({ path: process.env.FOTOS + '/detalle.png', fullPage: true }); }
   // Un empleado no entra

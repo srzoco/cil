@@ -163,7 +163,8 @@
         h += '<div class="persona-sec"><h2>' + esc(p.nombre) + '</h2><a class="btn chico sec" href="#/nuevo?para=' + esc(p.id) + '">Pedirle algo</a></div>' + agrupada(con, 'Nada pendiente con ' + p.nombre.split(' ')[0] + '.');
       });
     }
-    h += '<div class="acciones"><a class="btn grande" href="#/nuevo">+ Nuevo pendiente</a></div>';
+    // Fijo abajo: se crea un pendiente sin bajar hasta el final de la lista
+    h += '<div class="nuevo-fijo"><a class="btn grande" href="#/nuevo">+ Nuevo pendiente</a></div>';
     h += '<div class="card pref-avisos"><label class="campo">Avisos de pedidos y respuestas<select data-cambio="pref"><option value="momento"' + (S.d.avisos === 'momento' ? ' selected' : '') + '>Al momento</option>' +
       '<option value="resumen"' + (S.d.avisos === 'resumen' ? ' selected' : '') + '>Un resumen a las 8 a. m.</option></select></label>' +
       '<p class="ayuda">Lo que vence te avisa ese día igual (a su hora, o a las 8 a. m. si no tiene hora).</p></div>';

@@ -20,8 +20,9 @@ ok(L.accionCopy(Object.assign({}, idea, { fase: 'publicada' }), { copy_ig: 'b' }
   await p.route('**/config.js', r => r.fulfill({ contentType: 'application/javascript', body: 'window.BARQUERO_CONFIG={};' }));
   // LanguageTool marca «Pistachos» (está en el catálogo) y «Zaatar» (producto nuevo)
   await p.route('https://api.languagetool.org/**', async r => {
-    const t = new URLSearchParams(r.request().postData()).get('text');
-    const m = ['Pistachos', 'Zaatar'].filter(w => t.includes(w)).map(w => ({ offset: t.indexOf(w), length: w.length, message: 'Posible error ortográfico.', replacements: [{ value: 'Pistacho' }] }));
+    const qs = new URLSearchParams(r.request().postData()), t = qs.get('text');
+    if (qs.get('altLanguages') !== 'en-US') fallas.push('No le pide a LanguageTool aceptar palabras en inglés');
+    const m = ['Pistachos tostados', 'Zaatar'].filter(w => t.includes(w)).map(w => ({ offset: t.indexOf(w), length: w.length, message: 'Posible error ortográfico.', replacements: [{ value: 'Pistacho' }] }));
     r.fulfill({ contentType: 'application/json', body: JSON.stringify({ matches: m }) });
   });
   await p.goto(BASE + '/contenido/'); await p.waitForTimeout(800);
@@ -31,10 +32,10 @@ ok(L.accionCopy(Object.assign({}, idea, { fase: 'publicada' }), { copy_ig: 'b' }
   ok(await p.$('[data-act="editar-copy"]'), 'No sale el botón para escribir el copy');
   await p.click('[data-act="editar-copy"]'); await p.waitForTimeout(400);
   const ta = p.locator('form[data-form="copy"] textarea').first();
-  await ta.fill('Pistachos y Zaatar con queso manchego');
+  await ta.fill('Pistachos tostados y Zaatar con queso manchego');
   await p.locator('form[data-form="copy"] [data-act="ortografia"]').first().click(); await p.waitForTimeout(600);
   let res = await p.locator('form[data-form="copy"] .corrector-res').first().innerHTML();
-  ok(!/>Pistachos</.test(res), 'Marcó como error un nombre del catálogo');
+  ok(!/>Pistachos tostados</.test(res), 'Marcó como error un nombre del catálogo (de varias palabras)');
   ok(/Zaatar/.test(res), 'No marcó la palabra desconocida');
   ok(!/class="rojo"/.test(res), 'El aviso del catálogo sigue saliendo como error (rojo)');
   ok(/producto nuevo/.test(res), 'Falta la explicación de producto nuevo');
@@ -43,8 +44,8 @@ ok(L.accionCopy(Object.assign({}, idea, { fase: 'publicada' }), { copy_ig: 'b' }
   ok(!/corr-mal/.test(res), 'Después de «Es un nombre» sigue marcando Zaatar');
   await p.click('form[data-form="copy"] button[type="submit"]'); await p.waitForTimeout(700);
   const g = await p.evaluate(id => JSON.parse(localStorage.getItem('bfcontenido_demo_v2')).piezas.find(x => x.id === id), id);
-  ok(g.copy_ig === 'Pistachos y Zaatar con queso manchego', 'No guardó el copy: ' + g.copy_ig);
-  ok(/Pistachos y Zaatar/.test(await p.textContent('.bloque-copy')), 'No muestra el copy en la ficha');
+  ok(g.copy_ig === 'Pistachos tostados y Zaatar con queso manchego', 'No guardó el copy: ' + g.copy_ig);
+  ok(/Pistachos tostados y Zaatar/.test(await p.textContent('.bloque-copy')), 'No muestra el copy en la ficha');
   const w = await p.evaluate(() => document.documentElement.scrollWidth);
   ok(w <= 376, 'Se sale de la pantalla: ' + w);
   await b.close();

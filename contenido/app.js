@@ -1432,7 +1432,7 @@
     if (!texto.trim()) { res.innerHTML = '<p class="muted">Escribe el copy primero.</p>'; return; }
     res.innerHTML = '<p class="muted">Revisando…</p>';
     var lt = fetch(LT_URL, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ text: texto, language: 'es', enabledOnly: 'false' }).toString() })
+      body: new URLSearchParams({ text: texto, language: 'es', altLanguages: 'en-US', enabledOnly: 'false' }).toString() })
       .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
       .then(function (j) { return (j.matches || []).filter(function (m) { var w = texto.substr(m.offset, m.length); return !/^[#@]/.test(w) && !/barquero/i.test(w); }); },
         function () { return null; });
@@ -1441,7 +1441,11 @@
       var faltan = L.nombresIncompletos(texto, x[1]), h = '';
       var conocidas = L.palabrasCatalogo(x[1]), propias = palabrasPropias();
       // Un nombre del catálogo o una palabra marcada como nombre no es un error de ortografía
-      var errores = x[0] && x[0].filter(function (m) { var w = L.normal(texto.substr(m.offset, m.length)); return !(w && (conocidas[w] || propias.indexOf(w) >= 0)); });
+      // (si el error abarca varias palabras, se ignora cuando todas son conocidas)
+      var errores = x[0] && x[0].filter(function (m) {
+        var ws = L.normal(texto.substr(m.offset, m.length)).split(' ').filter(Boolean);
+        return !(ws.length && ws.every(function (w) { return conocidas[w] || propias.indexOf(w) >= 0; }));
+      });
       if (errores === null) h += '<p class="rojo">No se pudo revisar la ortografía ahora (¿sin internet?). Las palabras subrayadas en rojo igual son errores.</p>';
       else if (!errores.length) h += '<p class="ok-txt">✓ Sin errores de ortografía ni gramática.</p>';
       else h += '<ul class="corr-lista">' + errores.slice(0, 15).map(function (m) {

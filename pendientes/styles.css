@@ -36,3 +36,5 @@
 .pref-avisos select { font: inherit; padding: 8px 10px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--card); color: var(--ink); }
 .grupo-t { font: 700 .82rem var(--sans); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 18px 0 8px; }
 .grupo-t:first-of-type { margin-top: 4px; }
+.nuevo-fijo { position: sticky; bottom: 0; z-index: 5; background: var(--bg); padding: 10px 0 calc(10px + env(safe-area-inset-bottom)); margin-top: 14px; border-top: 1px solid var(--line); }
+.nuevo-fijo .btn { width: 100%; }
