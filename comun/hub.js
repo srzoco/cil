@@ -37,7 +37,7 @@
     CLAVES.forEach(function (k) { try { localStorage.setItem(k, JSON.stringify(ses)); } catch (e) { /* sin almacenamiento */ } });
     return ses;
   }
-  function olvidar() { try { CLAVES.forEach(function (k) { localStorage.removeItem(k); }); localStorage.removeItem('barquero_directo'); Object.keys(localStorage).forEach(function (k) { if (k.indexOf('barquero_cache_') === 0) localStorage.removeItem(k); }); } catch (e) { /* nada */ } }
+  function olvidar() { try { CLAVES.forEach(function (k) { localStorage.removeItem(k); }); localStorage.removeItem('barquero_directo'); Object.keys(localStorage).forEach(function (k) { if (k.indexOf('barquero_cache_') === 0 || k.indexOf('bfcontenido_cache_') === 0) localStorage.removeItem(k); }); } catch (e) { /* nada */ } }
   function auth(ruta, cuerpo, tok) {
     var h = { apikey: KEY, 'Content-Type': 'application/json' }; if (tok) h.Authorization = 'Bearer ' + tok;
     return fetch(URL_SB + '/auth/v1/' + ruta, { method: 'POST', headers: h, body: JSON.stringify(cuerpo || {}) });

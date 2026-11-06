@@ -24,8 +24,10 @@
     cambiar: function () { var n = actual() === 'oscuro' ? 'claro' : 'oscuro'; try { localStorage.setItem(K, n); } catch (e) { /* sin almacenamiento */ } aplicar(n); return n; }
   };
   // Versión nueva publicada (avisa sw.js): recién abierta y sin nadie escribiendo, se recarga sola; si no, botón «Actualizar»
-  var T0 = Date.now();
-  function escribiendo() { var a = document.activeElement; return !!a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName); }
+  // Si la persona ya tocó algo (p. ej. «Llegué» apenas abrió), no se recarga sola: no se corta lo que estaba haciendo
+  var T0 = Date.now(), toco = false;
+  ['pointerdown', 'keydown'].forEach(function (ev) { document.addEventListener(ev, function () { toco = true; }, { capture: true, passive: true }); });
+  function escribiendo() { var a = document.activeElement; return toco || (!!a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)); }
   function botonActualizar() {
     if (document.getElementById('cil-actualizar')) return;
     var d = document.createElement('button'); d.id = 'cil-actualizar'; d.type = 'button'; d.textContent = '↻ Hay una versión nueva · Actualizar';
