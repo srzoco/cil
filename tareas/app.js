@@ -411,10 +411,15 @@
     var c = consumible(m.id) || {}, rec = consumo().recetas[m.id] || {}, nombre = c.nombre || rec.nombre || 'Consumible', unidad = c.unidad || rec.unidad || '';
     var pedido = (consumo().pendientes || []).filter(function (p) { return p.id === m.pedido; })[0];
     var gente = esAdmin() ? empleados().filter(function (pe) { return !c.local_id || localDe(pe) === c.local_id; }) : [];
+    // Gerencia también recibe consumibles (de cualquier local)
+    var ger = esAdmin() ? S.data.personas.filter(function (pe) { return pe.rol === 'admin' && pe.activo !== false && gente.indexOf(pe) < 0; })
+      .sort(function (a, b) { return (a.nombre || '') < (b.nombre || '') ? -1 : 1; }) : [];
+    var opc = function (l) { return l.map(function (pe) { return '<option value="' + esc(pe.id) + '">' + esc(pe.nombre || pe.email) + '</option>'; }).join(''); };
     return '<h2>Entregar ' + esc(nombre) + '</h2>' + (c.id ? '<p class="muted">Hay ' + esc(cantTxt(c.stock)) + ' (' + esc(unidad) + ')</p>' : '') +
       '<form data-form="entregar" data-id="' + esc(m.id) + '" data-pedido="' + esc(m.pedido || '') + '">' +
       (pedido ? '<p class="nota">Para <b>' + esc(pedido.persona) + '</b>' + (pedido.nota ? ': «' + esc(pedido.nota) + '»' : '') + '</p><input type="hidden" name="persona" value="' + esc(pedido.persona_id) + '">'
-        : '<label class="campo">¿A quién?<select name="persona" required><option value="">Elige</option>' + gente.map(function (pe) { return '<option value="' + esc(pe.id) + '">' + esc(pe.nombre || pe.email) + '</option>'; }).join('') + '</select></label>') +
+        : '<label class="campo">¿A quién?<select name="persona" required><option value="">Elige</option>' +
+          (ger.length ? '<optgroup label="Equipo">' + opc(gente) + '</optgroup><optgroup label="Gerencia">' + opc(ger) + '</optgroup>' : opc(gente)) + '</select></label>') +
       '<label class="campo">¿Cuánto entregaste? <small>(' + esc(unidad) + ')</small><input name="cantidad" type="number" min="0.1" max="1000" step="0.1" value="1" required inputmode="decimal"></label>' +
       '<div class="acciones"><button class="btn grande" type="submit">Entregado</button></div></form>';
   }

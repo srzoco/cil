@@ -23,6 +23,25 @@
     boton: function () { var o = actual() === 'oscuro'; return '<button class="boton-tema" data-tema-cambiar aria-label="' + (o ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro') + '" title="' + (o ? 'Modo claro' : 'Modo oscuro') + '">' + (o ? SOL : LUNA) + '</button>'; },
     cambiar: function () { var n = actual() === 'oscuro' ? 'claro' : 'oscuro'; try { localStorage.setItem(K, n); } catch (e) { /* sin almacenamiento */ } aplicar(n); return n; }
   };
+  // Versión nueva publicada (avisa sw.js): recién abierta y sin nadie escribiendo, se recarga sola; si no, botón «Actualizar»
+  var T0 = Date.now();
+  function escribiendo() { var a = document.activeElement; return !!a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName); }
+  function botonActualizar() {
+    if (document.getElementById('cil-actualizar')) return;
+    var d = document.createElement('button'); d.id = 'cil-actualizar'; d.type = 'button'; d.textContent = '↻ Hay una versión nueva · Actualizar';
+    d.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:calc(96px + env(safe-area-inset-bottom));z-index:900;border:0;border-radius:999px;' +
+      'padding:12px 18px;background:var(--accent,#001E54);color:var(--accent-ink,#fff);font:600 .9rem var(--sans,system-ui);box-shadow:0 6px 18px rgba(0,30,84,.25);max-width:calc(100% - 32px)';
+    d.onclick = function () { location.reload(); };
+    document.body.appendChild(d);
+  }
+  if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', function (e) {
+    if (!e.data || e.data.tipo !== 'nueva-version') return;
+    var ya = 0; try { ya = +sessionStorage.getItem('cil_recargado') || 0; } catch (x) { /* nada */ }
+    if (Date.now() - T0 < 8000 && !escribiendo() && Date.now() - ya > 30000) {
+      try { sessionStorage.setItem('cil_recargado', String(Date.now())); } catch (x) { /* nada */ }
+      location.reload();
+    } else botonActualizar();
+  });
   document.addEventListener('click', function (e) {
     var b = e.target.closest && e.target.closest('[data-tema-cambiar]'); if (!b) return;
     window.BarqueroTema.cambiar();

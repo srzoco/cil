@@ -1,9 +1,9 @@
 /* CIL — guarda la app en el teléfono para que abra al instante (menú y módulos).
    Los datos (Supabase) nunca se guardan aquí: siempre se piden a internet.
    Al publicar una versión nueva, se sube el número de VERSION y el ?v= de index.html. */
-var VERSION = 'cil-v90';
-var ARCHIVOS = ['./', 'index.html', 'comun/tema.css?v=3', 'comun/tema.js?v=2', 'comun/cambiar.js?v=1', 'comun/hub.css?v=8', 'comun/hub.js?v=14',
-  'tareas/', 'tareas/styles.css?v=33', 'tareas/logic.js?v=28', 'tareas/store.js?v=42', 'tareas/app.js?v=61', 'pendientes/', 'pendientes/styles.css?v=4', 'pendientes/app.js?v=9',
+var VERSION = 'cil-v91';
+var ARCHIVOS = ['./', 'index.html', 'comun/tema.css?v=3', 'comun/tema.js?v=3', 'comun/cambiar.js?v=1', 'comun/hub.css?v=8', 'comun/hub.js?v=14',
+  'tareas/', 'tareas/styles.css?v=33', 'tareas/logic.js?v=28', 'tareas/store.js?v=42', 'tareas/app.js?v=62', 'pendientes/', 'pendientes/styles.css?v=4', 'pendientes/app.js?v=9',
   'mensajes/', 'contenido/', 'contenido/styles.css?v=9', 'contenido/logic.js?v=8', 'contenido/demo.js?v=1', 'contenido/store.js?v=3', 'contenido/app.js?v=13',
   'manifest.webmanifest', 'icon-192.png'];
 
@@ -23,7 +23,7 @@ self.addEventListener('fetch', function (e) {
   if (req.method !== 'GET' || url.origin !== location.origin) return;  // Supabase y lo demás: directo a internet
   // La página y config.js: lo guardado al instante (abrir o cambiar de herramienta no espera a internet)
   // y lo nuevo se guarda por detrás para la próxima vez. Si no hay nada guardado, se espera a internet.
-  // Una versión publicada se ve al segundo abrir.
+  // Si hay una versión nueva, la página se entera y se actualiza (ver abajo).
   if (req.mode === 'navigate' || /config\.js$/.test(url.pathname)) {
     var red = fetch(req).then(function (r) {
       if (r.ok) { var copia = r.clone(); caches.open(VERSION).then(function (c) { c.put(req, copia); }); }
@@ -34,6 +34,17 @@ self.addEventListener('fetch', function (e) {
       .then(function (hit) { return hit || caches.match(req, { ignoreSearch: true }); });
     e.waitUntil(red.catch(function () { /* sin internet */ }));
     e.respondWith(guardado.then(function (hit) {
+      // Si se abrió lo guardado y en internet ya hay otra versión de la página, se le avisa a la página
+      // (comun/tema.js la recarga sola si recién abrió y nadie está escribiendo; si no, muestra «Actualizar»)
+      if (hit && req.mode === 'navigate') e.waitUntil(red.then(function (r) {
+        if (!r.ok) return;
+        return Promise.all([hit.clone().text(), r.clone().text()]).then(function (t) {
+          if (t[0] === t[1]) return;
+          return self.clients.get(e.resultingClientId || e.clientId).then(function (cl) {
+            if (cl) cl.postMessage({ tipo: 'nueva-version' });
+          });
+        });
+      }).catch(function () { /* sin internet */ }));
       return hit || red.catch(function () { return caches.match('index.html').then(function (x) { if (x) return x; throw new Error('sin red'); }); });
     }));
     return;
