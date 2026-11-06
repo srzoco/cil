@@ -24,7 +24,7 @@ App web unificada **CIL** en GitHub Pages: https://srzoco.github.io/cil/
 - `tareas/app.js`: interfaz SPA (rutas hash, delegación `data-acc` / `data-form`). Equipo es un menú con subpantallas `#/equipo/<personas|grupos|locales|frio|calendario|avisos|ajustes>`. Una sola llamada `datos_app(p_completo)` trae todo, con RLS (security invoker).
 - `supabase/cil.sql`: esquema completo y re-ejecutable. Ella lo corre entero en el SQL Editor; no borra datos.
 - `supabase/functions/avisos/index.ts`: Edge Function de Web Push (VAPID + aes128gcm propios con WebCrypto). La llama pg_cron cada minuto con el header `x-aviso-secreto`.
-- `sw.js`: caché de la app. **Al publicar cambios sube `VERSION` en sw.js y los `?v=` en los `index.html` y en la lista ARCHIVOS.**
+- `sw.js`: caché de la app. **Al publicar cambios sube `VERSION` en sw.js y los `?v=` en los `index.html` y en la lista ARCHIVOS.** Desde el 6/11/2026 las páginas abren al instante con lo guardado (antes esperaban hasta 1,5 s a internet) y lo nuevo se guarda por detrás: **una versión publicada se ve al segundo abrir**. Al activarse guarda también la versión anterior para que una página vieja abierta no mezcle archivos. Pendientes guarda lo último visto (`barquero_cache_pend_<id>`), como Tareas, Contenido y el Armador.
 
 ## Reglas de negocio ya decididas (no cambiarlas sin preguntar)
 - Reparto por carga relativa: minutos × 100 / capacidad (%), tolerancia de 15 min, tope por tarea, grupos, `rota` (fuera de la rotación) y días de trabajo por persona y por local.

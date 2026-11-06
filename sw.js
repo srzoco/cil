@@ -1,9 +1,9 @@
 /* CIL — guarda la app en el teléfono para que abra al instante (menú y módulos).
    Los datos (Supabase) nunca se guardan aquí: siempre se piden a internet.
    Al publicar una versión nueva, se sube el número de VERSION y el ?v= de index.html. */
-var VERSION = 'cil-v89';
+var VERSION = 'cil-v90';
 var ARCHIVOS = ['./', 'index.html', 'comun/tema.css?v=3', 'comun/tema.js?v=2', 'comun/cambiar.js?v=1', 'comun/hub.css?v=8', 'comun/hub.js?v=14',
-  'tareas/', 'tareas/styles.css?v=33', 'tareas/logic.js?v=28', 'tareas/store.js?v=42', 'tareas/app.js?v=61', 'pendientes/', 'pendientes/styles.css?v=4', 'pendientes/app.js?v=8',
+  'tareas/', 'tareas/styles.css?v=33', 'tareas/logic.js?v=28', 'tareas/store.js?v=42', 'tareas/app.js?v=61', 'pendientes/', 'pendientes/styles.css?v=4', 'pendientes/app.js?v=9',
   'mensajes/', 'contenido/', 'contenido/styles.css?v=9', 'contenido/logic.js?v=8', 'contenido/demo.js?v=1', 'contenido/store.js?v=3', 'contenido/app.js?v=13',
   'manifest.webmanifest', 'icon-192.png'];
 
@@ -12,32 +12,29 @@ self.addEventListener('install', function (e) {
   self.skipWaiting();
 });
 self.addEventListener('activate', function (e) {
+  // Se guarda también la versión anterior: una página que abrió con ella sigue encontrando sus archivos (no se mezclan versiones)
   e.waitUntil(caches.keys().then(function (ks) {
-    return Promise.all(ks.filter(function (k) { return k !== VERSION; }).map(function (k) { return caches.delete(k); }));
+    var viejas = ks.filter(function (k) { return k !== VERSION; });
+    return Promise.all(viejas.slice(0, -1).map(function (k) { return caches.delete(k); }));
   }).then(function () { return self.clients.claim(); }));
 });
 self.addEventListener('fetch', function (e) {
   var req = e.request, url = new URL(req.url);
   if (req.method !== 'GET' || url.origin !== location.origin) return;  // Supabase y lo demás: directo a internet
-  // La página: primero internet (para ver los cambios), pero si tarda más de 1,5 s se abre lo guardado
-  // y lo nuevo queda guardado para la próxima vez. Con internet lento ya no se queda la pantalla en blanco.
-  // config.js casi nunca cambia: lo guardado de una vez, y se actualiza por detrás.
+  // La página y config.js: lo guardado al instante (abrir o cambiar de herramienta no espera a internet)
+  // y lo nuevo se guarda por detrás para la próxima vez. Si no hay nada guardado, se espera a internet.
+  // Una versión publicada se ve al segundo abrir.
   if (req.mode === 'navigate' || /config\.js$/.test(url.pathname)) {
     var red = fetch(req).then(function (r) {
       if (r.ok) { var copia = r.clone(); caches.open(VERSION).then(function (c) { c.put(req, copia); }); }
       return r;
     });
-    var guardado = caches.match(req, { ignoreSearch: true });
+    // primero en la versión actual (la anterior también se guarda, pero ahí la página es vieja)
+    var guardado = caches.open(VERSION).then(function (c) { return c.match(req, { ignoreSearch: true }); })
+      .then(function (hit) { return hit || caches.match(req, { ignoreSearch: true }); });
     e.waitUntil(red.catch(function () { /* sin internet */ }));
-    if (/config\.js$/.test(url.pathname)) {
-      e.respondWith(guardado.then(function (hit) { return hit || red; }));
-      return;
-    }
-    e.respondWith(new Promise(function (ok, mal) {
-      var listo = false, fin = function (r) { if (!listo && r) { listo = true; ok(r); } };
-      var plan = function () { guardado.then(function (hit) { if (hit) fin(hit); else red.then(fin, function () { caches.match('index.html').then(function (x) { if (x) fin(x); else mal(new Error('sin red')); }); }); }); };
-      var t = setTimeout(plan, 1500);
-      red.then(function (r) { clearTimeout(t); fin(r); }, function () { clearTimeout(t); plan(); });
+    e.respondWith(guardado.then(function (hit) {
+      return hit || red.catch(function () { return caches.match('index.html').then(function (x) { if (x) return x; throw new Error('sin red'); }); });
     }));
     return;
   }

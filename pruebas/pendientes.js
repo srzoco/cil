@@ -127,6 +127,13 @@ sql(`insert into auth.users (id, email) values ('${JAVIER}', 'javier@x.com') on 
   const caja = await p.locator('.nuevo-fijo a').boundingBox();
   if (!caja || caja.y + caja.height > 760 || caja.y < 500) fallas.push('«+ Nuevo pendiente» no queda fijo abajo: ' + JSON.stringify(caja));
   if (process.env.FOTOS) await p.screenshot({ path: process.env.FOTOS + '/fijo.png' });
+  // Abre al instante con lo último guardado aunque la base de datos tarde
+  donde = 'Sara con base de datos lenta';
+  if (!(await p.evaluate((id) => !!localStorage.getItem('barquero_cache_pend_' + id), SARA))) fallas.push('No guardó lo último visto en el teléfono');
+  await p.route('http://sb.test/rest/v1/rpc/pend_datos', () => { /* no responde */ });
+  await p.reload(); await p.waitForTimeout(500);
+  await debe('Relleno 3');
+  await p.unroute('http://sb.test/rest/v1/rpc/pend_datos');
   if (process.env.FOTOS) { await p.goto(BASE + '/pendientes/#/cerrados'); await p.waitForTimeout(400); await p.screenshot({ path: process.env.FOTOS + '/lista.png' });
     await p.locator('a.item').first().click(); await p.waitForTimeout(900); await p.screenshot({ path: process.env.FOTOS + '/detalle.png', fullPage: true }); }
   // Un empleado no entra

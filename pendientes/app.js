@@ -79,8 +79,16 @@
   function ruta() { var h = location.hash.replace(/^#\/?/, ''); var q = h.split('?'); return { partes: q[0].split('/').filter(Boolean), q: new URLSearchParams(q[1] || '') }; }
 
   // ---------- Datos ----------
+  // Lo último que se vio queda guardado en el teléfono (por persona): la página abre al instante y se actualiza por detrás
+  function claveCache() { var s = leer(); return s ? 'barquero_cache_pend_' + s.user.id : null; }
   function cargar() {
-    return rpc('pend_datos').then(function (d) { S.d = d; pintar(); limpiarFotos(); }, function (e) {
+    if (!S.d) { var k = claveCache(), c = null; try { c = k && JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { /* nada */ } if (c && c.yo) { S.d = c; pintar(); } }
+    return rpc('pend_datos').then(function (d) {
+      var k = claveCache(); try { if (k && d) localStorage.setItem(k, JSON.stringify(d)); } catch (e) { /* nada */ }
+      S.d = d; pintar(); limpiarFotos();
+    }, function (e) {
+      if (e.message === 'sesion' || /Solo gerencia/.test(e.message)) { var k = claveCache(); try { if (k) localStorage.removeItem(k); } catch (x) { /* nada */ } S.d = null; }
+      else if (S.d) { aviso(e.message === 'Failed to fetch' ? 'Sin conexión: estás viendo lo último guardado.' : e.message); return; }
       if (e.message === 'sesion') { $app.innerHTML = '<div class="centro"><h1>Inicia sesión</h1><p class="muted">Entra primero desde el menú de CIL.</p><a class="btn" href="../">Ir al menú</a></div>'; return; }
       if (/Solo gerencia/.test(e.message)) { $app.innerHTML = '<div class="centro"><h1>Solo gerencia</h1><p class="muted">Esta página es para las personas de gerencia.</p><a class="btn" href="../">Volver al menú</a></div>'; return; }
       $app.innerHTML = '<div class="centro"><h1>No se pudo cargar</h1><p class="muted">' + esc(e.message === 'Failed to fetch' ? 'No hay conexión. Revisa el internet.' : e.message) + '</p><button class="btn" data-acc="recargar">Intentar de nuevo</button></div>';
