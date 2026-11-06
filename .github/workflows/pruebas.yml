@@ -56,6 +56,7 @@ jobs:
           node pruebas/armador.js
           node pruebas/armador-stock.js
           node pruebas/armador-medidas.js
+          node pruebas/cambiar.js
           PGPASSWORD=prueba PSQL="psql -h localhost -U postgres -d cil" node pruebas/pendientes.js
 
   # Si las pruebas pasan y es la rama principal, instala cil.sql en Supabase (no borra datos).
