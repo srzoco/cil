@@ -34,6 +34,9 @@ jobs:
       - name: Medidas del precio (el bot dice «el gramo»)
         env: { PGPASSWORD: prueba }
         run: psql -h localhost -U postgres -d cil -v ON_ERROR_STOP=1 -q -f pruebas/medidas.sql
+      - name: Costos (solo gerencia y acceso «costos»)
+        env: { PGPASSWORD: prueba }
+        run: psql -h localhost -U postgres -d cil -v ON_ERROR_STOP=1 -q -f pruebas/costos.sql
       - name: Pruebas del bot (Claude y ManyChat simulados, base de datos real)
         env: { PGPASSWORD: prueba }
         run: pruebas/bot/correr.sh
@@ -56,6 +59,7 @@ jobs:
           node pruebas/armador.js
           node pruebas/armador-stock.js
           node pruebas/armador-medidas.js
+          node pruebas/armador-costo.js
           node pruebas/cambiar.js
           node pruebas/consumibles-gerencia.js
           PGPASSWORD=prueba PSQL="psql -h localhost -U postgres -d cil" node pruebas/pendientes.js

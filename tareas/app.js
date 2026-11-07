@@ -1844,7 +1844,7 @@
       (variosLocales() ? '<label class="campo">Local<select name="local_id">' + locales().map(function (l) { return '<option value="' + esc(l.id) + '">' + esc(l.nombre) + '</option>'; }).join('') + '</select></label>' : '') +
       '<label class="campo">Rol<select name="rol"><option value="empleado">Empleado</option><option value="admin">Gerencia (entra a todo)</option></select></label>' +
       '<div class="campo"><span>Módulos a los que entra <small>(si es empleado)</small></span>' +
-      [['tareas', 'Tareas'], ['contenido', 'Contenido'], ['mensajes', 'Armador de mensajes']].map(function (m) {
+      [['tareas', 'Tareas'], ['contenido', 'Contenido'], ['mensajes', 'Armador de mensajes'], ['costos', 'Cotizador a costo (Armador; ve los costos de Yobel)']].map(function (m) {
         return '<label class="check"><input type="checkbox" name="acceso" value="' + m[0] + '"' + (m[0] === 'tareas' ? ' checked' : '') + '>' + m[1] + '</label>';
       }).join('') + '</div>' +
       '<div class="acciones"><button class="btn grande" type="submit">Agregar</button></div></form>';
@@ -1920,7 +1920,7 @@
         '<label class="check"><input type="checkbox" name="despacha"' + (pe.despacha ? ' checked' : '') + '>Sale a despachar <small class="muted">(ve el botón «Salí a despachar», si está encendido en Ajustes)</small></label>' +
         '<label class="check"><input type="checkbox" name="entrega_consumibles"' + (pe.entrega_consumibles ? ' checked' : '') + '>Encargado de consumibles <small class="muted">(entrega lo que piden en su local, como gerencia)</small></label>' : '') +
       (store.modo === 'supabase' && pe.rol !== 'admin' ? '<div class="campo"><span>Módulos a los que entra <small>(gerencia entra a todos)</small></span>' +
-        [['tareas', 'Tareas'], ['contenido', 'Contenido'], ['mensajes', 'Armador de mensajes']].map(function (m) {
+        [['tareas', 'Tareas'], ['contenido', 'Contenido'], ['mensajes', 'Armador de mensajes'], ['costos', 'Cotizador a costo (Armador; ve los costos de Yobel)']].map(function (m) {
           return '<label class="check"><input type="checkbox" name="acceso" value="' + m[0] + '"' + ((pe.accesos || []).indexOf(m[0]) >= 0 ? ' checked' : '') + '>' + m[1] + '</label>';
         }).join('') + '</div>' : '') +
       '<label class="check"><input type="checkbox" name="activo"' + (pe.activo ? ' checked' : '') + (soyYo ? ' disabled' : '') + '>Activo <small class="muted">(puede entrar)</small></label>' +

@@ -3733,3 +3733,71 @@ begin
 end $$;
 
 -- Listo. Siguiente paso de la guía: poner tu correo (y los de gerencia) como admin.
+
+-- =====================================================================
+--  Cotizador a costo (Armador, 7/11/2026): solo para vender a gerencia.
+--  Los costos van en su propia tabla, que nadie lee directo: solo la RPC costos_cotizar,
+--  para gerencia y quien tenga el acceso 'costos' (Adolfo). Nunca entran a armador_datos
+--  (que es público) ni al bot. Los sube el robot (robot_costos, con su token) o gerencia
+--  con el archivo de Yobel (costos_subir). Se cotiza con el costo promedio de Yobel + margen.
+-- =====================================================================
+create table if not exists public.costos (
+  ref            text primary key check (char_length(ref) between 1 and 400),
+  producto       text,
+  costo_promedio numeric not null check (costo_promedio > 0 and costo_promedio < 100000),
+  unidad         text,
+  actualizado    timestamptz not null default now()
+);
+alter table public.costos enable row level security;
+revoke all on public.costos from anon, authenticated;
+
+create or replace function public._costos_guardar(p_filas jsonb) returns int
+language plpgsql security definer set search_path = public as $$
+declare f jsonb; n int := 0; c numeric; ahora timestamptz := now();
+begin
+  if jsonb_typeof(p_filas) <> 'array' or jsonb_array_length(p_filas) > 3000 then raise exception 'datos no válidos'; end if;
+  for f in select value from jsonb_array_elements(p_filas) loop
+    begin c := (f->>'costo')::numeric; exception when others then continue; end;
+    continue when coalesce(trim(f->>'ref'), '') = '' or c is null or c <= 0 or c >= 100000;
+    insert into costos (ref, producto, costo_promedio, unidad, actualizado)
+    values (left(trim(f->>'ref'), 400), left(f->>'producto', 200), c, left(nullif(trim(f->>'unidad'), ''), 20), ahora)
+    on conflict (ref) do update set producto = excluded.producto, costo_promedio = excluded.costo_promedio,
+      unidad = excluded.unidad, actualizado = excluded.actualizado;
+    n := n + 1;
+  end loop;
+  return n;
+end $$;
+
+-- El robot de la tienda (mismo token que robot_subir)
+create or replace function public.robot_costos(p_token text, p_filas jsonb) returns json
+language plpgsql security definer set search_path = public as $$
+declare hash text := _bot_cfg('robot_token_hash', '');
+begin
+  if hash = '' or p_token is null or encode(sha256(convert_to(p_token, 'UTF8')), 'hex') <> hash then raise exception 'no autorizado'; end if;
+  return json_build_object('ok', true, 'costos', public._costos_guardar(p_filas));
+end $$;
+
+-- Gerencia sube el archivo de Yobel a mano (el Armador toma solo referencia, costo promedio y unidad)
+create or replace function public.costos_subir(p_filas jsonb) returns int
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.es_admin() then raise exception 'Solo gerencia.'; end if;
+  return public._costos_guardar(p_filas);
+end $$;
+
+-- Para cotizar: gerencia y quien tenga el acceso 'costos'
+create or replace function public.costos_cotizar() returns json
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not (public.es_admin() or public.tiene_acceso('costos')) then raise exception 'Sin acceso a costos.'; end if;
+  if not exists (select 1 from personas where id = auth.uid() and activo) then raise exception 'Tu usuario no está activo.'; end if;
+  return json_build_object('margen', coalesce(nullif(_bot_cfg('costo_margen', ''), '')::numeric, 1),
+    'costos', coalesce((select json_agg(json_build_object('ref', ref, 'costo', costo_promedio, 'unidad', unidad, 'actualizado', actualizado)) from costos), '[]'::json));
+end $$;
+insert into public.bot_config (clave, valor, descripcion) values
+  ('costo_margen', '1', 'Cotizador a costo del Armador: % que se suma al costo promedio de Yobel (venta a gerencia).')
+on conflict (clave) do nothing;
+
+revoke execute on function public._costos_guardar(jsonb), public.robot_costos(text, jsonb), public.costos_subir(jsonb), public.costos_cotizar() from public, anon, authenticated;
+grant execute on function public.robot_costos(text, jsonb) to anon, authenticated;
+grant execute on function public.costos_subir(jsonb), public.costos_cotizar() to authenticated;

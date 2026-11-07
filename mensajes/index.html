@@ -74,7 +74,8 @@ h1{margin:2px 0 0;font-family:var(--display);font-weight:400;font-size:clamp(26p
 
 /* Pestañas */
 .tabs{display:inline-flex;gap:4px;padding:4px;background:var(--surface-2);border-radius:999px;margin-block:0 16px}
-.tabs button{border:0;background:transparent;font-weight:600;font-size:14px;color:var(--muted);padding:8px 16px;border-radius:999px;cursor:pointer}
+.tabs button{border:0;background:transparent;font-weight:600;font-size:14px;color:var(--muted);padding:8px 16px;border-radius:999px;cursor:pointer;white-space:nowrap}
+@media (max-width:420px){ .tabs button{padding:8px 11px;font-size:13px} }
 .tabs button[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px var(--shadow)}
 
 .note,.warn{margin:0 0 16px;background:var(--gold-bg);color:var(--gold-ink);border-radius:10px;padding:10px 12px;font-size:14px}
@@ -105,6 +106,18 @@ textarea.field{resize:vertical}
 .picker{min-width:0}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-block:12px}
 .cat-sel{margin-block:10px 12px;font-weight:600}
+.costo-total{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px;background:var(--surface);border:1.5px solid var(--accent);border-radius:16px;padding:14px 16px;box-shadow:0 2px 10px var(--shadow)}
+.costo-total .lbl{display:block;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.costo-total b{display:block;font:400 30px/1.15 var(--display, Gloock, serif);color:var(--ink);font-variant-numeric:tabular-nums}
+.costo-total .sub,.krow .sub{display:block;font-size:13px;color:var(--muted)}
+.costo-total .act{flex-basis:100%}
+.costo-nota{font-size:13px;color:var(--muted);margin:10px 2px}
+.klist{display:grid;gap:10px;margin-top:12px}
+.kprod{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;display:grid;gap:8px}
+.krow{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.ktxt{min-width:0;overflow-wrap:anywhere}
+.kin{display:flex;align-items:center;gap:6px;flex:none;font-weight:600;color:var(--muted)}
+.kin input{width:92px;font:600 16px var(--body);padding:9px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg, var(--surface));color:var(--ink);text-align:right}
 .chip{border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:999px;padding:6px 12px;font-size:13px;font-weight:600;cursor:pointer}
 .chip[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .plist{display:grid;gap:8px}
@@ -433,7 +446,20 @@ body.usd #usd-badge{display:inline-block}
     return { productos: out, informe: { cambios: cambios, nuevos: nuevos, eliminadas: eliminadas, piezas: piezas, raros: raros, inactivas: inactivas, filas: R.recs.length } };
   }
 
-  return { parseCSV: parseCSV, importCSV: importCSV, emojiFor: emojiFor };
+  /* Costos del archivo de Yobel (columna «Costo promedio»): solo referencia, costo y unidad.
+     Nunca entran al catálogo (que es público): van a la tabla privada de costos. */
+  function costosCSV(text){
+    var R = records(text);
+    if (R.error) return [];
+    var out = [];
+    R.recs.forEach(function(r){
+      if (!r.producto || (r.estado && norm(r.estado) !== 'activa') || /^V[A-ZÁÉÍÓÚÑ]/.test(r.producto)) return;
+      var c = price(r['costo promedio']);
+      if (c > 0) out.push({ ref: refOf(r), producto: r.producto.slice(0, 200), costo: c, unidad: r.unidad || '' });
+    });
+    return out;
+  }
+  return { parseCSV: parseCSV, importCSV: importCSV, emojiFor: emojiFor, costosCSV: costosCSV };
 })();
 if (typeof module !== 'undefined') module.exports = BarqueroImport;
 
@@ -483,7 +509,8 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
   const S = {
     products: sortProds(DATA.productos || []), ajustes: DATA.ajustes || {}, imp: DATA.importacion || null,
     owner: false, art: null, view: 'armar', mode: 'list', q: '', cat: '', cq: '',
-    sel: new Map(), disc: loadDisc(), lastGen: '', moneda: 'bcv', tasas: null, edit: null, pending: null, busy: false, loading: HOST === 'github'
+    sel: new Map(), disc: loadDisc(), lastGen: '', moneda: 'bcv', tasas: null, edit: null, pending: null, busy: false, loading: HOST === 'github',
+    costos: null, margen: 1, kq: '', kcant: new Map()   // cotizador a costo (solo gerencia y acceso «costos»; no se guarda en el teléfono)
   };
   function applyData(d){ DATA = d; S.products = sortProds(d.productos || []); S.ajustes = d.ajustes || {}; S.imp = d.importacion || null; pruneSel(); }
   function pruneSel(){
@@ -773,6 +800,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
   <nav class="tabs" role="tablist" aria-label="Secciones">
     <button type="button" role="tab" id="tab-armar" aria-selected="true" aria-controls="view-armar" data-view="armar">Armar mensaje</button>
     <button type="button" role="tab" id="tab-catalogo" aria-selected="false" aria-controls="view-catalogo" data-view="catalogo">Catálogo</button>
+    <button type="button" role="tab" id="tab-costo" aria-selected="false" aria-controls="view-costo" data-view="costo" hidden>A costo</button>
   </nav>
 
   <main>
@@ -798,6 +826,13 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
         <label for="msg" class="lbl">Vista previa · puedes editarla antes de copiar</label>
         <textarea id="msg" class="bubble" rows="6" placeholder="Toca los productos de la lista y aquí aparece el mensaje listo, con el descuento aplicado."></textarea>
       </aside>
+    </section>
+
+    <section id="view-costo" class="costo" role="tabpanel" aria-labelledby="tab-costo" hidden>
+      <div class="costo-total" id="costo-total" aria-live="polite"></div>
+      <p class="costo-nota">🔒 Solo para vender a gerencia. Es un cotizador: no arma mensaje ni se copia.</p>
+      <input id="kq" class="field" type="search" placeholder="Buscar producto…" autocomplete="off" aria-label="Buscar producto a costo">
+      <div id="klist" class="klist"></div>
     </section>
 
     <section id="view-catalogo" role="tabpanel" aria-labelledby="tab-catalogo" hidden>
@@ -914,12 +949,56 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
 <div id="toast" class="toast" role="status" aria-live="polite"></div>`;
 
   /* ---------- Render ---------- */
-  function renderAll(){ renderTabs(); renderDisc(); renderPicker(); renderComposer(); renderBar(); renderCatalog(); renderOwner(); }
+  function renderAll(){ renderTabs(); renderDisc(); renderPicker(); renderComposer(); renderBar(); renderCatalog(); renderOwner(); renderCosto(); }
+
+  /* ---------- Cotizador a costo ---------- */
+  // Cómo se cuenta: por kilo, por gramo o por unidad (según la unidad de Yobel; si no trae, la medida del catálogo)
+  function tipoCant(v, c){
+    const u = norm(c && c.unidad || '').trim();
+    if (/^(kg|kgs|kilo|kilos|kilogramo|kilogramos)$/.test(u)) return 'kg';
+    if (/^(g|gr|grs|gramo|gramos)$/.test(u)) return 'g';
+    if (u) return 'u';
+    const m = medidaDe(v); return m === 'kg' ? 'kg' : m === 'g' ? 'g' : 'u';
+  }
+  const CANT = { kg: { paso: '0.001', corto: 'kg', precio: 'el kilo', nombre: 'kilos', sin: 'por kilo' }, g: { paso: '1', corto: 'g', precio: 'el gramo', nombre: 'gramos', sin: 'por gramo' },
+    u: { paso: '1', corto: 'und', precio: 'c/u', nombre: 'unidades', sin: 'unidad' } };
+  function costoDe(ref){ const c = S.costos && ref && S.costos.get(ref); return c ? Math.round(c.costo * (1 + S.margen / 100) * 100) / 100 : null; }
+  function totalCosto(){ let t = 0, n = 0; for (const [ref, q] of S.kcant){ const c = costoDe(ref); if (c != null && q > 0){ t += c * q; n++; } } return { t: Math.round(t * 100) / 100, n }; }
+  function renderCostoTotal(){
+    if (!S.costos) return;
+    const { t, n } = totalCosto();
+    let ult = ''; for (const c of S.costos.values()) if (!ult || c.actualizado > ult) ult = c.actualizado;
+    $('#costo-total').innerHTML = `<div><span class="lbl">Total a costo</span><b>${money(t)}</b><span class="sub">${n ? n + (n === 1 ? ' producto' : ' productos') : 'Escribe cantidades abajo'} · costo promedio + ${num(S.margen)} %</span></div>` +
+      `<button type="button" class="btn ghost" id="k-clear"${n ? '' : ' disabled'}>Limpiar</button>` +
+      (ult ? `<span class="sub act">Costos de Yobel del ${esc(new Date(ult).toLocaleString('es-VE', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }))}</span>` : '');
+  }
+  function renderCosto(){
+    if (!S.costos){ return; }
+    renderCostoTotal();
+    const items = S.products.filter(p => matches(p, S.kq)).map(p => ({ p, vs: p.presentaciones.filter(v => v.ref && S.costos.has(v.ref)) })).filter(x => x.vs.length);
+    if (!items.length){ $('#klist').innerHTML = `<p class="empty">${S.kq ? 'Ningún producto con costo coincide con «' + esc(S.kq) + '».' : 'Todavía no hay costos de Yobel. Gerencia los sube con el archivo de Yobel en Catálogo.'}</p>`; return; }
+    $('#klist').innerHTML = items.map(({ p, vs }) => `<div class="kprod"><b>${esc(p.emoji || '🔹')} ${esc(p.nombre)}</b>` + vs.map(v => {
+      const c = S.costos.get(v.ref), k = CANT[tipoCant(v, c)], q = S.kcant.get(v.ref);
+      return `<label class="krow"><span class="ktxt">${esc(v.texto || k.sin)}<span class="sub">${money(costoDe(v.ref))} ${k.precio}</span></span>` +
+        `<span class="kin"><input type="number" inputmode="decimal" min="0" step="${k.paso}" data-kref="${esc(v.ref)}" value="${q > 0 ? esc(q) : ''}" placeholder="0" aria-label="${esc(p.nombre + ' ' + (v.texto || ''))}, ${k.nombre}"><span>${k.corto}</span></span></label>`;
+    }).join('') + '</div>').join('');
+  }
+  async function cargarCostos(){
+    try {
+      if (!(await tokenCil())) return;
+      const r = await rpcCil('costos_cotizar');
+      if (!r || !Array.isArray(r.costos)) return;
+      S.costos = new Map(r.costos.map(c => [c.ref, c])); S.margen = Number(r.margen) || 0;
+      renderTabs(); renderCosto();
+    } catch (_){ /* sin acceso: la pestaña no aparece */ }
+  }
 
   function renderTabs(){
     for (const b of document.querySelectorAll('.tabs button')) b.setAttribute('aria-selected', String(b.dataset.view === S.view));
     $('#view-armar').hidden = S.view !== 'armar';
     $('#view-catalogo').hidden = S.view !== 'catalogo';
+    $('#view-costo').hidden = S.view !== 'costo';
+    $('#tab-costo').hidden = !S.costos;
     $('#view-armar').dataset.mode = S.mode;
   }
   function renderOwner(){ document.body.classList.toggle('owner', S.owner); }
@@ -1323,6 +1402,14 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
     renderTabs(); renderBar(); renderCatalog();
   });
   document.addEventListener('click', e => { if (e.target.closest('[data-auto]')) backToAuto(); });
+  $('#kq').addEventListener('input', e => { S.kq = e.target.value; renderCosto(); });
+  $('#klist').addEventListener('input', e => {
+    const i = e.target.closest('[data-kref]'); if (!i) return;
+    const q = parseNum(i.value);
+    if (q > 0 && q < 100000) S.kcant.set(i.dataset.kref, q); else S.kcant.delete(i.dataset.kref);
+    renderCostoTotal();
+  });
+  $('#costo-total').addEventListener('click', e => { if (e.target.closest('#k-clear')){ S.kcant.clear(); renderCosto(); } });
   $('#force').addEventListener('click', forceUpdate);
   $('#q').addEventListener('input', e => { S.q = e.target.value; stashUI(); renderPicker(); });
   $('#cq').addEventListener('input', e => { S.cq = e.target.value; renderCatalog(); });
@@ -1372,7 +1459,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
     try { text = await f.text(); } catch (_){ err.textContent = 'No se pudo leer el archivo.'; err.hidden = false; return; }
     const res = IMP.importCSV(text, S.products);
     if (res.error){ err.textContent = res.error; err.hidden = false; S.pending = null; renderReport(); return; }
-    S.pending = { res, archivo: f.name };
+    S.pending = { res, archivo: f.name, costos: IMP.costosCSV(text) };
     renderReport();
     $('#report').scrollIntoView({ block: 'start' });
   });
@@ -1380,6 +1467,8 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
     if (e.target.closest('#imp-cancel')){ S.pending = null; renderReport(); return; }
     if (e.target.closest('#imp-ok') && S.pending){
       const p = S.pending;
+      // Los costos van aparte, a la tabla privada (solo gerencia puede subirlos)
+      if (S.cil && p.costos && p.costos.length) rpcCil('costos_subir', { p_filas: p.costos }).then(() => cargarCostos(), e => toast('No se guardaron los costos: ' + (e && e.msg || 'error')));
       publishData(nextData({ productos: p.res.productos, importacion: { fecha: new Date().toISOString(), archivo: p.archivo, productos: p.res.productos.length } }), (n => `Precios actualizados: ${n} ${n === 1 ? 'cambio' : 'cambios'}`)(p.res.informe.cambios.length));
     }
   });
@@ -1494,6 +1583,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
       renderAll();
       // ¿Es alguien de gerencia con sesión de CIL en este teléfono? Entonces puede editar sin clave.
       try { if (await tokenCil() && (await rpcCil('es_admin')) === true){ S.cil = true; S.owner = true; renderOwner(); renderGh(); renderAll(); } } catch (_){}
+      cargarCostos();
       // Cada 5 minutos: descuento, y precio y stock nuevos del robot (si nadie está editando ni revisando un CSV)
       let verDatos = db && db.actualizado_en;
       setInterval(async () => {
