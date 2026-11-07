@@ -179,5 +179,22 @@ do $$ begin
   if exists (select 1 from armador_usos where id <> 'p3') then raise exception 'FALLO: contó un id que no existe'; end if;
 end $$;
 
+-- Productos con «V» delante (descontinuados en Yobel): no se avisan como nuevos
+update armador_datos set datos = jsonb_set(datos, '{robot,fecha}', to_jsonb(now() - interval '1 hour')) where id = 1;
+delete from bot_avisos where tipo = 'robot_nuevos';
+set role anon;
+do $$ begin
+  raise notice 'subida: %', robot_subir((select t from t_token), (
+    select jsonb_agg(jsonb_build_object('ref', v->>'ref', 'producto', p->>'nombre', 'precio', (v->>'precio')::numeric, 'stock', 5))
+    from armador_datos a, jsonb_array_elements(a.datos->'productos') p, jsonb_array_elements(p->'presentaciones') v where a.id = 1 and v ? 'ref'
+  ) || '[{"ref":"VQUESO VIEJO|||||","producto":"VQUESO VIEJO","precio":5,"stock":1},{"ref":"Aceite nuevo|||||","producto":"Aceite nuevo","precio":7,"stock":2}]'::jsonb);
+end $$;
+reset role;
+do $$ declare t text; begin
+  select string_agg(texto, ' ') into t from bot_avisos where tipo = 'robot_nuevos';
+  if t is null or t not like '%Aceite nuevo%' then raise exception 'FALLO: no avisó el producto nuevo: %', t; end if;
+  if t like '%VQUESO%' then raise exception 'FALLO: avisó un descontinuado (V) como nuevo: %', t; end if;
+end $$;
+
 rollback;
 \echo 'OK: pruebas del robot'

@@ -3660,7 +3660,8 @@ begin
 
   -- en Yobel pero no en el armador
   select coalesce(array_agg(distinct mapa->k->>'producto'), '{}') into nuevos
-    from jsonb_object_keys(mapa) k where not (k = any(vistos));
+    from jsonb_object_keys(mapa) k where not (k = any(vistos))
+     and (mapa->k->>'producto') !~ '^V[A-ZÁÉÍÓÚÑ]';   -- «V» delante = descontinuado en Yobel: no se avisa como nuevo
 
   update armador_datos
      set datos = jsonb_set(jsonb_set(datos, '{productos}', prods), '{robot}',
