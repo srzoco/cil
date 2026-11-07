@@ -48,6 +48,14 @@ const fs = require('fs');
   const txt = await p.locator('#plist').innerText();
   if (!txt.includes('Agotado')) fallas.push('No marca «Agotado» en la lista');
   if (!txt.includes('Bajo pedido')) fallas.push('No marca «Bajo pedido» en la lista');
+  // categorías en lista desplegable; elegir una filtra
+  await p.selectOption('#chips', 'Mariscos'); await p.waitForTimeout(200);
+  const vis = await p.locator('#plist .prod').evaluateAll(xs => xs.map(x => x.dataset.id));
+  if (vis.join() !== 't1') fallas.push('La categoría elegida no filtra: ' + vis.join());
+  await p.selectOption('#chips', ''); await p.waitForTimeout(200);
+  // «Copiar mensaje» va arriba del mensaje
+  const arriba = await p.evaluate(() => document.getElementById('copy').getBoundingClientRect().top < document.getElementById('msg').getBoundingClientRect().top || !!(document.getElementById('msg').compareDocumentPosition(document.getElementById('copy')) & Node.DOCUMENT_POSITION_PRECEDING));
+  if (!arriba) fallas.push('«Copiar mensaje» no está arriba del mensaje');
   // al elegir el queso solo entra la presentación con stock
   await p.locator('.prod[data-id="q1"]').click();
   const msg = await p.locator('#msg').inputValue();

@@ -104,6 +104,7 @@ textarea.field{resize:vertical}
 .armar{display:grid;gap:24px;grid-template-columns:minmax(0,1fr)}
 .picker{min-width:0}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-block:12px}
+.cat-sel{margin-block:10px 12px;font-weight:600}
 .chip{border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:999px;padding:6px 12px;font-size:13px;font-weight:600;cursor:pointer}
 .chip[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .plist{display:grid;gap:8px}
@@ -778,7 +779,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
     <section id="view-armar" class="armar" data-mode="list" role="tabpanel" aria-labelledby="tab-armar">
       <div class="picker">
         <input id="q" class="field" type="search" placeholder="Buscar producto…" autocomplete="off" aria-label="Buscar producto">
-        <div id="chips" class="chips" aria-label="Categorías"></div>
+        <select id="chips" class="field cat-sel" aria-label="Categoría"></select>
         <div id="plist" class="plist"></div>
       </div>
       <aside class="composer" aria-labelledby="comp-title">
@@ -788,14 +789,14 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
           <span id="usd-badge" class="pill up">Divisas</span>
           <span id="comp-count" class="count"></span>
         </div>
-        <div id="selected" class="selected"></div>
-        <div id="disc-warn" class="warn" hidden></div>
-        <label for="msg" class="lbl">Vista previa · puedes editarla antes de copiar</label>
-        <textarea id="msg" class="bubble" rows="6" placeholder="Toca los productos de la lista y aquí aparece el mensaje listo, con el descuento aplicado."></textarea>
         <div class="actions">
           <button type="button" class="btn primary" id="copy" disabled>Copiar mensaje</button>
           <button type="button" class="btn ghost" id="clear" disabled>Limpiar</button>
         </div>
+        <div id="disc-warn" class="warn" hidden></div>
+        <div id="selected" class="selected"></div>
+        <label for="msg" class="lbl">Vista previa · puedes editarla antes de copiar</label>
+        <textarea id="msg" class="bubble" rows="6" placeholder="Toca los productos de la lista y aquí aparece el mensaje listo, con el descuento aplicado."></textarea>
       </aside>
     </section>
 
@@ -976,7 +977,8 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
     }
     const cats = categories();
     if (S.cat && !cats.includes(S.cat)) S.cat = '';
-    chips.innerHTML = ['', ...cats].map(c => `<button type="button" class="chip" data-cat="${esc(c)}" aria-pressed="${S.cat === c}">${c ? esc(c) : 'Todos'}</button>`).join('');
+    // Categorías en una lista desplegable (antes eran botones que ocupaban media pantalla)
+    chips.innerHTML = ['', ...cats].map(c => `<option value="${esc(c)}"${S.cat === c ? ' selected' : ''}>${c ? esc(c) : 'Todas las categorías'}</option>`).join('');
     const d = disc();
     const items = S.products.filter(p => (!S.cat || (p.categoria || 'Sin categoría') === S.cat) && matches(p, S.q));
     if (!items.length){ list.innerHTML = `<p class="empty">Ningún producto coincide con «${esc(S.q)}».</p>`; return; }
@@ -1324,12 +1326,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
   $('#force').addEventListener('click', forceUpdate);
   $('#q').addEventListener('input', e => { S.q = e.target.value; stashUI(); renderPicker(); });
   $('#cq').addEventListener('input', e => { S.cq = e.target.value; renderCatalog(); });
-  $('#chips').addEventListener('click', e => {
-    const b = e.target.closest('.chip');
-    if (!b) return;
-    S.cat = b.dataset.cat; stashUI();
-    renderPicker();
-  });
+  $('#chips').addEventListener('change', e => { S.cat = e.target.value; stashUI(); renderPicker(); });
   $('#plist').addEventListener('click', e => { const b = e.target.closest('.prod'); if (b) toggleProduct(b.dataset.id); });
   $('#selected').addEventListener('click', e => {
     const b = e.target.closest('[data-act]');
