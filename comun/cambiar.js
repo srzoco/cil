@@ -49,15 +49,19 @@
   window.addEventListener('pageshow', cerrar);  // al volver con «atrás», la hoja no queda abierta
 
   var css = document.createElement('style');
-  css.textContent = '#cambiar-hoja{position:fixed;inset:0;z-index:1000}' +
-    '.cambiar-fondo{position:absolute;inset:0;background:rgba(0,10,30,.45)}' +
-    '.cambiar-panel{position:absolute;left:0;right:0;bottom:0;background:var(--card,#fff);color:var(--ink,#0E1A33);border-radius:18px 18px 0 0;' +
+  // Colores propios (no dependen de los de cada herramienta: el Armador usa otros nombres y quedaba blanco con letras claras)
+  var OSC = '--ch-bg:#111E3A;--ch-ink:#F3F6FB;--ch-muted:#BCC6DA;--ch-line:#34487C;--ch-act:#1A2A50;';
+  css.textContent = '#cambiar-hoja{--ch-bg:#fff;--ch-ink:#0E1A33;--ch-muted:#4D5870;--ch-line:#D9DFEA;--ch-act:#E5EBF5;position:fixed;inset:0;z-index:1000}' +
+    '@media (prefers-color-scheme:dark){:root:not([data-theme="claro"]) #cambiar-hoja{' + OSC + '}}' +
+    ':root[data-theme="oscuro"] #cambiar-hoja{' + OSC + '}' +
+    '.cambiar-fondo{position:absolute;inset:0;background:rgba(0,10,30,.55)}' +
+    '.cambiar-panel{position:absolute;left:0;right:0;bottom:0;background:var(--ch-bg);color:var(--ch-ink);border-radius:18px 18px 0 0;' +
     'padding:14px 16px calc(16px + env(safe-area-inset-bottom));box-shadow:0 -6px 24px rgba(0,30,84,.18);max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:8px}' +
-    '.cambiar-t{margin:0 0 2px;font:700 .8rem var(--sans,system-ui);text-transform:uppercase;letter-spacing:.06em;color:var(--muted,#4D5870)}' +
-    '.cambiar-op{display:flex;align-items:center;gap:12px;min-height:52px;padding:0 14px;border:1.5px solid var(--line,#D9DFEA);border-radius:14px;' +
-    'text-decoration:none;color:var(--ink,#0E1A33);font:600 1rem var(--sans,system-ui);background:var(--card,#fff)}' +
-    '.cambiar-op:active{background:var(--accent-bg,#E5EBF5)}' +
+    '.cambiar-t{margin:0 0 2px;font:700 .8rem Montserrat,system-ui,sans-serif;text-transform:uppercase;letter-spacing:.06em;color:var(--ch-muted)}' +
+    '.cambiar-op{display:flex;align-items:center;gap:12px;min-height:52px;padding:0 14px;border:1.5px solid var(--ch-line);border-radius:14px;' +
+    'text-decoration:none;color:var(--ch-ink);font:600 1rem Montserrat,system-ui,sans-serif;background:var(--ch-bg)}' +
+    '.cambiar-op:active{background:var(--ch-act)}' +
     '.cambiar-ic{font-size:1.25rem;width:28px;text-align:center}' +
-    '.cambiar-menu{border-style:dashed;color:var(--muted,#4D5870)}';
+    '.cambiar-menu{border-style:dashed;color:var(--ch-muted)}';
   document.head.appendChild(css);
 })();
