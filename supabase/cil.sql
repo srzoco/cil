@@ -3802,3 +3802,195 @@ on conflict (clave) do nothing;
 revoke execute on function public._costos_guardar(jsonb), public.robot_costos(text, jsonb), public.costos_subir(jsonb), public.costos_cotizar() from public, anon, authenticated;
 grant execute on function public.robot_costos(text, jsonb) to anon, authenticated;
 grant execute on function public.costos_subir(jsonb), public.costos_cotizar() to authenticated;
+
+-- =====================================================================
+--  Robot de Yobel: descuento del día en las 4 cuentas de cobro en bolívares (7/11/2026)
+--  Pago móvil, Punto de Venta Crédito Bs., Punto de Venta Débito Bs. y Transferencia Bs.
+--  (la lista vive en el robot de la PC; aquí solo se decide SI y CUÁNDO se cambia).
+--  1. El robot lee el descuento de hoy (armador a mano o tasas.json) y lo que tiene Yobel, y llama robot_descuento_pedir.
+--  2. Si cambia más de descuento_max_cambio puntos: no se toca y se avisa 🔴.
+--  3. Mientras descuento_aprobar = si, gerencia lo aprueba en el Armador (aviso 🔴 con enlace).
+--  4. El robot lo pone, lo vuelve a leer y llama robot_descuento_resultado.
+-- =====================================================================
+create table if not exists public.robot_descuentos (
+  fecha         date primary key default public.hoy(),
+  descuento     numeric(5,2) not null check (descuento > 0 and descuento <= 95),
+  en_yobel      numeric(5,2),
+  estado        text not null check (estado in ('pendiente','aprobado','rechazado','aplicado','fallo','bloqueado','vencido')),
+  creado        timestamptz not null default now(),
+  aprobado_por  uuid,
+  aprobado_en   timestamptz,
+  terminado_en  timestamptz,
+  detalle       text
+);
+alter table public.robot_descuentos enable row level security;
+revoke all on public.robot_descuentos from anon, authenticated;
+
+insert into public.bot_config (clave, valor, descripcion) values
+  ('descuento_yobel', 'no', 'si = el robot pone el descuento del día en las 4 cuentas de cobro en Bs. de Yobel. no = no toca nada.'),
+  ('descuento_aprobar', 'si', 'si = gerencia aprueba cada cambio en el Armador antes de que el robot lo ponga. no = lo pone solo.'),
+  ('descuento_max_cambio', '5', 'Si el descuento nuevo cambia más de estos puntos respecto al de Yobel, el robot no lo pone y avisa.'),
+  ('descuento_hora_limite', '12:00', 'Hasta esta hora el robot espera la aprobación; después queda el de ayer y avisa.')
+on conflict (clave) do nothing;
+
+-- Aviso con enlace (como bot_aviso, pero abre el Armador). Urgente = una vez por tipo al día.
+create or replace function public._descuento_aviso(p_tipo text, p_texto text, p_urgente boolean) returns void
+language plpgsql security definer set search_path = public as $$
+declare quien uuid; nuevo boolean := false;
+begin
+  if p_urgente and exists (select 1 from bot_avisos where tipo = p_tipo and fecha = hoy() and urgente) then return; end if;
+  insert into bot_avisos (tipo, texto, urgente) values (left(p_tipo, 60), left(p_texto, 900), p_urgente)
+  on conflict do nothing returning true into nuevo;
+  if coalesce(nuevo, false) and p_urgente then
+    select p.id into quien from personas p join auth.users u on u.id = p.id
+     where lower(u.email) = lower(_bot_cfg('avisos_correo', '')) and p.activo limit 1;
+    if quien is not null then
+      insert into avisos_cola (persona_id, titulo, cuerpo, url)
+      values (quien, left(p_texto, 90), left(p_texto, 400), 'mensajes/#yobel');
+      update bot_avisos set enviado_en = now() where tipo = p_tipo and fecha = hoy() and urgente;
+    end if;
+  end if;
+end $$;
+
+create or replace function public._robot_token_ok(p_token text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select _bot_cfg('robot_token_hash', '') <> '' and p_token is not null
+     and encode(sha256(convert_to(p_token, 'UTF8')), 'hex') = _bot_cfg('robot_token_hash', '')
+$$;
+
+-- El robot pregunta qué hacer. Respuesta: accion = aplicar | esperar | nada.
+create or replace function public.robot_descuento_pedir(p_token text, p_descuento numeric, p_en_yobel numeric) returns json
+language plpgsql security definer set search_path = public as $$
+declare
+  r robot_descuentos%rowtype; manual numeric; maximo numeric; estado_nuevo text; arm armador_datos%rowtype;
+  fmt text;
+begin
+  if not _robot_token_ok(p_token) then raise exception 'no autorizado'; end if;
+  if _bot_cfg('descuento_yobel', 'si') <> 'si' then return json_build_object('accion', 'nada', 'motivo', 'apagado'); end if;
+  if p_descuento is null or p_descuento <> trunc(p_descuento) or p_descuento < 1 or p_descuento > 95 then
+    raise exception 'descuento no válido';
+  end if;
+  if p_en_yobel is null or p_en_yobel < 0 or p_en_yobel > 95 then raise exception 'descuento de Yobel no válido'; end if;
+  -- Si gerencia fijó el descuento a mano hoy, solo vale ese
+  select * into arm from armador_datos where id = 1;
+  if arm.descuento_fecha = hoy() and arm.descuento_manual is not null and arm.descuento_manual <> p_descuento then
+    raise exception 'no coincide con el descuento fijado a mano hoy (%)', trim_scale(arm.descuento_manual);
+  end if;
+  fmt := trim_scale(p_descuento)::text || '%';
+
+  select * into r from robot_descuentos where fecha = hoy() for update;
+  if found and r.descuento = p_descuento then
+    if r.estado = 'pendiente' then
+      if to_char(now() at time zone 'America/Caracas', 'HH24:MI') >= lpad(_bot_cfg('descuento_hora_limite', '12:00'), 5, '0') then
+        update robot_descuentos set estado = 'vencido', terminado_en = now() where fecha = hoy();
+        perform _descuento_aviso('descuento_vencido', '🔴 Yobel: nadie aprobó el ' || fmt || '. Quedó el descuento anterior (' || trim_scale(r.en_yobel) || '%).', true);
+        return json_build_object('accion', 'nada', 'motivo', 'vencido');
+      end if;
+      return json_build_object('accion', 'esperar');
+    end if;
+    if r.estado = 'aprobado' then return json_build_object('accion', 'aplicar', 'descuento', p_descuento); end if;
+    return json_build_object('accion', 'nada', 'motivo', r.estado);        -- aplicado, rechazado, fallo, bloqueado, vencido: un intento por día
+  end if;
+  -- Si hoy ya hubo otro descuento (gerencia lo cambió después), se vuelve a decidir desde cero
+
+  maximo := coalesce(nullif(_bot_cfg('descuento_max_cambio', ''), '')::numeric, 5);
+  if p_en_yobel = p_descuento then estado_nuevo := 'aplicado';
+  elsif abs(p_descuento - p_en_yobel) > maximo then estado_nuevo := 'bloqueado';
+  elsif _bot_cfg('descuento_aprobar', 'si') = 'si' then estado_nuevo := 'pendiente';
+  else estado_nuevo := 'aprobado';
+  end if;
+
+  insert into robot_descuentos (fecha, descuento, en_yobel, estado, terminado_en, detalle)
+  values (hoy(), p_descuento, p_en_yobel, estado_nuevo, case when estado_nuevo in ('aplicado','bloqueado') then now() end,
+          case when estado_nuevo = 'aplicado' then 'Yobel ya tenía el descuento de hoy' end)
+  on conflict (fecha) do update set descuento = excluded.descuento, en_yobel = excluded.en_yobel, estado = excluded.estado,
+    creado = now(), aprobado_por = null, aprobado_en = null, terminado_en = excluded.terminado_en, detalle = excluded.detalle;
+
+  if estado_nuevo = 'bloqueado' then
+    perform _descuento_aviso('descuento_bloqueado:' || p_descuento, '🔴 Yobel: el descuento pasaría de ' || trim_scale(p_en_yobel) || '% a ' || fmt
+      || ' (más de ' || trim_scale(maximo) || ' puntos). No lo cambié: revísalo y cámbialo a mano si está bien.', true);
+    return json_build_object('accion', 'nada', 'motivo', 'bloqueado');
+  elsif estado_nuevo = 'pendiente' then
+    perform _descuento_aviso('descuento_pedir:' || p_descuento, '🔴 Yobel: ¿pongo ' || fmt || ' en las 4 cuentas en Bs.? (hoy tienen '
+      || trim_scale(p_en_yobel) || '%). Toca para aprobar.', true);
+    return json_build_object('accion', 'esperar');
+  elsif estado_nuevo = 'aprobado' then
+    return json_build_object('accion', 'aplicar', 'descuento', p_descuento);
+  end if;
+  return json_build_object('accion', 'nada', 'motivo', 'ya_estaba');
+end $$;
+
+-- El robot cuenta cómo le fue
+create or replace function public.robot_descuento_resultado(p_token text, p_descuento numeric, p_ok boolean, p_detalle text) returns void
+language plpgsql security definer set search_path = public as $$
+declare r robot_descuentos%rowtype; fmt text := trim_scale(p_descuento)::text || '%';
+begin
+  if not _robot_token_ok(p_token) then raise exception 'no autorizado'; end if;
+  select * into r from robot_descuentos where fecha = hoy() and descuento = p_descuento and estado = 'aprobado' for update;
+  if not found then raise exception 'no hay un cambio aprobado de % hoy', fmt; end if;
+  update robot_descuentos set estado = case when p_ok then 'aplicado' else 'fallo' end, terminado_en = now(),
+         detalle = left(coalesce(p_detalle, ''), 500) where fecha = hoy();
+  if p_ok then
+    -- mientras se aprueba a mano, también avisa que quedó (para tener la tranquilidad); después va al resumen
+    perform _descuento_aviso('descuento_ok:' || p_descuento, '✅ Yobel: quedó ' || fmt || ' en las 4 cuentas en Bs. (lo revisé después de guardar).',
+      _bot_cfg('descuento_aprobar', 'si') = 'si');
+  else
+    perform _descuento_aviso('descuento_fallo', '🔴 Yobel: no pude poner el ' || fmt || '. ' || left(coalesce(p_detalle, ''), 200)
+      || ' Revisa las 4 cuentas a mano.', true);
+  end if;
+end $$;
+
+-- Gerencia: ver lo de hoy (para el aviso del Armador)
+create or replace function public.descuento_yobel_hoy() returns json
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.es_admin() then raise exception 'Solo gerencia.'; end if;
+  return (select json_build_object('fecha', fecha, 'descuento', descuento, 'en_yobel', en_yobel, 'estado', estado,
+            'creado', creado, 'aprobado_en', aprobado_en, 'terminado_en', terminado_en, 'detalle', detalle,
+            'limite', _bot_cfg('descuento_hora_limite', '12:00'))
+          from robot_descuentos where fecha = hoy());
+end $$;
+
+-- Gerencia aprueba (p_si = true) o rechaza el cambio de hoy. p_descuento = el que vio en pantalla (evita aprobar otro).
+create or replace function public.descuento_yobel_aprobar(p_descuento numeric, p_si boolean) returns json
+language plpgsql security definer set search_path = public as $$
+declare r robot_descuentos%rowtype;
+begin
+  if not public.es_admin() then raise exception 'Solo gerencia.'; end if;
+  select * into r from robot_descuentos where fecha = hoy() for update;
+  if not found or r.estado <> 'pendiente' then raise exception 'No hay ningún cambio esperando aprobación.'; end if;
+  if r.descuento <> p_descuento then raise exception 'El descuento cambió mientras tanto: recarga la página.'; end if;
+  if to_char(now() at time zone 'America/Caracas', 'HH24:MI') >= lpad(_bot_cfg('descuento_hora_limite', '12:00'), 5, '0') then
+    raise exception 'Ya pasó la hora límite: cámbialo a mano en Yobel.';
+  end if;
+  update robot_descuentos set estado = case when p_si then 'aprobado' else 'rechazado' end,
+         aprobado_por = auth.uid(), aprobado_en = now(), terminado_en = case when p_si then null else now() end
+   where fecha = hoy();
+  return public.descuento_yobel_hoy();
+end $$;
+
+-- 9:45 a. m. (lunes a sábado): si el robot no apareció hoy, avisar (la PC estaba apagada o falló antes de preguntar)
+create or replace function public.descuento_yobel_vigilar() returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if _bot_cfg('descuento_yobel', 'si') <> 'si' then return; end if;
+  if exists (select 1 from robot_descuentos where fecha = hoy()) then return; end if;
+  perform _descuento_aviso('descuento_ausente', '🔴 Yobel: el robot no revisó el descuento de hoy (¿PC apagada?). Revisa las 4 cuentas en Bs. a mano.', true);
+end $$;
+
+revoke execute on function public._descuento_aviso(text, text, boolean), public._robot_token_ok(text),
+  public.robot_descuento_pedir(text, numeric, numeric), public.robot_descuento_resultado(text, numeric, boolean, text),
+  public.descuento_yobel_hoy(), public.descuento_yobel_aprobar(numeric, boolean), public.descuento_yobel_vigilar()
+  from public, anon, authenticated;
+grant execute on function public.robot_descuento_pedir(text, numeric, numeric), public.robot_descuento_resultado(text, numeric, boolean, text) to anon, authenticated;
+grant execute on function public.descuento_yobel_hoy(), public.descuento_yobel_aprobar(numeric, boolean) to authenticated;
+
+do $$
+begin
+  if to_regclass('cron.job') is null then return; end if;
+  perform cron.unschedule(jobid) from cron.job where jobname = 'descuento_yobel_vigilar';
+  perform cron.schedule('descuento_yobel_vigilar', '45 13 * * 1-6', $q$select public.descuento_yobel_vigilar()$q$);
+  -- limpieza: guardar solo 90 días
+  perform cron.unschedule(jobid) from cron.job where jobname = 'descuento_yobel_limpieza';
+  perform cron.schedule('descuento_yobel_limpieza', '10 7 * * *', $q$delete from public.robot_descuentos where fecha < public.hoy() - 90$q$);
+end $$;

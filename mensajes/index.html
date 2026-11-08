@@ -97,6 +97,11 @@ textarea.field{resize:vertical}
 .btn.danger{background:var(--danger);color:var(--bg)}
 .btn.danger-ghost{background:transparent;color:var(--danger)}
 .btn:disabled{opacity:.45;cursor:not-allowed}
+.yobel{margin:10px 16px 0;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.yobel.pide{border:2px solid var(--danger)}
+.yobel p{margin:0 0 4px;font-size:14px}
+.yobel small{color:var(--muted,inherit);opacity:.8}
+.yobel .acciones{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
 .actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .spacer{flex:1}
 .back{border:0;background:transparent;color:var(--accent);font-weight:700;font-size:14px;padding:4px 0;cursor:pointer;justify-self:start}
@@ -714,6 +719,52 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
     if (!r.ok) throw { msg: (j && j.message) || 'No se pudo guardar (' + r.status + '). Intenta de nuevo.' };
     return j;
   }
+  /* ---------- Robot de Yobel: aprobar el descuento de las 4 cuentas en Bs. (solo gerencia) ---------- */
+  async function cargarYobel(){
+    if (!S.cil) return;
+    try { S.yobel = await rpcCil('descuento_yobel_hoy'); } catch (_){ return; }
+    renderYobel();
+    // mientras espera aprobación o el robot lo está poniendo, se revisa cada minuto
+    clearTimeout(S.yobelT);
+    if (S.yobel && (S.yobel.estado === 'pendiente' || S.yobel.estado === 'aprobado')) S.yobelT = setTimeout(cargarYobel, 60 * 1000);
+  }
+  function renderYobel(){
+    const box = $('#yobel'), y = S.yobel;
+    if (!box) return;
+    if (!S.cil || !y){ box.hidden = true; return; }
+    const d = num(Number(y.descuento)) + '%', antes = y.en_yobel != null ? num(Number(y.en_yobel)) + '%' : '—';
+    const txt = {
+      pendiente: `<p><b>🤖 Yobel: ¿pongo ${d} en las 4 cuentas en Bs.?</b></p><small>Hoy tienen ${antes}. Pago móvil, Punto de Venta Crédito y Débito, Transferencia Bs. Si nadie aprueba antes de las ${esc(y.limite || '12:00')}, queda ${antes}.</small>
+        <div class="acciones"><button type="button" class="btn primary" data-yobel="si">Aprobar ${d}</button><button type="button" class="btn ghost" data-yobel="no">No, lo cambio yo</button></div>`,
+      aprobado: `<p>🤖 Yobel: aprobado ${d}. El robot lo está poniendo…</p>`,
+      aplicado: `<p>✅ Yobel: las 4 cuentas en Bs. tienen ${d}.</p>`,
+      rechazado: `<p>Yobel: no se aprobó el ${d}. Cámbialo a mano si hace falta.</p>`,
+      fallo: `<p>🔴 Yobel: el robot no pudo poner el ${d}. Revisa las 4 cuentas a mano.</p><small>${esc(y.detalle || '')}</small>`,
+      bloqueado: `<p>🔴 Yobel: el cambio de ${antes} a ${d} es muy grande. No lo toqué: revísalo a mano.</p>`,
+      vencido: `<p>Yobel: nadie aprobó el ${d}. Quedó ${antes}.</p>`,
+    }[y.estado];
+    if (!txt){ box.hidden = true; return; }
+    box.className = 'yobel' + (y.estado === 'pendiente' ? ' pide' : '');
+    setHTML(box, txt);
+    box.hidden = false;
+    if (y.estado === 'pendiente' && location.hash === '#yobel') try { box.scrollIntoView({ block: 'center' }); } catch (_){}
+  }
+  document.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-yobel]');
+    if (!b || !S.yobel || S.yobel.estado !== 'pendiente') return;
+    const si = b.dataset.yobel === 'si';
+    document.querySelectorAll('[data-yobel]').forEach(x => x.disabled = true);
+    try {
+      S.yobel = await rpcCil('descuento_yobel_aprobar', { p_descuento: Number(S.yobel.descuento), p_si: si });
+      toast(si ? 'Aprobado: el robot lo pone en 1 o 2 minutos' : 'Listo: el robot no lo cambia hoy');
+      renderYobel(); cargarYobel();
+    } catch (err){
+      toast(err && err.msg ? err.msg : 'No se pudo. Intenta de nuevo.');
+      document.querySelectorAll('[data-yobel]').forEach(x => x.disabled = false);
+      cargarYobel();
+    }
+  });
+
   // Catálogo y descuento fijado a mano, desde la base de datos (lectura pública)
   async function leerDb(){
     if (!SB) return null;
@@ -796,6 +847,8 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
     </label>
     </div>
   </header>
+
+  <section class="yobel" id="yobel" hidden aria-live="polite"></section>
 
   <nav class="tabs" role="tablist" aria-label="Secciones">
     <button type="button" role="tab" id="tab-armar" aria-selected="true" aria-controls="view-armar" data-view="armar">Armar mensaje</button>
@@ -1583,6 +1636,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
       renderAll();
       // ¿Es alguien de gerencia con sesión de CIL en este teléfono? Entonces puede editar sin clave.
       try { if (await tokenCil() && (await rpcCil('es_admin')) === true){ S.cil = true; S.owner = true; renderOwner(); renderGh(); renderAll(); } } catch (_){}
+      cargarYobel();
       cargarCostos();
       // Cada 5 minutos: descuento, y precio y stock nuevos del robot (si nadie está editando ni revisando un CSV)
       let verDatos = db && db.actualizado_en;
@@ -1597,6 +1651,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
           try { localStorage.setItem(LS_CAT, JSON.stringify({ datos: db2.datos, ver2: S.dbVer })); } catch (_){}
         }
         if (cambio){ renderDisc(); renderPicker(); renderComposer(); renderCatalog(); } else renderDisc();
+        cargarYobel();
       }, 5 * 60 * 1000);
     })();
     return;
