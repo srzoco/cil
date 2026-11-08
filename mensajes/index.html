@@ -111,6 +111,8 @@ textarea.field{resize:vertical}
 .picker{min-width:0}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-block:12px}
 .cat-sel{margin-block:10px 12px;font-weight:600}
+.unir{display:grid;gap:8px;background:var(--surface-2);border:1.5px dashed var(--accent);border-radius:12px;padding:12px 14px;margin-block:4px 14px}
+.unir-t{margin:0;font-size:14px}
 .costo-total{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px;background:var(--surface);border:1.5px solid var(--accent);border-radius:16px;padding:14px 16px;box-shadow:0 2px 10px var(--shadow)}
 .costo-total .lbl{display:block;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 .costo-total b{display:block;font:400 30px/1.15 var(--display, Gloock, serif);color:var(--ink);font-variant-numeric:tabular-nums}
@@ -941,6 +943,12 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
       <div id="editor" class="editor" hidden>
         <button type="button" class="back" id="ed-back">← Volver al catálogo</button>
         <h2 id="ed-title">Nuevo producto</h2>
+        <div id="unir-box" class="unir" hidden>
+          <p class="unir-t"><b>¿Le cambiaron el nombre en Yobel?</b> Este producto quedó «stock sin actualizar». Elige el producto nuevo y se juntan en uno solo.</p>
+          <select id="unir-sel" class="field" aria-label="Producto nuevo (el mismo con otro nombre)"></select>
+          <p id="unir-prev" class="hint"></p>
+          <button type="button" class="btn primary small" id="unir-ok" disabled>Es el mismo: juntar</button>
+        </div>
         <div class="ed-grid">
           <div class="ed-form">
             <label class="flabel" for="f-nombre">Título en el mensaje</label>
@@ -1236,6 +1244,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
     $('#f-usos').value = p && p.usos ? p.usos : '';
     $('#ed-del').hidden = !p;
     $('#del-confirm').hidden = true;
+    renderUnir(p);
     $('#ed-err').hidden = true;
     $('#cats').innerHTML = categories().filter(c => c !== 'Sin categoría').map(c => `<option value="${esc(c)}"></option>`).join('');
     renderVrows(); renderEdPreview(); renderCatalog();
@@ -1243,6 +1252,53 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
     $('#f-nombre').focus();
   }
   function closeEditor(){ S.edit = null; renderCatalog(); }
+
+  /* ---------- «Es el mismo que…»: producto al que le cambiaron el nombre en Yobel ----------
+     Se queda el producto viejo (su id: ficha, usos, bajo pedido, emoji, pregunta, medidas y el contador de uso del bot)
+     con el nombre, las referencias, precios y stock del nuevo. El nuevo se quita de la lista. */
+  function palabras(t){ return norm(t).split(/[^a-z0-9]+/).filter(w => w.length > 2); }
+  function renderUnir(p){
+    const box = $('#unir-box');
+    const viejo = p && p.presentaciones.some(v => v.sin_actualizar);
+    box.hidden = !viejo;
+    if (!viejo) return;
+    const pv = new Set(palabras(p.nombre));
+    const cand = S.products.filter(x => x.id !== p.id && x.presentaciones.some(v => v.ref && !v.sin_actualizar))
+      .map(x => ({ x, n: palabras(x.nombre).filter(w => pv.has(w)).length }))
+      .sort((a, b) => b.n - a.n || (a.x.nombre < b.x.nombre ? -1 : 1));
+    $('#unir-sel').innerHTML = '<option value="">Elige el producto nuevo…</option>' + cand.map(({ x, n }) =>
+      `<option value="${esc(x.id)}">${n ? '★ ' : ''}${esc(x.nombre)}${x.ficha || x.usos ? ' (ya tiene ficha)' : ''}</option>`).join('');
+    $('#unir-prev').textContent = cand.length ? '★ = se parece al nombre de este producto.' : 'No hay productos nuevos de Yobel para juntar.';
+    $('#unir-ok').disabled = true;
+  }
+  function unirProductos(viejo, nuevo){
+    const conRef = viejo.presentaciones.filter(v => v.ref), usadas = new Set();
+    const pres = nuevo.presentaciones.map((nv, i) => {
+      // misma presentación: mismo texto; si no, misma posición (si tienen las mismas); si el viejo tenía una sola, esa
+      let j = conRef.findIndex((o, k) => !usadas.has(k) && norm(String(o.texto || '').replace(/\s+/g, ' ').trim()) === norm(String(nv.texto || '').replace(/\s+/g, ' ').trim()));
+      if (j < 0 && conRef.length === nuevo.presentaciones.length && !usadas.has(i)) j = i;
+      if (j < 0 && conRef.length === 1) j = 0;
+      const ov = j >= 0 ? conRef[j] : null;
+      if (ov && conRef.length > 1) usadas.add(j);
+      const o = Object.assign({}, nv);
+      if (ov && ov.medida != null && ov.medida !== '') { o.medida = ov.medida; o.kilo = ov.medida === 'kg'; }
+      else if (ov && ov.kilo && !o.medida) { o.medida = 'kg'; o.kilo = true; }
+      return o;
+    });
+    const aMano = viejo.presentaciones.filter(v => !v.ref);   // las que se agregaron a mano se conservan
+    const vacio = v => v == null || String(v).trim() === '';
+    return Object.assign({}, nuevo, {
+      id: viejo.id,
+      categoria: vacio(viejo.categoria) ? nuevo.categoria : viejo.categoria,
+      emoji: vacio(viejo.emoji) || viejo.emoji === '🔹' ? nuevo.emoji : viejo.emoji,
+      pregunta: vacio(viejo.pregunta) ? nuevo.pregunta : viejo.pregunta,
+      ficha: vacio(viejo.ficha) ? nuevo.ficha : viejo.ficha,
+      usos: vacio(viejo.usos) ? nuevo.usos : viejo.usos,
+      bajo_pedido: !!(viejo.bajo_pedido || nuevo.bajo_pedido),
+      presentaciones: pres.concat(aMano),
+      actualizado: new Date().toISOString()
+    });
+  }
   function renderVrows(){
     const rows = S.edit.draft.presentaciones;
     $('#vrows').innerHTML = rows.map((v, i) => `<div class="vrow" data-i="${i}">
@@ -1567,6 +1623,19 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
     $('#del-confirm').hidden = false;
   });
   $('#del-no').addEventListener('click', () => { $('#del-confirm').hidden = true; });
+  $('#unir-sel').addEventListener('change', e => {
+    const viejo = S.edit && S.products.find(x => x.id === S.edit.id), nuevo = S.products.find(x => x.id === e.target.value);
+    $('#unir-ok').disabled = !(viejo && nuevo);
+    $('#unir-prev').textContent = viejo && nuevo ? `Queda un solo producto: «${nuevo.nombre}», con los precios y el stock de Yobel, y la ficha, los usos, las medidas y el historial de «${viejo.nombre}». «${nuevo.nombre}» deja de salir repetido.` : '';
+  });
+  $('#unir-ok').addEventListener('click', () => {
+    const viejo = S.edit && S.products.find(x => x.id === S.edit.id), nuevo = S.products.find(x => x.id === $('#unir-sel').value);
+    if (!viejo || !nuevo || S.busy) return;
+    const junto = unirProductos(viejo, nuevo);
+    if (S.sel.has(nuevo.id)) { S.sel.set(viejo.id, S.sel.get(nuevo.id)); S.sel.delete(nuevo.id); }
+    const list = S.products.filter(x => x.id !== nuevo.id).map(x => x.id === viejo.id ? junto : x);
+    publishData(nextData({ productos: list }), `Listo: «${nuevo.nombre}» quedó junto con lo que tenía «${viejo.nombre}»`);
+  });
   $('#del-yes').addEventListener('click', () => {
     if (!S.edit || !S.edit.id) return;
     const id = S.edit.id;
