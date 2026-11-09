@@ -782,6 +782,19 @@ grant select, delete on public.redes_nuevas to authenticated;
 drop policy if exists redes_nuevas_admin on public.redes_nuevas;
 create policy redes_nuevas_admin on public.redes_nuevas for all to authenticated using (public.es_admin()) with check (public.es_admin());
 
+-- Primer intento de «Llegué» desde cada red (aunque la red todavía no estuviera registrada). Si después esa red resulta ser
+-- el Wi-Fi del local (gerencia la registra), la llegada cuenta desde ese primer intento: un cambio de dirección del proveedor
+-- no los hace llegar tarde ni les atrasa el tiempo mínimo de las tareas. Nadie la lee directo.
+create table if not exists public.llegada_intentos (
+  persona_id uuid not null references public.personas (id) on delete cascade,
+  fecha      date not null default public.hoy(),
+  ip         text not null,
+  creado_en  timestamptz not null default now(),
+  primary key (persona_id, fecha, ip)
+);
+alter table public.llegada_intentos enable row level security;
+revoke all on public.llegada_intentos from anon, authenticated;
+
 create or replace function public._ubicar(p_persona uuid, p_lat double precision, p_lng double precision, p_precision double precision) returns json
 language plpgsql stable security definer set search_path = public as $$
 declare propio uuid; ip text := public._ip_cliente(); lo record;
@@ -816,7 +829,7 @@ drop function if exists public.marcar_llegada(double precision, double precision
 create or replace function public.marcar_llegada(p_lat double precision default null, p_lng double precision default null, p_precision double precision default null,
                                                  p_hora timestamptz default null) returns json
 language plpgsql security definer set search_path = public as $$
-declare v json; v_ip text := public._ip_cliente(); nom text; nuevo uuid;
+declare v json; v_ip text := public._ip_cliente(); nom text; nuevo uuid; primer timestamptz;
 begin
   -- solo quien tiene el acceso «Tareas» y está activo (al desactivar a alguien, su sesión puede durar hasta 1 hora)
   if not public.tiene_acceso('tareas') then raise exception 'No tienes acceso a Tareas.'; end if;
@@ -831,6 +844,8 @@ begin
     -- El aviso sale después, uno solo con todos los que no pudieron (avisos_pendientes, 4f).
     if v_ip is not null then
       insert into redes_nuevas (persona_id, ip) values (auth.uid(), v_ip) on conflict do nothing;
+      insert into llegada_intentos (persona_id, ip) values (auth.uid(), v_ip) on conflict do nothing;
+      delete from llegada_intentos where fecha < public.hoy() - 7;
     end if;
     return json_build_object('error', 'No se pudo marcar tu llegada. Si el problema sigue, avísale a gerencia.');
   end if;
@@ -839,6 +854,13 @@ begin
   -- Si no, cuenta la hora en que llega al servidor desde el Wi-Fi del local.
   if v->>'verif' = 'sin_wifi' and p_hora is not null and p_hora < now() - interval '2 minutes' then
     return public._llegada(auth.uid(), 'sin_conexion', (v->>'local')::uuid, p_hora);
+  end if;
+  -- Wi-Fi del local que no se reconocía cuando intentó antes (gerencia la registró después): cuenta desde el primer intento
+  if v->>'verif' = 'wifi' and v_ip is not null then
+    select min(creado_en) into primer from llegada_intentos where persona_id = auth.uid() and fecha = public.hoy() and ip = v_ip;
+    if primer is not null then
+      return public._llegada(auth.uid(), 'wifi', (v->>'local')::uuid, primer);
+    end if;
   end if;
   return public._llegada(auth.uid(), nullif(v->>'verif', 'libre'), (v->>'local')::uuid);
 end $$;

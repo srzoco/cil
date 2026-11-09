@@ -37,6 +37,9 @@ jobs:
       - name: Costos (solo gerencia y acceso «costos»)
         env: { PGPASSWORD: prueba }
         run: psql -h localhost -U postgres -d cil -v ON_ERROR_STOP=1 -q -f pruebas/costos.sql
+      - name: Llegada desde el primer intento en la red del local
+        env: { PGPASSWORD: prueba }
+        run: psql -h localhost -U postgres -d cil -v ON_ERROR_STOP=1 -q -f pruebas/llegada-intentos.sql
       - name: Robot de Yobel, descuento de las cuentas de cobro
         env: { PGPASSWORD: prueba }
         run: psql -h localhost -U postgres -d cil -v ON_ERROR_STOP=1 -q -f pruebas/robot-descuento.sql
