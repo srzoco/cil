@@ -198,6 +198,29 @@ do $$ declare t text; begin
   -- la categoría corregida en Yobel llega al armador; sin categoría en el archivo, no se borra la que había
   if (select p->>'categoria' from armador_datos a, jsonb_array_elements(a.datos->'productos') p where a.id = 1 and p->>'id' = 'p1') <> 'Quesos finos' then
     raise exception 'FALLO: no actualizó la categoría'; end if;
+  -- lo nuevo no se crea: queda en la fila «Nuevos por aprobar»
+  if exists (select 1 from armador_datos a, jsonb_array_elements(a.datos->'productos') p where a.id = 1 and p->>'nombre' = 'Aceite nuevo') then
+    raise exception 'FALLO: creó el producto nuevo sin aprobación'; end if;
+  if not exists (select 1 from armador_datos a, jsonb_array_elements(a.datos->'nuevos') x where a.id = 1 and x->>'ref' = 'Aceite nuevo|||||' and (x->>'precio')::numeric = 7) then
+    raise exception 'FALLO: el nuevo no quedó en la fila: %', (select datos->'nuevos' from armador_datos where id = 1); end if;
+  if exists (select 1 from armador_datos a, jsonb_array_elements(a.datos->'nuevos') x where a.id = 1 and x->>'producto' like 'VQUESO%') then
+    raise exception 'FALLO: un descontinuado quedó en la fila'; end if;
+end $$;
+
+-- Lo que gerencia descartó no vuelve a la fila
+update armador_datos set datos = jsonb_set(jsonb_set(datos, '{descartados}', '["Aceite nuevo|||||"]'), '{robot,fecha}', to_jsonb(now() - interval '1 hour')) where id = 1;
+delete from bot_avisos where tipo = 'robot_nuevos';
+set role anon;
+do $$ begin
+  perform robot_subir((select t from t_token), (
+    select jsonb_agg(jsonb_build_object('ref', v->>'ref', 'producto', p->>'nombre', 'precio', (v->>'precio')::numeric, 'stock', 5))
+    from armador_datos a, jsonb_array_elements(a.datos->'productos') p, jsonb_array_elements(p->'presentaciones') v where a.id = 1 and v ? 'ref'
+  ) || '[{"ref":"Aceite nuevo|||||","producto":"Aceite nuevo","precio":7,"stock":2}]'::jsonb);
+end $$;
+reset role;
+do $$ begin
+  if jsonb_array_length((select datos->'nuevos' from armador_datos where id = 1)) <> 0 then raise exception 'FALLO: volvió a la fila algo descartado'; end if;
+  if exists (select 1 from bot_avisos where tipo = 'robot_nuevos') then raise exception 'FALLO: avisó un descartado'; end if;
 end $$;
 
 rollback;

@@ -113,6 +113,14 @@ textarea.field{resize:vertical}
 .cat-sel{margin-block:10px 12px;font-weight:600}
 .unir{display:grid;gap:8px;background:var(--surface-2);border:1.5px dashed var(--accent);border-radius:12px;padding:12px 14px;margin-block:4px 14px}
 .unir-t{margin:0;font-size:14px}
+.cola{display:grid;gap:10px;border:1.5px solid var(--accent);border-radius:14px;padding:12px 14px;margin-block:4px 14px;background:var(--surface)}
+.cola-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.cola-head h3{margin:0;font-size:16px}
+.cola-item{border-top:1px solid var(--line);padding-top:10px;display:grid;gap:6px}
+.cola-acc{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.cola-sel{flex:1 1 160px;width:auto;padding:8px 10px;font-size:14px}
+.cola-motivo{margin:0;font-size:13.5px}
+.cola-nota{color:var(--muted)}
 .costo-total{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px;background:var(--surface);border:1.5px solid var(--accent);border-radius:16px;padding:14px 16px;box-shadow:0 2px 10px var(--shadow)}
 .costo-total .lbl{display:block;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 .costo-total b{display:block;font:400 30px/1.15 var(--display, Gloock, serif);color:var(--ink);font-variant-numeric:tabular-nums}
@@ -379,7 +387,21 @@ body.usd #usd-badge{display:inline-block}
   /* Actualiza los productos existentes con los precios del CSV y agrega los nuevos.
      Las presentaciones sin "ref" (agregadas a mano) no se tocan. */
   function medidaDe(v){ return v && v.medida != null ? String(v.medida) : (v && v.kilo ? 'kg' : ''); }
-  function importCSV(text, productos, ahora){
+  // Producto del armador a partir de filas de Yobel ({ref, producto, categoria, precio, stock, kilo?, texto?}); ids = los que ya existen
+  function textoDeRef(ref){ var x = String(ref || '').split('|'); return textoOf({ producto: x[0], talla: x[1], presentacion: x[2], sabor: x[3], modelo: x[4], peso: x[5] }); }
+  function productoNuevo(filas, ids, ahora){
+    var r0 = filas[0], id = slug(r0.producto), n = 2;
+    while (ids[id]) id = slug(r0.producto) + '-' + (n++);
+    var g = filas.map(function(f){ return { texto: f.texto != null ? f.texto : textoDeRef(f.ref), r: { presentacion: (String(f.ref).split('|')[2] || ''), peso: (String(f.ref).split('|')[5] || '') } }; });
+    return {
+      id: id, nombre: r0.producto, categoria: r0.categoria || '', emoji: emojiFor(r0.producto, r0.categoria),
+      pregunta: preguntaFor(g),
+      presentaciones: filas.map(function(f, i){ var o = { texto: g[i].texto, precio: Number(f.precio), kilo: !!f.kilo, ref: f.ref }; if (f.kilo) o.medida = 'kg'; if (f.stock != null && isFinite(f.stock)) o.stock = Number(f.stock); return o; }),
+      actualizado: ahora || new Date().toISOString()
+    };
+  }
+  // descartados = referencias que gerencia dijo «No agregar» (no vuelven a la fila)
+  function importCSV(text, productos, ahora, descartados){
     var R = records(text);
     if (R.error) return { error: R.error };
     ahora = ahora || new Date().toISOString();
@@ -439,22 +461,16 @@ body.usd #usd-badge{display:inline-block}
       if (!porNombre[k]){ porNombre[k] = []; grupos.push(porNombre[k]); }
       porNombre[k].push(v);
     });
-    var ids = {};
-    out.forEach(function(p){ ids[p.id] = 1; });
-    var nuevos = [];
+    // Lo nuevo de Yobel no se crea: va a la fila «Nuevos por aprobar» y gerencia decide
+    var desc = {}; (descartados || []).forEach(function(x){ desc[x] = 1; });
+    var nuevos = [], cola = [];
     grupos.forEach(function(g){
-      var r0 = g[0].r, id = slug(r0.producto), n = 2;
-      while (ids[id]) id = slug(r0.producto) + '-' + (n++);
-      ids[id] = 1;
-      out.push({
-        id: id, nombre: r0.producto, categoria: r0.categoria || '', emoji: emojiFor(r0.producto, r0.categoria),
-        pregunta: preguntaFor(g),
-        presentaciones: g.map(function(v){ var o = { texto: v.texto, precio: v.precio, kilo: v.kilo, ref: v.ref }; if (isFinite(v.stock)) o.stock = v.stock; return o; }),
-        actualizado: ahora
-      });
-      nuevos.push(r0.producto);
+      var filas = g.filter(function(v){ return !desc[v.ref]; });
+      if (!filas.length) return;
+      nuevos.push(g[0].r.producto);
+      filas.forEach(function(v){ var o = { ref: v.ref, producto: v.r.producto, categoria: v.r.categoria || '', precio: v.precio, kilo: v.kilo, texto: v.texto }; if (isFinite(v.stock)) o.stock = v.stock; cola.push(o); });
     });
-    return { productos: out, informe: { cambios: cambios, categorias: categorias, nuevos: nuevos, eliminadas: eliminadas, piezas: piezas, raros: raros, inactivas: inactivas, filas: R.recs.length } };
+    return { productos: out, cola: cola, informe: { cambios: cambios, categorias: categorias, nuevos: nuevos, eliminadas: eliminadas, piezas: piezas, raros: raros, inactivas: inactivas, filas: R.recs.length } };
   }
 
   /* Costos del archivo de Yobel (columna «Costo promedio»): solo referencia, costo y unidad.
@@ -470,7 +486,7 @@ body.usd #usd-badge{display:inline-block}
     });
     return out;
   }
-  return { parseCSV: parseCSV, importCSV: importCSV, emojiFor: emojiFor, costosCSV: costosCSV };
+  return { parseCSV: parseCSV, importCSV: importCSV, emojiFor: emojiFor, costosCSV: costosCSV, productoNuevo: productoNuevo };
 })();
 if (typeof module !== 'undefined') module.exports = BarqueroImport;
 
@@ -908,6 +924,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
         </div>
         <p id="csv-err" class="err" role="alert" hidden></p>
         <div id="report" class="report" hidden></div>
+        <section id="cola" class="cola owner-only" hidden></section>
         <input id="cq" class="field" type="search" placeholder="Buscar en el catálogo…" autocomplete="off" aria-label="Buscar en el catálogo">
         <div id="clist" class="clist"></div>
 
@@ -1194,12 +1211,72 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
       }
       list.innerHTML = items.length ? html : `<p class="empty">Ningún producto coincide con «${esc(S.cq)}».</p>`;
     }
+    renderCola();
     const st = S.ajustes;
     if (document.activeElement !== $('#pie')) $('#pie').value = st.pie != null ? st.pie : DEF.pie;
     if (document.activeElement !== $('#pv')) $('#pv').value = st.preguntaVarios != null ? st.preguntaVarios : DEF.preguntaVarios;
     if (document.activeElement !== $('#pie-usd')) $('#pie-usd').value = st.pieDivisas != null ? st.pieDivisas : DEF.pieDivisas;
     if (document.activeElement !== $('#dusd')) $('#dusd').value = num(discUsd());
     if (document.activeElement !== $('#dbase')) $('#dbase').value = validPct(st.descuentoBase) ? num(st.descuentoBase) : '';
+  }
+
+  /* ---------- Nuevos de Yobel por aprobar ---------- */
+  function colaGrupos(){
+    const g = new Map();
+    for (const f of (DATA.nuevos || [])) { if (!g.has(f.producto)) g.set(f.producto, []); g.get(f.producto).push(f); }
+    return [...g.entries()].map(([producto, filas]) => ({ producto, filas }));
+  }
+  function renderCola(){
+    const box = $('#cola'), gs = colaGrupos();
+    box.hidden = !gs.length || !S.owner;
+    if (box.hidden){ box.innerHTML = ''; return; }
+    const opts = '<option value="">Es el mismo que…</option>' + S.products.slice().sort((a, b) => (a.presentaciones.some(v => v.sin_actualizar) ? 0 : 1) - (b.presentaciones.some(v => v.sin_actualizar) ? 0 : 1) || (a.nombre < b.nombre ? -1 : 1))
+      .map(p => `<option value="${esc(p.id)}">${p.presentaciones.some(v => v.sin_actualizar) ? '⏸ ' : ''}${esc(p.nombre)}</option>`).join('');
+    box.innerHTML = `<div class="cola-head"><h3>Nuevos de Yobel por aprobar <span class="pill">${gs.length}</span></h3>${gs.length > 1 ? '<button type="button" class="btn ghost small" data-cola="todos">Agregar todos</button>' : ''}</div>
+      <p class="hint" style="margin:0">No están en el armador. Agrégalos, júntalos con uno que tenga otro nombre (⏸ = quedó sin actualizar) o descártalos.</p>` +
+      gs.map((g, i) => { const m = motivoCola(g);
+        return `<div class="cola-item" data-i="${i}"><p class="cname">${esc(g.producto)}</p><p class="cmeta">${esc(g.filas[0].categoria || 'Sin categoría')} · ${g.filas.map(f => esc(money(f.precio)) + (f.texto ? ' ' + esc(f.texto) : '')).join(' · ')}</p>
+        <p class="cola-motivo"><b>Por qué no entró:</b> ${esc(m.txt)}${m.notas.length ? ' <span class="cola-nota">(' + esc(m.notas.join('; ')) + ')</span>' : ''}</p>
+        <div class="cola-acc">${m.sugerido ? `<button type="button" class="btn primary small" data-cola="mismo-sug" data-id="${esc(m.sugerido)}">Es el mismo: juntar</button><button type="button" class="btn ghost small" data-cola="agregar">Agregar como nuevo</button>` : '<button type="button" class="btn primary small" data-cola="agregar">Agregar</button>'}<select class="field cola-sel" data-cola="mismo" aria-label="Es el mismo que…">${opts}</select><button type="button" class="btn ghost small" data-cola="no">No agregar</button></div></div>`; }).join('');
+  }
+  // Por qué no entró: ¿parece un producto del armador con otro nombre (el viejo quedó sin actualizar)? ¿o es nuevo de verdad?
+  function motivoCola(g){
+    const pv = palabras(g.producto);
+    let mejor = null, puntos = 0;
+    for (const p of S.products){
+      const pw = new Set(palabras(p.nombre)), n = pv.filter(w => pw.has(w)).length;
+      const score = n / Math.max(1, Math.min(pv.length, pw.size));
+      if (n >= 2 && score > puntos){ puntos = score; mejor = p; }
+    }
+    const pausado = mejor && mejor.presentaciones.some(v => v.sin_actualizar);
+    const notas = [];
+    if (g.filas.every(f => Number(f.stock) <= 0)) notas.push('sin stock en Yobel');
+    const porPeso = mejor && mejor.presentaciones.some(v => ['g', '100g'].includes(medidaDe(v)));
+    if (g.filas.some(f => Number(f.precio) <= 1) && !porPeso) notas.push('precio de $1 o menos: revísalo');
+    if (mejor && pausado && puntos >= 0.5) return { txt: `Parece «${mejor.nombre}» con otro nombre: ese quedó sin actualizar en Yobel.`, sugerido: mejor.id, notas };
+    if (mejor && puntos >= 0.6) return { txt: `No está en el armador. Se parece a «${mejor.nombre}» (¿otra presentación?).`, sugerido: null, notas };
+    return { txt: 'Producto nuevo en Yobel: nunca estuvo en el armador.', sugerido: null, notas };
+  }
+  function sinDeLaCola(refs){ const q = new Set(refs); return (DATA.nuevos || []).filter(f => !q.has(f.ref)); }
+  function idsActuales(){ const ids = {}; S.products.forEach(p => { ids[p.id] = 1; }); return ids; }
+  function colaAccion(tipo, g, conId){
+    if (S.busy) return;
+    const refs = g ? g.filas.map(f => f.ref) : [], ahora = new Date().toISOString();
+    if (tipo === 'agregar'){
+      const nuevo = IMP.productoNuevo(g.filas, idsActuales(), ahora);
+      publishData(nextData({ productos: sortProds(S.products.concat([nuevo])), nuevos: sinDeLaCola(refs) }), `«${g.producto}» agregado al armador`);
+    } else if (tipo === 'todos'){
+      const ids = idsActuales(), add = [];
+      for (const x of colaGrupos()){ const n = IMP.productoNuevo(x.filas, ids, ahora); ids[n.id] = 1; add.push(n); }
+      publishData(nextData({ productos: sortProds(S.products.concat(add)), nuevos: [] }), `${add.length} productos agregados al armador`);
+    } else if (tipo === 'no'){
+      const desc = (DATA.descartados || []).concat(refs).slice(-1000);
+      publishData(nextData({ nuevos: sinDeLaCola(refs), descartados: desc }), `«${g.producto}» no se agrega (no vuelve a aparecer aquí)`);
+    } else if (tipo === 'mismo'){
+      const viejo = S.products.find(x => x.id === conId); if (!viejo) return;
+      const junto = unirProductos(viejo, IMP.productoNuevo(g.filas, {}, ahora));
+      publishData(nextData({ productos: S.products.map(x => x.id === viejo.id ? junto : x), nuevos: sinDeLaCola(refs) }), `Listo: «${g.producto}» quedó junto con lo que tenía «${viejo.nombre}»`);
+    }
   }
 
   /* ---------- Importar CSV ---------- */
@@ -1221,7 +1298,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
       </div>
       ${sec('Categorías corregidas en Yobel', (inf.categorias || []).map(c => `${esc(c.nombre)}: ${esc(c.antes || 'Sin categoría')} → <strong>${esc(c.despues)}</strong>`), true)}
       ${sec('Precios que cambian', inf.cambios.map(c => `${esc(c.nombre)}${c.texto ? ' · ' + esc(c.texto) : ''}: ${money(c.antes)} → <strong>${money(c.despues)}</strong>${medidaTxt(c)}`), true)}
-      ${sec('Productos nuevos', inf.nuevos.map(esc))}
+      ${sec('Productos nuevos (van a «Nuevos por aprobar»; no se agregan solos)', inf.nuevos.map(esc))}
       ${sec('No vinieron en el archivo: no se borran, quedan con «stock sin actualizar» (revísalos en Yobel)', inf.eliminadas.map(x => esc(x.nombre) + (x.texto ? ' · ' + esc(x.texto) : '')))}
       ${sec('No se cargaron por precio sospechoso (revísalos en la web)', inf.raros.map(x => esc(x.producto) + (x.texto ? ' · ' + esc(x.texto) : '') + ': $' + esc(x.precio)), true)}
       ${inf.piezas ? `<p class="hint" style="margin:0">${inf.piezas} productos descontinuados (con «V» delante del nombre) no se cargan.</p>` : ''}
@@ -1271,10 +1348,17 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
     const cand = S.products.filter(x => x.id !== p.id && x.presentaciones.some(v => v.ref && !v.sin_actualizar))
       .map(x => ({ x, n: palabras(x.nombre).filter(w => pv.has(w)).length }))
       .sort((a, b) => b.n - a.n || (a.x.nombre < b.x.nombre ? -1 : 1));
-    $('#unir-sel').innerHTML = '<option value="">Elige el producto nuevo…</option>' + cand.map(({ x, n }) =>
-      `<option value="${esc(x.id)}">${n ? '★ ' : ''}${esc(x.nombre)}${x.ficha || x.usos ? ' (ya tiene ficha)' : ''}</option>`).join('');
-    $('#unir-prev').textContent = cand.length ? '★ = se parece al nombre de este producto.' : 'No hay productos nuevos de Yobel para juntar.';
+    // primero los de la fila «Nuevos por aprobar» (lo más probable: el mismo producto con el nombre corregido en Yobel)
+    const cola = colaGrupos().map((g, i) => ({ g, i, n: palabras(g.producto).filter(w => pv.has(w)).length })).sort((a, b) => b.n - a.n);
+    $('#unir-sel').innerHTML = '<option value="">Elige el producto nuevo…</option>' +
+      (cola.length ? '<optgroup label="Nuevos de Yobel por aprobar">' + cola.map(({ g, i, n }) => `<option value="cola:${i}">${n ? '★ ' : ''}${esc(g.producto)}</option>`).join('') + '</optgroup><optgroup label="Ya en el armador">' : '') +
+      cand.map(({ x, n }) => `<option value="${esc(x.id)}">${n ? '★ ' : ''}${esc(x.nombre)}${x.ficha || x.usos ? ' (ya tiene ficha)' : ''}</option>`).join('') + (cola.length ? '</optgroup>' : '');
+    $('#unir-prev').textContent = cand.length || cola.length ? '★ = se parece al nombre de este producto.' : 'No hay productos nuevos de Yobel para juntar.';
     $('#unir-ok').disabled = true;
+  }
+  function elegidoUnir(v){
+    if (String(v).startsWith('cola:')) { const g = colaGrupos()[Number(v.slice(5))]; return g ? IMP.productoNuevo(g.filas, {}) : null; }
+    return S.products.find(x => x.id === v) || null;
   }
   function unirProductos(viejo, nuevo){
     const conRef = viejo.presentaciones.filter(v => v.ref), usadas = new Set();
@@ -1571,7 +1655,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
     if (!f) return;
     let text;
     try { text = await f.text(); } catch (_){ err.textContent = 'No se pudo leer el archivo.'; err.hidden = false; return; }
-    const res = IMP.importCSV(text, S.products);
+    const res = IMP.importCSV(text, S.products, undefined, DATA.descartados || []);
     if (res.error){ err.textContent = res.error; err.hidden = false; S.pending = null; renderReport(); return; }
     S.pending = { res, archivo: f.name, costos: IMP.costosCSV(text) };
     renderReport();
@@ -1583,7 +1667,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
       const p = S.pending;
       // Los costos van aparte, a la tabla privada (solo gerencia puede subirlos)
       if (S.cil && p.costos && p.costos.length) rpcCil('costos_subir', { p_filas: p.costos }).then(() => cargarCostos(), e => toast('No se guardaron los costos: ' + (e && e.msg || 'error')));
-      publishData(nextData({ productos: p.res.productos, importacion: { fecha: new Date().toISOString(), archivo: p.archivo, productos: p.res.productos.length } }), (n => `Precios actualizados: ${n} ${n === 1 ? 'cambio' : 'cambios'}`)(p.res.informe.cambios.length));
+      publishData(nextData({ productos: p.res.productos, nuevos: p.res.cola, importacion: { fecha: new Date().toISOString(), archivo: p.archivo, productos: p.res.productos.length } }), (n => `Precios actualizados: ${n} ${n === 1 ? 'cambio' : 'cambios'}`)(p.res.informe.cambios.length));
     }
   });
   $('#add').addEventListener('click', () => openEditor(null));
@@ -1628,14 +1712,28 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
     $('#del-confirm').hidden = false;
   });
   $('#del-no').addEventListener('click', () => { $('#del-confirm').hidden = true; });
+  $('#cola').addEventListener('click', e => {
+    const b = e.target.closest('button[data-cola]'); if (!b) return;
+    const it = b.closest('.cola-item'), g = it ? colaGrupos()[Number(it.dataset.i)] : null;
+    if (b.dataset.cola === 'mismo-sug') colaAccion('mismo', g, b.dataset.id);
+    else colaAccion(b.dataset.cola, g);
+  });
+  $('#cola').addEventListener('change', e => {
+    const sel = e.target.closest('select[data-cola="mismo"]'); if (!sel || !sel.value) return;
+    const g = colaGrupos()[Number(sel.closest('.cola-item').dataset.i)], viejo = S.products.find(x => x.id === sel.value);
+    if (g && viejo && confirm(`¿«${g.producto}» es el mismo producto que «${viejo.nombre}»? Queda uno solo, con la ficha y los usos de «${viejo.nombre}».`)) colaAccion('mismo', g, sel.value);
+    else sel.value = '';
+  });
   $('#unir-sel').addEventListener('change', e => {
-    const viejo = S.edit && S.products.find(x => x.id === S.edit.id), nuevo = S.products.find(x => x.id === e.target.value);
+    const viejo = S.edit && S.products.find(x => x.id === S.edit.id), nuevo = elegidoUnir(e.target.value);
     $('#unir-ok').disabled = !(viejo && nuevo);
     $('#unir-prev').textContent = viejo && nuevo ? `Queda un solo producto: «${nuevo.nombre}», con los precios y el stock de Yobel, y la ficha, los usos, las medidas y el historial de «${viejo.nombre}». «${nuevo.nombre}» deja de salir repetido.` : '';
   });
   $('#unir-ok').addEventListener('click', () => {
-    const viejo = S.edit && S.products.find(x => x.id === S.edit.id), nuevo = S.products.find(x => x.id === $('#unir-sel').value);
+    const v = $('#unir-sel').value;
+    const viejo = S.edit && S.products.find(x => x.id === S.edit.id), nuevo = elegidoUnir(v);
     if (!viejo || !nuevo || S.busy) return;
+    if (v.startsWith('cola:')) { colaAccion('mismo', colaGrupos()[Number(v.slice(5))], viejo.id); return; }
     const junto = unirProductos(viejo, nuevo);
     if (S.sel.has(nuevo.id)) { S.sel.set(viejo.id, S.sel.get(nuevo.id)); S.sel.delete(nuevo.id); }
     const list = S.products.filter(x => x.id !== nuevo.id).map(x => x.id === viejo.id ? junto : x);

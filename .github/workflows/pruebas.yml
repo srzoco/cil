@@ -67,6 +67,7 @@ jobs:
           node pruebas/armador-medidas.js
           node pruebas/armador-costo.js
           node pruebas/armador-unir.js
+          node pruebas/armador-cola.js
           node pruebas/armador-yobel.js
           node pruebas/cambiar.js
           node pruebas/consumibles-gerencia.js

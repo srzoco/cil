@@ -3598,7 +3598,7 @@ declare
   mapa jsonb := '{}'; f jsonb; ref text; precio_nuevo numeric; precio_viejo numeric; stock_nuevo numeric;
   n_filas int; n_antes int; vistos text[] := '{}'; forzar boolean := _bot_cfg('robot_forzar', 'no') = 'si';
   cambios int := 0; grandes text[] := '{}'; pausados text[] := '{}'; nuevos text[] := '{}'; huerfanas text[] := '{}';
-  bajo boolean; con_ref boolean; alguno boolean; cat_y text;
+  bajo boolean; con_ref boolean; alguno boolean; cat_y text; cola jsonb; antes_cola text[]; descartados text[];
 begin
   if hash = '' or p_token is null or encode(sha256(convert_to(p_token, 'UTF8')), 'hex') <> hash then
     raise exception 'no autorizado';
@@ -3684,13 +3684,21 @@ begin
     return json_build_object('ok', false, 'error', 'cambio_masivo');
   end if;
 
-  -- en Yobel pero no en el armador
-  select coalesce(array_agg(distinct mapa->k->>'producto'), '{}') into nuevos
-    from jsonb_object_keys(mapa) k where not (k = any(vistos))
-     and (mapa->k->>'producto') !~ '^V[A-ZÁÉÍÓÚÑ]';   -- «V» delante = descontinuado en Yobel: no se avisa como nuevo
+  -- En Yobel pero no en el armador: no se crean solos, van a la fila «Nuevos por aprobar» (datos.nuevos) y gerencia decide.
+  -- «V» delante = descontinuado; lo que gerencia ya descartó (datos.descartados) no vuelve a la fila.
+  select coalesce(array_agg(x), '{}') into descartados from jsonb_array_elements_text(coalesce(fila.datos->'descartados', '[]')) x;
+  select coalesce(array_agg(x->>'ref'), '{}') into antes_cola from jsonb_array_elements(coalesce(fila.datos->'nuevos', '[]')) x;
+  select coalesce(jsonb_agg(jsonb_build_object('ref', k, 'producto', mapa->k->>'producto', 'categoria', mapa->k->>'categoria',
+           'precio', (mapa->k->>'precio')::numeric, 'stock', (mapa->k->>'stock')::numeric) order by mapa->k->>'producto', k), '[]')
+    into cola
+    from jsonb_object_keys(mapa) k where not (k = any(vistos)) and not (k = any(descartados))
+     and (mapa->k->>'producto') !~ '^V[A-ZÁÉÍÓÚÑ]';
+  -- se avisa solo lo que entró hoy a la fila (no lo que ya estaba esperando)
+  select coalesce(array_agg(distinct x->>'producto'), '{}') into nuevos
+    from jsonb_array_elements(cola) x where not ((x->>'ref') = any(antes_cola));
 
   update armador_datos
-     set datos = jsonb_set(jsonb_set(datos, '{productos}', prods), '{robot}',
+     set datos = jsonb_set(jsonb_set(jsonb_set(datos, '{productos}', prods), '{nuevos}', cola), '{robot}',
                   jsonb_build_object('fecha', now(), 'filas', (select count(*) from jsonb_object_keys(mapa)))),
          editado_en = coalesce(editado_en, actualizado_en),   -- la versión de gerencia no cambia
          actualizado_en = clock_timestamp()
@@ -3708,7 +3716,7 @@ begin
       || '. Si cambiaron de nombre en Yobel, copia la ficha al producto nuevo en el armador.', false);
   end if;
   if array_length(nuevos, 1) > 0 then
-    perform bot_aviso('robot_nuevos', 'Productos en Yobel que no están en el armador (agrégalos para que el bot los ofrezca): ' || array_to_string(nuevos[1:15], ', ') || case when array_length(nuevos, 1) > 15 then '…' else '' end, false);
+    perform bot_aviso('robot_nuevos', 'Productos nuevos de Yobel esperan tu aprobación en el Armador → Catálogo: ' || array_to_string(nuevos[1:15], ', ') || case when array_length(nuevos, 1) > 15 then '…' else '' end, false);
   end if;
 
   return json_build_object('ok', true, 'filas', (select count(*) from jsonb_object_keys(mapa)), 'cambios_precio', cambios,
