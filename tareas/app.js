@@ -392,7 +392,7 @@
     return '<section class="bloque"><div class="bloque-head"><h2>¿Te falta algo?</h2><small class="muted">Pídelo y te lo entregan</small></div><div class="pedir-grid">' +
       lista.map(function (x) {
         var p = pend[x.id];
-        return p ? '<div class="pedir pedido"><b>' + esc(x.nombre) + '</b><span>Pedido ' + esc(L.fmtHora(p.creado_en)) + '</span><button class="btn link chico" data-acc="cancelar-pedido" data-id="' + esc(p.id) + '">Cancelar</button></div>'
+        return p ? '<div class="pedir pedido"><b>' + esc(x.nombre) + '</b><span>Pedido ' + esc(cuandoPedido(p.creado_en).toLowerCase()) + '</span><button class="btn link chico" data-acc="cancelar-pedido" data-id="' + esc(p.id) + '">Cancelar</button></div>'
           : '<button class="pedir" data-acc="pedir" data-id="' + esc(x.id) + '"><b>' + esc(x.nombre) + '</b><span>Pedir</span></button>';
       }).join('') + '</div></section>';
   }
@@ -403,10 +403,12 @@
     return '<section class="bloque alerta"><div class="bloque-head"><h2>Pedidos de consumibles</h2><small class="muted">' + pend.length + '</small></div><div class="lista">' +
       pend.map(function (p) {
         return '<div class="item"><div class="item-cuerpo"><span class="item-titulo">' + esc(p.persona) + ' pide ' + esc(p.nombre) + '</span>' +
-          '<span class="item-meta"><span class="extra">' + esc(L.fmtHora(p.creado_en)) + (variosLocales() ? ' · ' + esc(nombreLocal(p.local_id)) : '') + (p.nota ? ' · «' + esc(p.nota) + '»' : '') + '</span></span></div>' +
+          '<span class="item-meta"><span class="extra">' + esc(cuandoPedido(p.creado_en)) + (variosLocales() ? ' · ' + esc(nombreLocal(p.local_id)) : '') + (p.nota ? ' · «' + esc(p.nota) + '»' : '') + '</span></span></div>' +
           '<button class="btn chico" data-acc="entregar" data-id="' + esc(p.consumible_id) + '" data-pedido="' + esc(p.id) + '" data-persona="' + esc(p.persona_id) + '">Entregar</button></div>';
       }).join('') + '</div></section>';
   }
+  // Cuándo se pidió: «Hoy, 10:16 a. m.» o «sáb 7 nov, 10:16 a. m.»
+  function cuandoPedido(ts) { var f = L.hoyISO(new Date(ts)); return (f === L.hoyISO() ? 'Hoy' : L.fmtFecha(f)) + ', ' + L.fmtHora(ts); }
   function modalEntregar(m) {
     var c = consumible(m.id) || {}, rec = consumo().recetas[m.id] || {}, nombre = c.nombre || rec.nombre || 'Consumible', unidad = c.unidad || rec.unidad || '';
     var pedido = (consumo().pendientes || []).filter(function (p) { return p.id === m.pedido; })[0];
