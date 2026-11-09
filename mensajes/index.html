@@ -1232,7 +1232,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
     if (box.hidden){ box.innerHTML = ''; return; }
     const opts = '<option value="">Es el mismo que…</option>' + S.products.slice().sort((a, b) => (a.presentaciones.some(v => v.sin_actualizar) ? 0 : 1) - (b.presentaciones.some(v => v.sin_actualizar) ? 0 : 1) || (a.nombre < b.nombre ? -1 : 1))
       .map(p => `<option value="${esc(p.id)}">${p.presentaciones.some(v => v.sin_actualizar) ? '⏸ ' : ''}${esc(p.nombre)}</option>`).join('');
-    box.innerHTML = `<div class="cola-head"><h3>Nuevos de Yobel por aprobar <span class="pill">${gs.length}</span></h3>${gs.length > 1 ? '<button type="button" class="btn ghost small" data-cola="todos">Agregar todos</button>' : ''}</div>
+    box.innerHTML = `<div class="cola-head"><h3>Nuevos de Yobel por aprobar <span class="pill">${gs.length}</span></h3></div>
       <p class="hint" style="margin:0">No están en el armador. Agrégalos, júntalos con uno que tenga otro nombre (⏸ = quedó sin actualizar) o descártalos.</p>` +
       gs.map((g, i) => { const m = motivoCola(g);
         return `<div class="cola-item" data-i="${i}"><p class="cname">${esc(g.producto)}</p><p class="cmeta">${esc(g.filas[0].categoria || 'Sin categoría')} · ${g.filas.map(f => esc(money(f.precio)) + (f.texto ? ' ' + esc(f.texto) : '')).join(' · ')}</p>
@@ -1292,13 +1292,13 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
       <p class="hint" style="margin:0">${esc(S.pending.archivo)} · ${inf.filas} filas leídas</p>
       <div class="tally">
         <span class="pill up">${inf.cambios.length === 1 ? '1 precio cambia' : inf.cambios.length + ' precios cambian'}</span>
-        <span class="pill">${inf.nuevos.length === 1 ? '1 producto nuevo' : inf.nuevos.length + ' productos nuevos'}</span>
+        <span class="pill">${inf.nuevos.length === 1 ? '1 nuevo por aprobar' : inf.nuevos.length + ' nuevos por aprobar'}</span>
         <span class="pill">${inf.eliminadas.length === 1 ? '1 no vino en el archivo' : inf.eliminadas.length + ' no vinieron en el archivo'}</span>
         ${inf.raros.length ? `<span class="pill alert">${inf.raros.length === 1 ? '1 con precio sospechoso' : inf.raros.length + ' con precio sospechoso'}</span>` : ''}
       </div>
       ${sec('Categorías corregidas en Yobel', (inf.categorias || []).map(c => `${esc(c.nombre)}: ${esc(c.antes || 'Sin categoría')} → <strong>${esc(c.despues)}</strong>`), true)}
       ${sec('Precios que cambian', inf.cambios.map(c => `${esc(c.nombre)}${c.texto ? ' · ' + esc(c.texto) : ''}: ${money(c.antes)} → <strong>${money(c.despues)}</strong>${medidaTxt(c)}`), true)}
-      ${sec('Productos nuevos (van a «Nuevos por aprobar»; no se agregan solos)', inf.nuevos.map(esc))}
+      ${sec('Nuevos por aprobar: «Publicar cambios» NO los agrega; después los apruebas uno por uno arriba del catálogo', inf.nuevos.map(esc))}
       ${sec('No vinieron en el archivo: no se borran, quedan con «stock sin actualizar» (revísalos en Yobel)', inf.eliminadas.map(x => esc(x.nombre) + (x.texto ? ' · ' + esc(x.texto) : '')))}
       ${sec('No se cargaron por precio sospechoso (revísalos en la web)', inf.raros.map(x => esc(x.producto) + (x.texto ? ' · ' + esc(x.texto) : '') + ': $' + esc(x.precio)), true)}
       ${inf.piezas ? `<p class="hint" style="margin:0">${inf.piezas} productos descontinuados (con «V» delante del nombre) no se cargan.</p>` : ''}
@@ -1667,7 +1667,8 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
       const p = S.pending;
       // Los costos van aparte, a la tabla privada (solo gerencia puede subirlos)
       if (S.cil && p.costos && p.costos.length) rpcCil('costos_subir', { p_filas: p.costos }).then(() => cargarCostos(), e => toast('No se guardaron los costos: ' + (e && e.msg || 'error')));
-      publishData(nextData({ productos: p.res.productos, nuevos: p.res.cola, importacion: { fecha: new Date().toISOString(), archivo: p.archivo, productos: p.res.productos.length } }), (n => `Precios actualizados: ${n} ${n === 1 ? 'cambio' : 'cambios'}`)(p.res.informe.cambios.length));
+      publishData(nextData({ productos: p.res.productos, nuevos: p.res.cola, importacion: { fecha: new Date().toISOString(), archivo: p.archivo, productos: p.res.productos.length } }), (n => `Precios actualizados: ${n} ${n === 1 ? 'cambio' : 'cambios'}`)(p.res.informe.cambios.length))
+        .then(ok => { if (ok && p.res.cola.length) { const c = $('#cola'); if (c && !c.hidden) c.scrollIntoView({ block: 'start', behavior: 'smooth' }); } });
     }
   });
   $('#add').addEventListener('click', () => openEditor(null));
