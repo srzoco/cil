@@ -13,6 +13,12 @@ const fs = require('fs');
   const v = r.productos.find(p => p.id === 'v').presentaciones[0];
   if (v.medida !== 'g' || v.precio !== 0.6) fallas.push('CSV: perdió la medida por gramo o no actualizó el precio: ' + JSON.stringify(v));
 
+  // La categoría corregida en Yobel llega con el CSV; sin categoría en el archivo, se queda la que había
+  const rc = IMP.importCSV('Producto,Categoría,Precio,Stock\nVainilla,Especias finas,0.6,100\n', [{ id: 'v', nombre: 'Vainilla', categoria: 'Condimentos', presentaciones: [{ texto: '', precio: 0.5, medida: 'g', ref: 'Vainilla|||||' }] }]);
+  if (rc.productos[0].categoria !== 'Especias finas' || rc.informe.categorias.length !== 1) fallas.push('CSV: no actualizó la categoría: ' + JSON.stringify(rc.productos[0].categoria));
+  const rs = IMP.importCSV('Producto,Precio,Stock\nVainilla,0.6,100\n', [{ id: 'v', nombre: 'Vainilla', categoria: 'Condimentos', presentaciones: [{ texto: '', precio: 0.5, medida: 'g', ref: 'Vainilla|||||' }] }]);
+  if (rs.productos[0].categoria !== 'Condimentos') fallas.push('CSV sin categoría borró la que había');
+
   const b = await chromium.launch({ executablePath: process.env.CHROMIUM || undefined });
   const p = await b.newPage({ viewport: { width: 360, height: 800 } });
   p.on('pageerror', e => fallas.push('JS: ' + e.message));

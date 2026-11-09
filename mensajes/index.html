@@ -400,9 +400,9 @@ body.usd #usd-badge{display:inline-block}
     var porRef = {};
     validas.forEach(function(v){ porRef[v.ref] = v; });
 
-    var usadas = {}, cambios = [], eliminadas = [], out = [];
+    var usadas = {}, cambios = [], eliminadas = [], categorias = [], out = [];
     (productos || []).forEach(function(p){
-      var pres = [], toco = false;
+      var pres = [], toco = false, cat = '';
       p.presentaciones.forEach(function(v){
         if (!v.ref){ pres.push(v); return; }
         var n = porRef[v.ref];
@@ -413,6 +413,7 @@ body.usd #usd-badge{display:inline-block}
           return;
         }
         usadas[v.ref] = 1;
+        if (n.r.categoria) cat = clean(n.r.categoria);
         // Si gerencia eligió la medida a mano (por gramo, por unidad…), el archivo no la cambia
         var aMano = ['', 'kg'].indexOf(medidaDe(v)) < 0;
         if (n.precio !== v.precio || (!aMano && n.kilo !== !!v.kilo)){
@@ -424,7 +425,10 @@ body.usd #usd-badge{display:inline-block}
         if (isFinite(n.stock)) o.stock = n.stock;
         pres.push(o);
       });
-      if (pres.length) out.push(Object.assign({}, p, { presentaciones: pres, actualizado: toco ? ahora : p.actualizado }));
+      // La categoría manda Yobel: si la corrigieron allá, se actualiza aquí
+      var cambioCat = cat && cat !== (p.categoria || '');
+      if (cambioCat) categorias.push({ nombre: p.nombre, antes: p.categoria || '', despues: cat });
+      if (pres.length) out.push(Object.assign({}, p, { presentaciones: pres, actualizado: toco || cambioCat ? ahora : p.actualizado }, cambioCat ? { categoria: cat } : {}));
     });
 
     var grupos = [], porNombre = {};
@@ -450,7 +454,7 @@ body.usd #usd-badge{display:inline-block}
       });
       nuevos.push(r0.producto);
     });
-    return { productos: out, informe: { cambios: cambios, nuevos: nuevos, eliminadas: eliminadas, piezas: piezas, raros: raros, inactivas: inactivas, filas: R.recs.length } };
+    return { productos: out, informe: { cambios: cambios, categorias: categorias, nuevos: nuevos, eliminadas: eliminadas, piezas: piezas, raros: raros, inactivas: inactivas, filas: R.recs.length } };
   }
 
   /* Costos del archivo de Yobel (columna «Costo promedio»): solo referencia, costo y unidad.
@@ -1205,7 +1209,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
     const inf = S.pending.res.informe;
     const li = a => a.map(x => `<li>${x}</li>`).join('');
     const sec = (title, items, open) => items.length ? `<details ${open ? 'open' : ''}><summary>${title} (${items.length})</summary><ul class="scroll">${li(items)}</ul></details>` : '';
-    const nothing = !inf.cambios.length && !inf.nuevos.length && !inf.eliminadas.length;
+    const nothing = !inf.cambios.length && !inf.nuevos.length && !inf.eliminadas.length && !(inf.categorias || []).length;
     box.innerHTML = `
       <h3>Revisa antes de publicar</h3>
       <p class="hint" style="margin:0">${esc(S.pending.archivo)} · ${inf.filas} filas leídas</p>
@@ -1215,6 +1219,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
         <span class="pill">${inf.eliminadas.length === 1 ? '1 no vino en el archivo' : inf.eliminadas.length + ' no vinieron en el archivo'}</span>
         ${inf.raros.length ? `<span class="pill alert">${inf.raros.length === 1 ? '1 con precio sospechoso' : inf.raros.length + ' con precio sospechoso'}</span>` : ''}
       </div>
+      ${sec('Categorías corregidas en Yobel', (inf.categorias || []).map(c => `${esc(c.nombre)}: ${esc(c.antes || 'Sin categoría')} → <strong>${esc(c.despues)}</strong>`), true)}
       ${sec('Precios que cambian', inf.cambios.map(c => `${esc(c.nombre)}${c.texto ? ' · ' + esc(c.texto) : ''}: ${money(c.antes)} → <strong>${money(c.despues)}</strong>${medidaTxt(c)}`), true)}
       ${sec('Productos nuevos', inf.nuevos.map(esc))}
       ${sec('No vinieron en el archivo: no se borran, quedan con «stock sin actualizar» (revísalos en Yobel)', inf.eliminadas.map(x => esc(x.nombre) + (x.texto ? ' · ' + esc(x.texto) : '')))}
@@ -1289,7 +1294,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
     const vacio = v => v == null || String(v).trim() === '';
     return Object.assign({}, nuevo, {
       id: viejo.id,
-      categoria: vacio(viejo.categoria) ? nuevo.categoria : viejo.categoria,
+      categoria: vacio(nuevo.categoria) ? viejo.categoria : nuevo.categoria,   // la categoría manda Yobel
       emoji: vacio(viejo.emoji) || viejo.emoji === '🔹' ? nuevo.emoji : viejo.emoji,
       pregunta: vacio(viejo.pregunta) ? nuevo.pregunta : viejo.pregunta,
       ficha: vacio(viejo.ficha) ? nuevo.ficha : viejo.ficha,

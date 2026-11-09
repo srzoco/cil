@@ -185,7 +185,8 @@ delete from bot_avisos where tipo = 'robot_nuevos';
 set role anon;
 do $$ begin
   raise notice 'subida: %', robot_subir((select t from t_token), (
-    select jsonb_agg(jsonb_build_object('ref', v->>'ref', 'producto', p->>'nombre', 'precio', (v->>'precio')::numeric, 'stock', 5))
+    select jsonb_agg(jsonb_build_object('ref', v->>'ref', 'producto', p->>'nombre', 'precio', (v->>'precio')::numeric, 'stock', 5,
+      'categoria', case when v->>'ref' = 'P1|||||' then 'Quesos finos' end))
     from armador_datos a, jsonb_array_elements(a.datos->'productos') p, jsonb_array_elements(p->'presentaciones') v where a.id = 1 and v ? 'ref'
   ) || '[{"ref":"VQUESO VIEJO|||||","producto":"VQUESO VIEJO","precio":5,"stock":1},{"ref":"Aceite nuevo|||||","producto":"Aceite nuevo","precio":7,"stock":2}]'::jsonb);
 end $$;
@@ -194,6 +195,9 @@ do $$ declare t text; begin
   select string_agg(texto, ' ') into t from bot_avisos where tipo = 'robot_nuevos';
   if t is null or t not like '%Aceite nuevo%' then raise exception 'FALLO: no avisó el producto nuevo: %', t; end if;
   if t like '%VQUESO%' then raise exception 'FALLO: avisó un descontinuado (V) como nuevo: %', t; end if;
+  -- la categoría corregida en Yobel llega al armador; sin categoría en el archivo, no se borra la que había
+  if (select p->>'categoria' from armador_datos a, jsonb_array_elements(a.datos->'productos') p where a.id = 1 and p->>'id' = 'p1') <> 'Quesos finos' then
+    raise exception 'FALLO: no actualizó la categoría'; end if;
 end $$;
 
 rollback;

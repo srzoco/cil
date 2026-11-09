@@ -3576,7 +3576,7 @@ declare
   mapa jsonb := '{}'; f jsonb; ref text; precio_nuevo numeric; precio_viejo numeric; stock_nuevo numeric;
   n_filas int; n_antes int; vistos text[] := '{}'; forzar boolean := _bot_cfg('robot_forzar', 'no') = 'si';
   cambios int := 0; grandes text[] := '{}'; pausados text[] := '{}'; nuevos text[] := '{}'; huerfanas text[] := '{}';
-  bajo boolean; con_ref boolean; alguno boolean;
+  bajo boolean; con_ref boolean; alguno boolean; cat_y text;
 begin
   if hash = '' or p_token is null or encode(sha256(convert_to(p_token, 'UTF8')), 'hex') <> hash then
     raise exception 'no autorizado';
@@ -3595,7 +3595,8 @@ begin
     exception when others then continue;
     end;
     continue when precio_nuevo is null or precio_nuevo <= 0 or precio_nuevo > 100000 or stock_nuevo < -100000 or stock_nuevo > 1000000;
-    mapa := mapa || jsonb_build_object(ref, jsonb_build_object('precio', precio_nuevo, 'stock', stock_nuevo, 'producto', left(f->>'producto', 200)));
+    mapa := mapa || jsonb_build_object(ref, jsonb_build_object('precio', precio_nuevo, 'stock', stock_nuevo, 'producto', left(f->>'producto', 200),
+      'categoria', nullif(left(trim(coalesce(f->>'categoria', '')), 80), '')));
   end loop;
 
   select * into fila from armador_datos where id = 1 for update;
@@ -3617,13 +3618,14 @@ begin
   for p in select value from jsonb_array_elements(fila.datos->'productos') loop
     bajo := coalesce((p->>'bajo_pedido')::boolean, false);
     nuevas_pres := '[]';
-    con_ref := false; alguno := false;
+    con_ref := false; alguno := false; cat_y := null;
     for v in select value from jsonb_array_elements(p->'presentaciones') loop
       ref := v->>'ref';
       if ref is not null then con_ref := true; end if;
       if ref is not null and mapa ? ref then
         alguno := true;
         vistos := vistos || ref;
+        cat_y := coalesce(mapa->ref->>'categoria', cat_y);
         precio_viejo := nullif(v->>'precio', '')::numeric;
         precio_nuevo := (mapa->ref->>'precio')::numeric;
         if precio_viejo is distinct from precio_nuevo then
@@ -3646,6 +3648,8 @@ begin
     if con_ref and not alguno and not bajo and (coalesce(trim(p->>'ficha'), '') <> '' or coalesce(trim(p->>'usos'), '') <> '') then
       huerfanas := huerfanas || coalesce(nullif(trim(p->>'nombre'), ''), p->>'id');
     end if;
+    -- la categoría manda Yobel: si la corrigieron allá, se actualiza aquí
+    if cat_y is not null and cat_y is distinct from nullif(p->>'categoria', '') then p := jsonb_set(p, '{categoria}', to_jsonb(cat_y)); end if;
     prods := prods || jsonb_build_array(jsonb_set(p, '{presentaciones}', nuevas_pres));
   end loop;
 

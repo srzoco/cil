@@ -21,7 +21,8 @@
   }
   function nl2br(s) { return esc(s).replace(/\n/g, '<br>'); }
   // Solo enlaces web: un «javascript:…» guardado en un enlace correría al tocarlo
-  function url(u) { u = String(u || '').trim(); return /^https?:\/\//i.test(u) ? esc(u) : '#'; }
+  // Solo enlaces http(s). Si pegaron el texto de «Compartir» de CapCut («Mira mi video… https://…»), se toma el enlace de adentro
+  function url(u) { var m = String(u || '').match(/https?:\/\/[^\s<>"']+/i); return m ? esc(m[0].replace(/[).,;]+$/, '')) : '#'; }
   function errU(msg) { var e = new Error(msg); e.usuario = true; return e; }
   function ruta() {
     var h = location.hash.replace(/^#/, '') || '/';
