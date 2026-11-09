@@ -25,6 +25,28 @@ const BASE = process.env.BASE || 'http://localhost:8765';
     const t = await p.evaluate(() => (document.querySelector('.toast') || {}).textContent || '');
     if (!/Entrega anotada/.test(t)) fallas.push('No anotó la entrega a gerencia: ' + t);
   }
+  // Un empleado pide; gerencia quita el pedido (sin entregar ni descontar)
+  const emp = await p.$eval('select[data-cambio="demo-usuario"]', s => [...s.options].find(o => !/gerencia/.test(o.text)).value);
+  const ger = await p.$eval('select[data-cambio="demo-usuario"]', s => [...s.options].find(o => /gerencia/.test(o.text)).value);
+  await p.selectOption('select[data-cambio="demo-usuario"]', emp); await p.waitForTimeout(500);
+  await p.goto(BASE + '/tareas/#/'); await p.waitForTimeout(400);
+  const pedir = p.locator('button[data-acc="pedir"]').first();
+  if (!(await pedir.count())) fallas.push('El empleado no tiene botón «Pedir»');
+  else {
+    await pedir.click(); await p.waitForTimeout(500);
+    if (!(await p.locator('[data-acc="cancelar-pedido"]').count())) fallas.push('El pedido no quedó');
+    if (!/pedido hoy, /i.test(await p.locator('.pedido').first().innerText())) fallas.push('El pedido no dice el día');
+    await p.selectOption('select[data-cambio="demo-usuario"]', ger); await p.waitForTimeout(500);
+    await p.goto(BASE + '/tareas/#/equipo/consumibles'); await p.waitForTimeout(500);
+    const antes = await p.locator('[data-acc="quitar-pedido"]').count();
+    if (!antes) fallas.push('Gerencia no ve el botón «Quitar»');
+    else {
+      if (!/Hoy, /.test(await p.locator('[data-acc="quitar-pedido"]').first().locator('xpath=ancestor::div[contains(@class,"item")]').innerText())) fallas.push('El pedido no dice «Hoy»');
+      await p.locator('[data-acc="quitar-pedido"]').first().click(); await p.waitForTimeout(300);
+      await p.click('button[data-acc="confirmar-si"]'); await p.waitForTimeout(600);
+      if ((await p.locator('[data-acc="quitar-pedido"]').count()) !== antes - 1) fallas.push('No quitó el pedido');
+    }
+  }
   await b.close();
   if (fallas.length) { console.error('FALLAS (' + fallas.length + '):\n- ' + fallas.join('\n- ')); process.exit(1); }
   console.log('OK: consumibles se pueden entregar también a gerencia.');

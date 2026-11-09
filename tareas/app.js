@@ -404,7 +404,8 @@
       pend.map(function (p) {
         return '<div class="item"><div class="item-cuerpo"><span class="item-titulo">' + esc(p.persona) + ' pide ' + esc(p.nombre) + '</span>' +
           '<span class="item-meta"><span class="extra">' + esc(cuandoPedido(p.creado_en)) + (variosLocales() ? ' · ' + esc(nombreLocal(p.local_id)) : '') + (p.nota ? ' · «' + esc(p.nota) + '»' : '') + '</span></span></div>' +
-          '<button class="btn chico" data-acc="entregar" data-id="' + esc(p.consumible_id) + '" data-pedido="' + esc(p.id) + '" data-persona="' + esc(p.persona_id) + '">Entregar</button></div>';
+          '<div class="acciones"><button class="btn chico" data-acc="entregar" data-id="' + esc(p.consumible_id) + '" data-pedido="' + esc(p.id) + '" data-persona="' + esc(p.persona_id) + '">Entregar</button>' +
+          (esAdmin() ? '<button class="btn fantasma chico" data-acc="quitar-pedido" data-id="' + esc(p.id) + '" aria-label="Quitar el pedido de ' + esc(p.persona) + '">Quitar</button>' : '') + '</div></div>';
       }).join('') + '</div></section>';
   }
   // Cuándo se pidió: «Hoy, 10:16 a. m.» o «sáb 7 nov, 10:16 a. m.»
@@ -1991,6 +1992,7 @@
     else if (acc === 'filtros-quitar') cambiarFiltroTareas(null);
     else if (acc === 'pedir') ejecutar(store.rpc('pedir_consumible', { p_consumible: id, p_nota: null }), 'Pedido. Te avisan cuando te lo entreguen.');
     else if (acc === 'cancelar-pedido') ejecutar(store.rpc('cancelar_pedido', { p_id: id }), 'Pedido cancelado.');
+    else if (acc === 'quitar-pedido') confirmar('¿Quitar este pedido? No se entrega nada ni se descuenta del inventario.', 'Quitar pedido', function () { ejecutar(store.rpc('cancelar_pedido', { p_id: id }), 'Pedido quitado.', true); });
     else if (acc === 'entregar') abrirModal({ tipo: 'entregar', id: id, pedido: el.getAttribute('data-pedido') || null });
     else if (acc === 'cons-mov') abrirModal({ tipo: 'cons-mov', id: id, mov: el.getAttribute('data-v') });
     else if (acc === 'cons-editar') abrirModal({ tipo: 'cons-editar', id: id || null, local: el.getAttribute('data-local') || null });
