@@ -2,10 +2,10 @@
    - Modo demo: todo se guarda en este navegador (para probar sin instalar nada).
    - Modo real: Supabase (base de datos compartida), usando su API REST directamente. */
 (function (root, factory) {
-  var mod = factory();
+  var mod = factory(root.CILSesion || (typeof require === 'function' ? require('../comun/sesion.js') : null));
   if (typeof module === 'object' && module.exports) module.exports = mod;
   else root.BFStore = mod;
-})(typeof self !== 'undefined' ? self : this, function () {
+})(typeof self !== 'undefined' ? self : this, function (SES) {
   'use strict';
 
   // ---------- Almacenamiento local seguro ----------
@@ -108,8 +108,6 @@
     this._guardar();
     return Promise.resolve();
   };
-  DemoStore.prototype.funcion = function () { return Promise.reject(errorUsuario('Las notificaciones no funcionan en modo demo.')); };
-  DemoStore.prototype.funcionPublica = function () { return Promise.reject(errorUsuario('Las notificaciones no funcionan en modo demo.')); };
   DemoStore.prototype.actualizar = function (tabla, id, patch, match) {
     var clave = tabla === 'equipo' ? 'user_id' : 'id';
     var fila = (this.db[tabla] instanceof Array ? this.db[tabla] : [this.db[tabla]]).filter(function (r) { return r[clave] === id; })[0];
@@ -125,20 +123,10 @@
     this.modo = 'supabase';
     this.url = String(config.supabaseUrl).replace(/\/+$/, '');
     this.key = config.supabaseKey;
-    this.claveSesion = 'bfcontenido_sesion';
-    this.ses = sesionCompartida();
+    this.ses = SES.leer();
     this.fetch = config.fetch || (typeof fetch !== 'undefined' ? fetch.bind(typeof window !== 'undefined' ? window : globalThis) : null);
   }
-  // La misma sesión del menú de CIL (dos lugares en el teléfono). Seguridad: si tienen personas DISTINTAS
-  // (quedó una sesión vieja de otra persona), no se usa ninguna: se borran y se pide entrar. Nunca se abre con otra cuenta.
-  var CLAVES_SESION = ['barquero_sesion', 'bfcontenido_sesion'];
-  function sesionCompartida() {
-    var mejor = null, usuarios = {};
-    CLAVES_SESION.forEach(function (k) { var x = LS.get(k); if (x && x.refresh_token && x.user) { usuarios[x.user.id] = 1; if (!mejor || (x.expires_at || 0) > (mejor.expires_at || 0)) mejor = x; } });
-    if (Object.keys(usuarios).length > 1) { CLAVES_SESION.forEach(function (k) { LS.del(k); }); return null; }
-    return mejor;
-  }
-  function usuarioGuardado() { var x = sesionCompartida(); return x ? x.user.id : null; }
+  // La sesión es la misma en todas las herramientas: vive en comun/sesion.js (CILSesion)
   SupabaseStore.prototype.sesion = function () { return this.ses ? { user: this.ses.user } : null; };
 
   SupabaseStore.prototype._pedir = function (url, opciones) {
@@ -165,21 +153,11 @@
     return this._pedir(this.url + '/auth/v1/' + ruta, { method: 'POST', headers: h, body: JSON.stringify(cuerpo || {}) });
   };
   SupabaseStore.prototype._guardarSesion = function (d, esEntrada) {
-    var ahora = Math.floor(Date.now() / 1000);
-    // al renovar: si mientras tanto entró otra persona en este teléfono, esta pantalla quedó vieja y no escribe encima
-    var otro = usuarioGuardado();
-    if (!esEntrada && otro && otro !== d.user.id) { this.ses = null; if (typeof location !== 'undefined') location.reload(); throw errorUsuario('Entró otra persona en este teléfono.', { sesion: true }); }
-    if (esEntrada) CLAVES_SESION.forEach(function (k) { LS.del(k); });
-    this.ses = {
-      access_token: d.access_token,
-      refresh_token: d.refresh_token,
-      expires_at: d.expires_at || (ahora + (d.expires_in || 3600)),
-      user: { id: d.user.id, email: d.user.email }
-    };
-    var ses = this.ses;
-    CLAVES_SESION.forEach(function (k) { LS.set(k, ses); });
+    // al renovar: si mientras tanto entró OTRA persona en este teléfono, esta pantalla quedó vieja: no escribe encima y se recarga
+    try { this.ses = SES.guardar(d, esEntrada); }
+    catch (e) { this.ses = null; if (typeof location !== 'undefined') location.reload(); throw errorUsuario(e.message, { sesion: true }); }
   };
-  SupabaseStore.prototype._olvidarSesion = function () { this.ses = null; CLAVES_SESION.forEach(function (k) { LS.del(k); }); };
+  SupabaseStore.prototype._olvidarSesion = function () { this.ses = null; SES.olvidar(); };
 
   SupabaseStore.prototype.entrar = function (email, clave) {
     var self = this;
@@ -201,25 +179,18 @@
   SupabaseStore.prototype._refrescar = function () {
     var self = this;
     if (!self.ses || !self.ses.refresh_token) return Promise.reject(errorUsuario('Tu sesión expiró. Vuelve a entrar.', { sesion: true }));
-    if (self._refrescando) return self._refrescando;
-    // Si el menú de CIL u otra app ya la renovó, se usa esa (gastar el refresh token viejo cerraría la sesión en todas)
-    var otra = sesionCompartida();
-    if (otra && otra.user.id === self.ses.user.id && otra.expires_at > self.ses.expires_at && otra.expires_at - 60 > Date.now() / 1000) { self.ses = otra; return Promise.resolve(); }
-    self._refrescando = self._auth('token?grant_type=refresh_token', { refresh_token: self.ses.refresh_token }).then(function (r) {
-      self._refrescando = null;
-      // Solo se cierra la sesión si el servidor dice que ya no vale (400/401/403). Si el servidor falló o está ocupado (5xx, 429),
-      // la sesión se conserva: se trata como «sin internet» y se reintenta después (antes sacaba a la persona y pedía la clave)
-      if (!r.ok && [400, 401, 403].indexOf(r.status) < 0) throw errorUsuario('El servidor no respondió. Inténtalo de nuevo en un momento.', { red: true });
-      if (!r.ok) { self._olvidarSesion(); throw errorUsuario('Tu sesión expiró. Vuelve a entrar.', { sesion: true }); }
-      self._guardarSesion(r.cuerpo);
-    }, function (e) { self._refrescando = null; throw e; });
-    return self._refrescando;
+    // Una sola renovación a la vez, y si otra herramienta ya la renovó se usa esa (comun/sesion.js)
+    return SES.renovar(self.url, self.key, self.ses, self.fetch).then(function (n) { self.ses = n; }, function (e) {
+      if (e && e.otro) { self.ses = null; if (typeof location !== 'undefined') location.reload(); }
+      else if (e && e.sesion) self.ses = null;
+      throw errorUsuario(e.message, { sesion: !!(e && e.sesion), red: !!(e && e.red) });
+    });
   };
   SupabaseStore.prototype._token = function () {
     var self = this;
     if (!self.ses) return Promise.reject(errorUsuario('Inicia sesión para continuar.', { sesion: true }));
     // Si en este teléfono ahora hay guardada otra persona (o nadie, porque salió en otra pantalla), esta pantalla quedó vieja
-    if (usuarioGuardado() !== self.ses.user.id) { self.ses = null; if (typeof location !== 'undefined') location.reload(); return Promise.reject(errorUsuario('La sesión cambió en este teléfono.', { sesion: true })); }
+    if (SES.usuario() !== self.ses.user.id) { self.ses = null; if (typeof location !== 'undefined') location.reload(); return Promise.reject(errorUsuario('La sesión cambió en este teléfono.', { sesion: true })); }
     if (self.ses.expires_at - 60 < Date.now() / 1000) return self._refrescar().then(function () { return self.ses.access_token; });
     return Promise.resolve(self.ses.access_token);
   };
@@ -305,29 +276,7 @@
     if (!qs.length) return Promise.reject(errorUsuario('Falta el filtro para borrar.'));
     return this._rest('DELETE', tabla + '?' + qs.join('&'), null, {});
   };
-  // Llama a la función de notificaciones con la sesión de la usuaria
-  SupabaseStore.prototype.funcion = function (nombre, cuerpo) {
-    var self = this;
-    return self._token().then(function (tok) {
-      return self._pedir(self.url + '/functions/v1/' + nombre, {
-        method: 'POST', headers: { apikey: self.key, Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo || {})
-      });
-    }).then(function (r) {
-      if (r.status === 404) throw errorUsuario('Falta instalar la función de notificaciones en Supabase (paso 6 de la guía).');
-      if (!r.ok) throw errorUsuario('Notificaciones: ' + mensajeDe(r.cuerpo, 'error ' + r.status));
-      return r.cuerpo;
-    });
-  };
-  SupabaseStore.prototype.funcionPublica = function (nombre, params) {
-    var self = this;
-    var qs = Object.keys(params || {}).map(function (k) { return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]); }).join('&');
-    return self._pedir(self.url + '/functions/v1/' + nombre + (qs ? '?' + qs : ''), { method: 'GET', headers: { apikey: self.key } }).then(function (r) {
-      if (r.status === 404) throw errorUsuario('Falta instalar la función de notificaciones en Supabase (paso 6 de la guía).');
-      if (r.status === 401) throw errorUsuario('La función de notificaciones pide JWT: desactiva «Verify JWT» en Supabase (paso 6 de la guía).');
-      if (!r.ok) throw errorUsuario('Notificaciones: ' + mensajeDe(r.cuerpo, 'error ' + r.status));
-      return r.cuerpo;
-    });
-  };
+
   SupabaseStore.prototype.actualizar = function (tabla, id, patch, match) {
     var clave = tabla === 'equipo' ? 'user_id' : 'id';
     var qs = [filtro(clave, id)];

@@ -2603,6 +2603,127 @@ end $$;
 -- no están en la lista de arriba y se les quitó el permiso que Supabase da por defecto.
 
 -- =====================================================================
+--  Contenido: las tablas (traídas del repositorio viejo contenidoBF el 10/11/2026)
+--  En Supabase ya existen desde el principio: este bloque NO hace nada allí (solo corre si la tabla «piezas» no existe).
+--  Sirve para que las pruebas y una base nueva tengan el mismo diseño que Supabase. Los permisos van en el bloque siguiente.
+--  Del repositorio viejo NO se trae: push_subs, push_config y bf_avisar (los avisos viejos; ahora van por avisos_cola).
+-- =====================================================================
+do $$
+begin
+  if to_regclass('public.piezas') is not null then return; end if;
+  create table if not exists public.equipo (
+    user_id    uuid primary key default auth.uid(),
+    nombre     text not null check (length(trim(nombre)) > 0),
+    rol        text not null check (rol in ('aprueba', 'edita')),
+    telefono   text,
+    creado_en  timestamptz not null default now()
+  );
+  create table if not exists public.ajustes (
+    id              int primary key default 1 check (id = 1),
+    cronograma      jsonb not null,
+    dias_minimos    int not null default 3 check (dias_minimos between 0 and 30),
+    grabacion_dia   int not null default 2 check (grabacion_dia between 0 and 6),
+    grabacion_hora  text not null default '11:00',
+    dias_entrega    int not null default 2 check (dias_entrega between 0 and 14),
+    actualizado_en  timestamptz not null default now()
+  );
+  insert into public.ajustes (id, cronograma) values (1, '{
+    "ig": {"0": "reel", "1": "carrusel", "2": "reel", "3": "historias", "4": "reel", "5": "carrusel", "6": "descanso"},
+    "tt": {"0": "cualquiera", "1": "cualquiera", "2": "cualquiera", "3": "cualquiera", "4": "cualquiera", "5": "cualquiera", "6": "cualquiera"}
+  }'::jsonb) on conflict (id) do nothing;
+  create table if not exists public.grabaciones (
+    id              uuid primary key default gen_random_uuid(),
+    semana          date not null unique,
+    fecha           date not null,
+    hora            text not null check (hora ~ '^[0-2][0-9]:[0-5][0-9]$'),
+    estado          text not null default 'propuesta' check (estado in ('propuesta', 'confirmada', 'hecha', 'cancelada')),
+    confirmaciones  uuid[] not null default '{}',
+    nota            text,
+    creado_en       timestamptz not null default now(),
+    actualizado_en  timestamptz not null default now()
+  );
+  create table if not exists public.grabacion_eventos (
+    id             uuid primary key default gen_random_uuid(),
+    grabacion_id   uuid not null references public.grabaciones (id) on delete cascade,
+    autor          uuid not null default auth.uid(),
+    tipo           text not null check (tipo in ('auto', 'confirmacion', 'reagenda', 'hecha', 'cancelada', 'reabierta')),
+    texto          text,
+    datos          jsonb not null default '{}'::jsonb,
+    creado_en      timestamptz not null default now()
+  );
+  create table if not exists public.piezas (
+    id               uuid primary key default gen_random_uuid(),
+    titulo           text not null check (length(trim(titulo)) > 0),
+    tipo             text not null constraint piezas_tipo_check check (tipo in ('reel', 'carrusel', 'historia')),
+    ig               boolean not null default true,
+    tt               boolean not null default false,
+    producto         text,
+    gancho           text,
+    objetivo         text,
+    fase             text not null default 'produccion' check (fase in ('idea', 'produccion', 'aprobada', 'publicada', 'archivada')),
+    etapa            text check (etapa in ('video', 'texto', 'diseno', 'copy')),
+    turno            text check (turno in ('edita', 'aprueba')),
+    version          int not null default 0 check (version >= 0),
+    texto_carrusel   text,
+    copy_ig          text,
+    copy_tt          text,
+    nota_version     text,
+    enlace_version   text,
+    primero          text check (primero in ('ig', 'tt')),
+    fecha_ig         date,
+    fecha_tt         date,
+    en_espera        boolean not null default false,
+    espera_producto  text,
+    espera_desde     date,
+    publicado_ig_en  timestamptz,
+    publicado_tt_en  timestamptz,
+    enlace_ig        text,
+    enlace_tt        text,
+    vistas_ig        int check (vistas_ig >= 0),
+    vistas_tt        int check (vistas_tt >= 0),
+    grabacion_id     uuid references public.grabaciones (id) on delete set null,
+    creado_por       uuid default auth.uid(),
+    creado_en        timestamptz not null default now(),
+    actualizado_en   timestamptz not null default now(),
+    constraint piezas_alguna_plataforma check (ig or tt),
+    constraint piezas_produccion_completa check (fase <> 'produccion' or (etapa is not null and turno is not null))
+  );
+  create index if not exists piezas_fase_idx on public.piezas (fase);
+  create table if not exists public.eventos (
+    id         uuid primary key default gen_random_uuid(),
+    pieza_id   uuid not null references public.piezas (id) on delete cascade,
+    autor      uuid not null default auth.uid(),
+    tipo       text not null check (tipo in ('creada', 'idea', 'iniciada', 'editada', 'envio', 'aprobacion',
+                                             'correccion', 'comentario', 'espera', 'llego', 'fechas',
+                                             'publicado', 'vistas', 'archivada', 'reabierta')),
+    etapa      text,
+    version    int,
+    texto      text,
+    datos      jsonb not null default '{}'::jsonb,
+    creado_en  timestamptz not null default now()
+  );
+  create index if not exists eventos_pieza_idx on public.eventos (pieza_id, creado_en);
+  create or replace function public.tocar_actualizado() returns trigger language plpgsql as $f$
+  begin new.actualizado_en := now(); return new; end $f$;
+  create trigger piezas_tocar before update on public.piezas for each row execute function public.tocar_actualizado();
+  create trigger ajustes_tocar before update on public.ajustes for each row execute function public.tocar_actualizado();
+  create trigger grabaciones_tocar before update on public.grabaciones for each row execute function public.tocar_actualizado();
+  alter table public.equipo enable row level security;
+  alter table public.ajustes enable row level security;
+  alter table public.piezas enable row level security;
+  alter table public.eventos enable row level security;
+  alter table public.grabaciones enable row level security;
+  alter table public.grabacion_eventos enable row level security;
+  revoke all on public.equipo, public.ajustes, public.piezas, public.eventos, public.grabaciones, public.grabacion_eventos from anon, authenticated;
+  grant select, insert, update on public.equipo to authenticated;
+  grant select, update on public.ajustes to authenticated;
+  grant select, insert, update on public.piezas to authenticated;
+  grant select, insert on public.eventos to authenticated;
+  grant select, insert, update on public.grabaciones to authenticated;
+  grant select, insert on public.grabacion_eventos to authenticated;
+end $$;
+
+-- =====================================================================
 --  Contenido: permisos por módulo
 --  Antes, cualquiera con usuario podía ver y editar Contenido. Ahora solo gerencia
 --  y quien tenga el acceso «contenido». Quien ya estaba en el equipo de Contenido

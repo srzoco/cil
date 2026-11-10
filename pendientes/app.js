@@ -4,7 +4,6 @@
   'use strict';
   var CFG = window.BARQUERO_CONFIG || {};
   var URL_SB = String(CFG.supabaseUrl || '').replace(/\/+$/, ''), KEY = CFG.supabaseKey;
-  var CLAVES = ['barquero_sesion', 'bfcontenido_sesion'];
   var $app = document.getElementById('app');
   var S = { d: null, hilos: {}, fotos: {}, foto: null, borrando: false, ocupado: false, nuevoId: null };
   var REPITE = { '': 'No se repite', diaria: 'Cada día', semanal: 'Cada semana', semanas2: 'Cada 2 semanas', semanas3: 'Cada 3 semanas', mensual: 'Cada mes' };
@@ -13,27 +12,11 @@
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 
-  // ---------- Sesión (la misma del menú de CIL) ----------
-  // Seguridad: si quedaron sesiones de personas DISTINTAS en este teléfono, no se usa ninguna (se pide entrar)
-  function leer() {
-    var mejor = null, usuarios = {};
-    CLAVES.forEach(function (k) { var x = null; try { x = JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { /* nada */ } if (x && x.refresh_token && x.user) { usuarios[x.user.id] = 1; if (!mejor || (x.expires_at || 0) > (mejor.expires_at || 0)) mejor = x; } });
-    if (Object.keys(usuarios).length > 1) { CLAVES.forEach(function (k) { try { localStorage.removeItem(k); } catch (e) { /* nada */ } }); return null; }
-    return mejor;
-  }
-  function guardar(d) {
-    // al renovar: si mientras tanto entró otra persona en este teléfono, no se escribe encima de su sesión
-    var actual = leer();
-    if (actual && actual.user.id !== d.user.id) throw new Error('sesion');
-    var ses = { access_token: d.access_token, refresh_token: d.refresh_token, expires_at: d.expires_at || Math.floor(Date.now() / 1000) + (d.expires_in || 3600), user: { id: d.user.id, email: d.user.email } };
-    CLAVES.forEach(function (k) { try { localStorage.setItem(k, JSON.stringify(ses)); } catch (e) { /* nada */ } });
-    return ses;
-  }
+  // ---------- Sesión (la misma del menú de CIL): comun/sesion.js ----------
+  var SES = window.CILSesion;
+  function leer() { return SES.leer(); }
   function token() {
-    var s = leer(); if (!s) return Promise.reject(new Error('sesion'));
-    if (s.expires_at - 60 > Date.now() / 1000) return Promise.resolve(s.access_token);
-    return fetch(URL_SB + '/auth/v1/token?grant_type=refresh_token', { method: 'POST', headers: { apikey: KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ refresh_token: s.refresh_token }) })
-      .then(function (r) { if (!r.ok) throw new Error([400, 401, 403].indexOf(r.status) < 0 ? 'El servidor no respondió. Inténtalo de nuevo en un momento.' : 'sesion'); return r.json(); }).then(function (d) { return guardar(d).access_token; });
+    return SES.token(URL_SB, KEY).catch(function (e) { throw new Error(e && e.sesion ? 'sesion' : (e && e.message) || 'Failed to fetch'); });
   }
   function rpc(fn, args) {
     return token().then(function (t) {
@@ -69,7 +52,6 @@
     return p ? p.nombre.split(' ')[0] : 'Alguien';
   }
   function pend(id) { return ((S.d && S.d.pendientes) || []).filter(function (x) { return x.id === id; })[0]; }
-  function otro(x) { return x.creado_por === S.d.yo ? x.para : x.creado_por; }
   function propio(x) { return x.creado_por === x.para; }
   function aviso(txt, ok) {
     [].forEach.call(document.querySelectorAll('.toast'), function (x) { x.remove(); });

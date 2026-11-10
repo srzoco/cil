@@ -9,8 +9,7 @@
   var S = {
     data: null, hoy: L.hoyISO(), cargando: true, error: null,
     modal: null, flash: null, toast: null, lote: null, sucio: false, ocupado: false, firma: '',
-    tablero: { col: null, tipo: 'todos', espera: false, q: '' },
-    push: { estado: 'cargando' }
+    tablero: { col: null, tipo: 'todos', espera: false, q: '' }
   };
 
   // ---------- Utilidades ----------
@@ -317,22 +316,9 @@
     return '<section class="bloque' + (opciones.clase ? ' ' + opciones.clase : '') + '"><div class="bloque-head"><h2>' + titulo + '</h2>' +
       (opciones.accion || '') + '</div>' + contenido + '</section>';
   }
-  function lista(items) { return '<div class="lista-tarjetas">' + items.join('') + '</div>'; }
 
   // ---------- Vista: Inicio ----------
   function saludo() { var h = new Date().getHours(); return h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches'; }
-  function hoyToca() {
-    var ig = L.slotTipo(ajustes(), 'ig', S.hoy), tt = L.slotTipo(ajustes(), 'tt', S.hoy);
-    return 'IG: ' + L.TIPO_DIA[ig].toLowerCase() + ' · TikTok: ' + L.TIPO_DIA[tt].toLowerCase();
-  }
-  function bannerPush() {
-    return '';  // los avisos ahora se activan en el menú de CIL (ver bloquePushAjustes)
-    var st = S.push.estado;
-    if (store.modo === 'demo' || ['apagado', 'instalar'].indexOf(st) < 0) return '';
-    try { if (localStorage.getItem('bf_push_oculto') === '1') return ''; } catch (e) { /* nada */ }
-    if (st === 'instalar') return '<div class="aviso-push">🔔 Para recibir notificaciones, agrega la app a tu pantalla de inicio (Compartir → «Agregar a inicio») y ábrela desde ahí. <button class="btn link" data-act="ocultar-push">Ahora no</button></div>';
-    return '<div class="aviso-push">🔔 <span>Activa las notificaciones para enterarte cuando te toque algo.</span> <button class="btn chico" data-act="activar-push">Activar</button> <button class="btn link" data-act="ocultar-push">Ahora no</button></div>';
-  }
   // Inicio: «Lo que te toca hoy» en una sola lista ordenada por urgencia (máximo 5 a la vista; el resto plegado)
   // y la planificación (huecos y esperas) plegada debajo.
   // Fila corta para las listas del inicio: título + una línea, y un solo botón a la derecha
@@ -346,7 +332,7 @@
       var en = piezas().filter(function (p) { return p[pl] && L.fechaDe(p, pl) === S.hoy && L.ocupa(p); });
       var st = L.slotTipo(ajustes(), pl, S.hoy);
       var cont = en.map(function (p) {
-        var pub = L.publicadoEn(p, pl), col = L.columnaDe(p), der;
+        var pub = L.publicadoEn(p, pl), der;
         if (pub) der = '<span class="pill ok">✅ Publicado</span>';
         else if (p.fase === 'aprobada') der = '<button class="btn chico" data-act="publicar" data-id="' + p.id + '" data-plat="' + pl + '">Ya se publicó</button>';
         else der = '<a class="pill corregir" href="#/p/' + p.id + '">⚠️ ' + esc(L.estadoDe(p, S.hoy).texto.split(' · ')[0]) + '</a>';
@@ -397,7 +383,6 @@
   function vistaInicio() {
     var r = L.pendientes(piezas(), eventos(), rol(), S.hoy, ajustes());
     var html = '<h1 class="saludo">' + saludo() + ', ' + esc(yo().nombre) + '</h1><p class="fecha-hoy">' + L.fmtFechaLarga(S.hoy) + '</p>';
-    html += bannerPush();
     html += bloqueHoy();
     // La grabación sube aquí solo cuando espera por ti (confirmar); si no, va abajo
     var grabArriba = grabNecesitaMe();
@@ -431,15 +416,6 @@
     html += '<input type="search" class="buscar" placeholder="Buscar pieza o producto" data-ir-buscar aria-label="Buscar pieza o producto">';
     if (L.esperasPorProducto(piezas()).length) html += listaEsperas();
     return html;
-  }
-  function listaHuecos(hs, max) {
-    if (!hs.length) return '<p class="vacio-ok">Semana cubierta ✅</p>';
-    var mostrar = hs.slice(0, max || 6);
-    return '<div class="lista">' + mostrar.map(function (h) {
-      return '<div class="item hueco-item"><span class="hueco-dot"></span><span class="item-cuerpo"><span class="item-titulo">' + esc(L.fmtFecha(h.fecha)) + ' · ' + L.PLATAFORMAS[h.plataforma] + '</span>' +
-        '<span class="item-meta"><span class="muted">' + L.TIPO_DIA[h.tipo] + ' sin pieza</span></span></span>' +
-        '<button class="btn chico" data-act="hueco" data-fecha="' + h.fecha + '" data-plat="' + h.plataforma + '" data-tipo="' + h.tipo + '">Llenar</button></div>';
-    }).join('') + '</div>' + (hs.length > mostrar.length ? '<a class="ver-mas" href="#/calendario">Ver ' + (hs.length - mostrar.length) + ' más en el calendario ›</a>' : '');
   }
   function listaEsperas() {
     var g = L.esperasPorProducto(piezas());
@@ -1139,20 +1115,11 @@
       '<button class="btn" type="submit">Guardar</button></form>';
   }
   function bloquePushAjustes() {
-    return '<div class="card"><p>Los avisos de Contenido ahora llegan por <b>CIL</b>, junto con los demás.</p>' +
+    return '<div class="card"><p>Los avisos de Contenido llegan por <b>CIL</b>, junto con los demás.</p>' +
       '<div class="acciones"><a class="btn" href="../?avisos=1">Activarlos en el menú de CIL</a></div>' +
       '<p class="ayuda">Se activan una sola vez por teléfono. Te avisa cuando te toca algo: piezas por aprobar, correcciones, fechas nuevas y la grabación. Cada mañana, un resumen de lo que se publica y lo que vence.</p></div>';
-    var st = S.push.estado;
-    var txt = {
-      cargando: 'Revisando…', nosoporta: 'Este navegador no permite notificaciones.', instalar: 'En iPhone, primero agrega la app a la pantalla de inicio (Compartir → «Agregar a inicio») y ábrela desde ahí.',
-      bloqueado: 'Las bloqueaste en este dispositivo. Actívalas en los ajustes del navegador para este sitio.', apagado: 'Apagadas en este dispositivo.', activo: 'Activadas en este dispositivo ✅',
-      demo: 'No funcionan en modo demo.'
-    }[st] || '';
-    return '<div class="card"><p>' + esc(txt) + '</p><div class="acciones">' +
-      (st === 'apagado' ? '<button class="btn" data-act="activar-push">🔔 Activar</button>' : '') +
-      (st === 'activo' ? '<button class="btn sec" data-act="probar-push">Enviar prueba</button><button class="btn fantasma" data-act="apagar-push">Apagar</button>' : '') +
-      '</div><p class="ayuda">Te avisa cuando te toca algo: piezas por aprobar, correcciones, fechas nuevas y la grabación. Cada mañana, un resumen de lo que se publica y lo que vence.</p></div>';
   }
+
   function vistaAjustes() {
     var aj = ajustes();
     var editable = rol() === 'aprueba';
@@ -1287,67 +1254,6 @@
   }
   function toastHtml() { return S.toast ? '<div class="toast ' + S.toast.tipo + '" role="alert">' + esc(S.toast.texto) + '</div>' : ''; }
 
-  // ---------- Notificaciones push ----------
-  function b64aBytes(b64) {
-    var pad = '='.repeat((4 - b64.length % 4) % 4);
-    var raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
-    var out = new Uint8Array(raw.length);
-    for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
-    return out;
-  }
-  function esIOS() { return /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); }
-  function instalada() { return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
-  function swRegistro() {
-    if (!('serviceWorker' in navigator)) return Promise.reject(new Error('sin sw'));
-    return navigator.serviceWorker.register('../sw.js', { scope: '../' }).then(function () { return navigator.serviceWorker.ready; });
-  }
-  function revisarPush() {
-    if (store.modo === 'demo') { S.push = { estado: 'demo' }; return Promise.resolve(); }
-    var soporta = ('serviceWorker' in navigator) && ('Notification' in window) && ('PushManager' in window);
-    if (!soporta) { S.push = { estado: esIOS() && !instalada() ? 'instalar' : 'nosoporta' }; return Promise.resolve(); }
-    if (Notification.permission === 'denied') { S.push = { estado: 'bloqueado' }; return Promise.resolve(); }
-    return swRegistro().then(function (reg) { return reg.pushManager.getSubscription(); }).then(function (sub) {
-      S.push = { estado: sub && Notification.permission === 'granted' ? 'activo' : 'apagado' };
-    }).catch(function () { S.push = { estado: 'apagado' }; });
-  }
-  function activarPush() {
-    if (esIOS() && !instalada()) { S.push = { estado: 'instalar' }; render(); return; }
-    var reg, clave;
-    accion(function () {
-      return Notification.requestPermission().then(function (perm) {
-        if (perm !== 'granted') throw errU(perm === 'denied' ? 'Bloqueaste las notificaciones. Actívalas en los ajustes del navegador para este sitio.' : 'No diste permiso para notificaciones.');
-        return store.funcionPublica('notificar', { accion: 'clave', app: base() });
-      }).then(function (r) {
-        clave = r && r.publica;
-        if (!clave) throw errU('La función de notificaciones no devolvió la clave.');
-        return swRegistro();
-      }).then(function (rg) {
-        reg = rg;
-        return reg.pushManager.getSubscription();
-      }).then(function (vieja) {
-        return vieja ? vieja.unsubscribe() : null;
-      }).then(function () {
-        return reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64aBytes(clave) });
-      }).then(function (sub) {
-        var j = sub.toJSON();
-        return store.insertar('push_subs', { endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth, user_agent: navigator.userAgent.slice(0, 200) }, { upsert: true });
-      });
-    }, function () {
-      try { localStorage.setItem('bf_push_oculto', '1'); } catch (e) { /* nada */ }
-      S.flash = { titulo: '🔔 Notificaciones activadas', texto: 'Desde Ajustes puedes mandarte una prueba.' };
-      return revisarPush();
-    });
-  }
-  function apagarPush() {
-    accion(function () {
-      return swRegistro().then(function (reg) { return reg.pushManager.getSubscription(); }).then(function (sub) {
-        if (!sub) return null;
-        var ep = sub.endpoint;
-        return sub.unsubscribe().then(function () { return store.eliminar('push_subs', { endpoint: ep }); });
-      });
-    }, function () { S.flash = { titulo: 'Notificaciones apagadas en este dispositivo' }; return revisarPush(); });
-  }
-
   // ---------- Acciones (clics) ----------
   var ACC = {
     'reintentar': function () { recargar(); },
@@ -1477,13 +1383,7 @@
       try { r = L.accionReabrirGrabacion(g); } catch (e) { return aviso(e.message); }
       accion(function () { return ejecutarG(g, r); }, null);
     },
-    'activar-push': function () { activarPush(); },
-    'apagar-push': function () { apagarPush(); },
-    'probar-push': function () {
-      accion(function () { return store.funcion('notificar', { tipo: 'prueba' }); }, function (r) {
-        S.flash = { titulo: r && r.enviadas ? '🔔 Prueba enviada' : 'No hay dispositivos activos', texto: r && r.enviadas ? 'Debe llegarte en unos segundos.' : 'Activa las notificaciones en este dispositivo.' };
-      });
-    },
+
     'copiar-texto': function (el) { copiarTexto(el.dataset.texto).then(function () { var t = el.textContent; el.textContent = '¡Copiado!'; setTimeout(function () { el.textContent = t; }, 1500); }); },
     'abrir-despues': function (el) { var d = el.closest('form').querySelector('.despues-mal'); d.hidden = !d.hidden; },
     'despues-bien': function (el) {
@@ -1493,7 +1393,6 @@
     },
     'ortografia': function (el) { revisarCopy(el); },
     'aplicar-corr': function (el) { aplicarCorreccion(el); },
-    'ocultar-push': function () { try { localStorage.setItem('bf_push_oculto', '1'); } catch (e) { /* nada */ } render(); }
   };
   function abrirModal(m) {
     S.modal = m; pintarCapas();
@@ -1595,7 +1494,7 @@
       if (S.ocupado) return;
       S.ocupado = true; btn.disabled = true; btn.textContent = 'Entrando…';
       store.entrar(val(f, 'email'), val(f, 'clave')).then(function () {
-        S.ocupado = false; S.cargando = true; render(); revisarPush(); return recargar();
+        S.ocupado = false; S.cargando = true; render(); return recargar();
       }).catch(function (e) { S.ocupado = false; btn.disabled = false; btn.textContent = 'Entrar'; aviso(e.message); });
     },
     perfil: function (f, btn) {
@@ -1892,7 +1791,6 @@
 
   // ---------- Arranque ----------
   // Los avisos de Contenido llegan por CIL (se activan en el menú). Aquí solo se registra el guardado de la app en el teléfono.
-  S.push = { estado: 'cil' };
   if ('serviceWorker' in navigator && location.protocol === 'https:' && store.modo !== 'demo') navigator.serviceWorker.register('../sw.js', { scope: '../' }).catch(function () { /* nada */ });
   if (store.sesion()) {
     var guardado = leerCache();

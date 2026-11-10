@@ -24,6 +24,7 @@ jobs:
         run: |
           node pruebas/versiones.js
           node pruebas/contenido-paginas.js
+          node pruebas/sesion-unidad.js
       - name: Base de datos (dos veces seguidas)
         env: { PGPASSWORD: prueba }
         run: |
@@ -50,6 +51,9 @@ jobs:
       - name: Avisos con emoji de la herramienta, 🔴 y agrupados
         env: { PGPASSWORD: prueba }
         run: psql -h localhost -U postgres -d cil -v ON_ERROR_STOP=1 -q -f pruebas/avisos-emoji.sql
+      - name: Contenido, quién puede ver y tocar sus tablas
+        env: { PGPASSWORD: prueba }
+        run: psql -h localhost -U postgres -d cil -v ON_ERROR_STOP=1 -q -f pruebas/contenido-permisos.sql
       - name: Robot de Yobel, descuento de las cuentas de cobro
         env: { PGPASSWORD: prueba }
         run: psql -h localhost -U postgres -d cil -v ON_ERROR_STOP=1 -q -f pruebas/robot-descuento.sql

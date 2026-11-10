@@ -3,7 +3,6 @@
   'use strict';
   var CFG = window.BARQUERO_CONFIG || {};
   var URL_SB = String(CFG.supabaseUrl || '').replace(/\/+$/, ''), KEY = CFG.supabaseKey;
-  var CLAVE = 'barquero_sesion';
   var $ = document.getElementById('hub');
   // Módulos: los de la fase 2 y 3 abren por ahora su app de siempre (con su propio inicio de sesión)
   var MODULOS = [
@@ -18,38 +17,20 @@
   ];
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
-  // La sesión se comparte con Contenido («bfcontenido_sesion», mismo sitio): se usa la más reciente de las dos
-  // y se guarda en ambas, para no pedir la clave otra vez al abrir Contenido.
-  var CLAVES = [CLAVE, 'bfcontenido_sesion'];
-  // Seguridad: si quedaron guardadas sesiones de personas DISTINTAS en este teléfono, no se usa ninguna (se pide entrar)
-  function leer() {
-    var mejor = null, usuarios = {};
-    CLAVES.forEach(function (k) { var x = null; try { x = JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { /* nada */ } if (x && x.refresh_token && x.user) { usuarios[x.user.id] = 1; if (!mejor || (x.expires_at || 0) > (mejor.expires_at || 0)) mejor = x; } });
-    if (Object.keys(usuarios).length > 1) { olvidar(); return null; }
-    return mejor;
-  }
-  function guardar(d, esEntrada) {
-    // al renovar: si mientras tanto entró otra persona en este teléfono, no se escribe encima de su sesión
-    var actual = leer();
-    if (!esEntrada && actual && actual.user.id !== d.user.id) throw new Error('sesion');
-    if (esEntrada) olvidar();
-    var ses = { access_token: d.access_token, refresh_token: d.refresh_token, expires_at: d.expires_at || Math.floor(Date.now() / 1000) + (d.expires_in || 3600), user: { id: d.user.id, email: d.user.email } };
-    CLAVES.forEach(function (k) { try { localStorage.setItem(k, JSON.stringify(ses)); } catch (e) { /* sin almacenamiento */ } });
-    return ses;
-  }
-  function olvidar() { try { CLAVES.forEach(function (k) { localStorage.removeItem(k); }); localStorage.removeItem('barquero_directo'); Object.keys(localStorage).forEach(function (k) { if (k.indexOf('barquero_cache_') === 0 || k.indexOf('bfcontenido_cache_') === 0) localStorage.removeItem(k); }); } catch (e) { /* nada */ } }
+  // La sesión: comun/sesion.js (la misma para todas las herramientas)
+  var SES = window.CILSesion;
+  function leer() { return SES.leer(); }
+  function guardar(d, esEntrada) { return SES.guardar(d, esEntrada); }
+  // Al salir (o si la sesión ya no vale) se borra también lo guardado del menú y de cada herramienta en este teléfono
+  function olvidar() { SES.olvidar(); try { localStorage.removeItem('barquero_directo'); Object.keys(localStorage).forEach(function (k) { if (k.indexOf('barquero_cache_') === 0 || k.indexOf('bfcontenido_cache_') === 0) localStorage.removeItem(k); }); } catch (e) { /* nada */ } }
   function auth(ruta, cuerpo, tok) {
     var h = { apikey: KEY, 'Content-Type': 'application/json' }; if (tok) h.Authorization = 'Bearer ' + tok;
     return fetch(URL_SB + '/auth/v1/' + ruta, { method: 'POST', headers: h, body: JSON.stringify(cuerpo || {}) });
   }
   function token() {
-    var s = leer(); if (!s) return Promise.reject(new Error('sesion'));
-    if (s.expires_at - 60 > Date.now() / 1000) return Promise.resolve(s.access_token);
-    return auth('token?grant_type=refresh_token', { refresh_token: s.refresh_token }).then(function (r) {
-      // solo se cierra la sesión si el servidor dice que ya no vale; si falló o está ocupado (5xx, 429), se conserva
-      if (!r.ok && [400, 401, 403].indexOf(r.status) < 0) throw new Error('El servidor no respondió. Inténtalo de nuevo en un momento.');
-      if (!r.ok) { olvidar(); throw new Error('sesion'); }
-      return r.json().then(function (d) { return guardar(d).access_token; });
+    return SES.token(URL_SB, KEY).catch(function (e) {
+      if (e && e.sesion) { olvidar(); throw new Error('sesion'); }
+      throw e;
     });
   }
   function rest(ruta) {
@@ -211,7 +192,6 @@
   function cargar() {
     if (!URL_SB || !KEY) { location.replace('tareas/'); return; }  // sin base de datos: demo de Tareas
     var s = leer(); if (!s) { login(); return; }
-    CLAVES.forEach(function (k) { try { localStorage.setItem(k, JSON.stringify(s)); } catch (e) { /* nada */ } });  // Contenido la encuentra al abrir
     // Abre al instante con el último menú visto en este teléfono y lo confirma por detrás
     var CACHE = 'barquero_cache_menu_' + s.user.id, previo = null;
     try { previo = JSON.parse(localStorage.getItem(CACHE) || 'null'); } catch (e) { /* nada */ }

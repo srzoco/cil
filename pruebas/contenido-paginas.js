@@ -3,7 +3,7 @@
    Uso: node pruebas/contenido-paginas.js   (no necesita navegador ni servidor) */
 const ST = require('../contenido/store.js');
 const ses = { access_token: 't', refresh_token: 'r', expires_at: 4e9, user: { id: 'sara', email: 's@x.com' } };
-ST.LS.set('barquero_sesion', ses); ST.LS.set('bfcontenido_sesion', ses);
+require('../comun/sesion.js').guardar({ access_token: 't', refresh_token: 'r', expires_at: 4e9, user: { id: 'sara', email: 's@x.com' } }, true);
 const filas = { equipo: 2, ajustes: 1, piezas: 1000, eventos: 2345, grabaciones: 30, grabacion_eventos: 0 };
 const pedidos = [];
 const fetchFalso = async (url) => {
