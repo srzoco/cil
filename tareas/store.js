@@ -860,6 +860,9 @@
     if (otra && otra.user.id === self.ses.user.id && otra.expires_at > self.ses.expires_at && otra.expires_at - 60 > Date.now() / 1000) { self.ses = otra; return Promise.resolve(); }
     self._refrescando = self._auth('token?grant_type=refresh_token', { refresh_token: self.ses.refresh_token }).then(function (r) {
       self._refrescando = null;
+      // Solo se cierra la sesión si el servidor dice que ya no vale (400/401/403). Si el servidor falló o está ocupado (5xx, 429),
+      // la sesión se conserva: se trata como «sin internet» y se reintenta después (antes sacaba a la persona y pedía la clave)
+      if (!r.ok && [400, 401, 403].indexOf(r.status) < 0) throw errorUsuario('El servidor no respondió. Inténtalo de nuevo en un momento.', { red: true });
       if (!r.ok) { self._olvidarSesion(); throw errorUsuario('Tu sesión expiró. Vuelve a entrar.', { sesion: true }); }
       self._guardarSesion(r.cuerpo);
     }, function (e) { self._refrescando = null; throw e; });

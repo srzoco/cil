@@ -33,7 +33,7 @@
     var s = leer(); if (!s) return Promise.reject(new Error('sesion'));
     if (s.expires_at - 60 > Date.now() / 1000) return Promise.resolve(s.access_token);
     return fetch(URL_SB + '/auth/v1/token?grant_type=refresh_token', { method: 'POST', headers: { apikey: KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ refresh_token: s.refresh_token }) })
-      .then(function (r) { if (!r.ok) throw new Error('sesion'); return r.json(); }).then(function (d) { return guardar(d).access_token; });
+      .then(function (r) { if (!r.ok) throw new Error([400, 401, 403].indexOf(r.status) < 0 ? 'El servidor no respondió. Inténtalo de nuevo en un momento.' : 'sesion'); return r.json(); }).then(function (d) { return guardar(d).access_token; });
   }
   function rpc(fn, args) {
     return token().then(function (t) {

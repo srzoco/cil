@@ -1397,7 +1397,7 @@
     if (!rs.length) return '';
     var porIp = {};
     rs.forEach(function (r) { (porIp[r.ip] = porIp[r.ip] || []).push(r); });
-    return '<section class="card alerta-card"><h2>Redes nuevas por revisar</h2><p class="ayuda sin-margen">Alguien no pudo marcar «Llegué» desde estas redes. Si es el Wi-Fi del local (el proveedor a veces lo cambia), regístrala aquí y vuelven a poder marcar.</p>' +
+    return '<section class="card alerta-card"><h2>Redes nuevas por revisar</h2><p class="ayuda sin-margen">Alguien no pudo marcar «Llegué» desde estas redes. Si es el Wi-Fi del local (el proveedor a veces lo cambia), regístrala aquí: su llegada queda marcada sola, a la hora en que lo intentaron.</p>' +
       Object.keys(porIp).map(function (ip) {
         var lista = porIp[ip], r = lista[0];
         return '<div class="tienda-fila"><div><b>' + esc(lista.map(function (x) { return nombreDe(x.persona_id); }).filter(function (v, i, a) { return a.indexOf(v) === i; }).join(', ')) + '</b>' +
@@ -2122,7 +2122,7 @@
       var locR = el.getAttribute('data-local');
       var ipR = (((S.data && S.data.redes_nuevas) || []).filter(function (x) { return x.id === id; })[0] || {}).ip;
       revisarDatosMoviles(ipR, false, function () {
-        ejecutar(store.rpc('aceptar_red', { p_red: id, p_local: locR }), 'Red registrada en «' + nombreLocal(locR) + '». Ya pueden marcar «Llegué».', true);
+        ejecutar(store.rpc('aceptar_red', { p_red: id, p_local: locR }), 'Red registrada en «' + nombreLocal(locR) + '». Quien lo intentó desde ahí ya quedó con su llegada marcada.', true);
       });
     }
     else if (acc === 'ignorar-red') {

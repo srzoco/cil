@@ -46,6 +46,8 @@
     var s = leer(); if (!s) return Promise.reject(new Error('sesion'));
     if (s.expires_at - 60 > Date.now() / 1000) return Promise.resolve(s.access_token);
     return auth('token?grant_type=refresh_token', { refresh_token: s.refresh_token }).then(function (r) {
+      // solo se cierra la sesión si el servidor dice que ya no vale; si falló o está ocupado (5xx, 429), se conserva
+      if (!r.ok && [400, 401, 403].indexOf(r.status) < 0) throw new Error('El servidor no respondió. Inténtalo de nuevo en un momento.');
       if (!r.ok) { olvidar(); throw new Error('sesion'); }
       return r.json().then(function (d) { return guardar(d).access_token; });
     });

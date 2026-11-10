@@ -9,11 +9,12 @@ const ses = (id, exp) => JSON.stringify({ access_token: 'tok-' + id, refresh_tok
 (async () => {
   const b = await chromium.launch({ executablePath: process.env.CHROMIUM || undefined });
   const p = await b.newPage({ viewport: { width: 360, height: 720 } });
-  const fallas = [];
+  const fallas = []; let caido = 0;
   await p.route('**/config.js', r => r.fulfill({ contentType: 'application/javascript', body: 'window.BARQUERO_CONFIG=window.TB_CONFIG={supabaseUrl:"http://sb.test",supabaseKey:"k"};' }));
   // la base de datos de mentira: responde como la persona del token; renovar le da a Sara un token nuevo
   await p.route('http://sb.test/**', r => {
     const u = r.request().url(), tok = (r.request().headers().authorization || '').replace('Bearer tok-', '');
+    if (u.includes('/auth/v1/token') && caido) return r.fulfill({ status: caido, contentType: 'application/json', body: '{"message":"x"}' });
     if (u.includes('/auth/v1/token')) return r.fulfill({ contentType: 'application/json', body: JSON.stringify({ access_token: 'tok-sara', refresh_token: 'ref-sara2', expires_in: 3600, user: { id: 'sara', email: 'sara@x.com' } }) });
     if (u.includes('/auth/v1/logout')) return r.fulfill({ status: 204, body: '' });
     if (u.includes('/personas')) return r.fulfill({ contentType: 'application/json', body: JSON.stringify([{ nombre: tok, email: tok + '@x.com', rol: 'empleado', accesos: ['tareas'], activo: true }]) });
@@ -45,7 +46,19 @@ const ses = (id, exp) => JSON.stringify({ access_token: 'tok-' + id, refresh_tok
   const salir = await p.waitForSelector('#salir', { timeout: 6000 }).catch(() => null);
   if (!salir) fallas.push('No apareció el botón «Salir» del menú'); else { await salir.click(); await p.waitForTimeout(400); }
   const k3 = await claves(); if (k3[0] || k3[1]) fallas.push('Al salir quedó una sesión guardada (' + k3.join(', ') + ')');
+  // Servidor caído u ocupado al renovar (503, 429): la sesión NO se borra (antes sacaba a la persona y había que darle la clave).
+  // Solo se borra si el servidor dice que ya no vale (400).
+  for (const st of [503, 429, 400]) for (const app of ['/', '/tareas/', '/pendientes/', '/contenido/']) {
+    caido = 0; await p.goto(BASE + app).catch(() => {}); await p.waitForTimeout(200);
+    caido = st;
+    await intentar(() => p.evaluate((s) => { localStorage.clear(); sessionStorage.setItem('barquero_en_menu', '1'); localStorage.setItem('barquero_sesion', s); localStorage.setItem('bfcontenido_sesion', s); }, ses('yure', 1)));
+    await p.goto(BASE + app).catch(() => {}); await p.reload().catch(() => {}); await p.waitForTimeout(1200);
+    const k = await claves();
+    if (st !== 400 && (k[0] !== 'yure' || k[1] !== 'yure')) fallas.push(app + ': con el servidor en ' + st + ' se borró la sesión (' + k.join(', ') + ')');
+    if (st === 400 && app !== '/pendientes/' && (k[0] || k[1])) fallas.push(app + ': con la sesión rechazada (400) no se borró (' + k.join(', ') + ')');
+  }
+  caido = 0;
   await b.close();
   if (fallas.length) { console.error('FALLAS (' + fallas.length + '):\n- ' + fallas.join('\n- ')); process.exit(1); }
-  console.log('OK: sesiones en el teléfono (dos personas guardadas, pantalla vieja, salir) sin abrir nunca otra cuenta.');
+  console.log('OK: sesiones en el teléfono (dos personas guardadas, pantalla vieja, salir, servidor caído) sin abrir nunca otra cuenta.');
 })();

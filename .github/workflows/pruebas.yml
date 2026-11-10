@@ -20,6 +20,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Sintaxis
         run: for f in tareas/*.js comun/*.js pendientes/*.js contenido/*.js sw.js config.js; do node -e "new Function(require('fs').readFileSync('$f','utf8'))" || exit 1; done
+      - name: Versiones de las páginas y Contenido con más de 1.000 filas
+        run: |
+          node pruebas/versiones.js
+          node pruebas/contenido-paginas.js
       - name: Base de datos (dos veces seguidas)
         env: { PGPASSWORD: prueba }
         run: |

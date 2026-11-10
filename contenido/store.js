@@ -207,6 +207,9 @@
     if (otra && otra.user.id === self.ses.user.id && otra.expires_at > self.ses.expires_at && otra.expires_at - 60 > Date.now() / 1000) { self.ses = otra; return Promise.resolve(); }
     self._refrescando = self._auth('token?grant_type=refresh_token', { refresh_token: self.ses.refresh_token }).then(function (r) {
       self._refrescando = null;
+      // Solo se cierra la sesión si el servidor dice que ya no vale (400/401/403). Si el servidor falló o está ocupado (5xx, 429),
+      // la sesión se conserva: se trata como «sin internet» y se reintenta después (antes sacaba a la persona y pedía la clave)
+      if (!r.ok && [400, 401, 403].indexOf(r.status) < 0) throw errorUsuario('El servidor no respondió. Inténtalo de nuevo en un momento.', { red: true });
       if (!r.ok) { self._olvidarSesion(); throw errorUsuario('Tu sesión expiró. Vuelve a entrar.', { sesion: true }); }
       self._guardarSesion(r.cuerpo);
     }, function (e) { self._refrescando = null; throw e; });
@@ -244,15 +247,28 @@
     if (v === true || v === false) return encodeURIComponent(k) + '=is.' + v;
     return encodeURIComponent(k) + '=eq.' + encodeURIComponent(String(v));
   }
+  // Supabase entrega como máximo 1.000 filas por consulta. Las piezas y sobre todo su historial pasan de ahí con los meses,
+  // y sin esto la app se quedaba solo con las 1.000 más viejas (sin las aprobaciones y correcciones recientes) sin avisar.
+  // Se pide por páginas hasta que no haya más (mientras sean menos de 1.000, es una sola consulta, igual que antes).
+  SupabaseStore.prototype._todas = function (ruta) {
+    var self = this, N = 1000, todo = [];
+    function pagina(desde) {
+      return self._rest('GET', ruta + '&limit=' + N + '&offset=' + desde).then(function (r) {
+        r = r || []; todo = todo.concat(r);
+        return r.length === N ? pagina(desde + N) : todo;
+      });
+    }
+    return pagina(0);
+  };
   SupabaseStore.prototype.cargarTodo = function () {
     var self = this;
     return Promise.all([
       self._rest('GET', 'equipo?select=*'),
       self._rest('GET', 'ajustes?select=*'),
-      self._rest('GET', 'piezas?select=*&order=creado_en.desc'),
-      self._rest('GET', 'eventos?select=*&order=creado_en.asc'),
+      self._todas('piezas?select=*&order=creado_en.desc,id.asc'),
+      self._todas('eventos?select=*&order=creado_en.asc,id.asc'),
       self._rest('GET', 'grabaciones?select=*&order=semana.desc'),
-      self._rest('GET', 'grabacion_eventos?select=*&order=creado_en.asc')
+      self._todas('grabacion_eventos?select=*&order=creado_en.asc,id.asc')
     ]).then(function (r) {
       return { equipo: r[0] || [], ajustes: (r[1] && r[1][0]) || null, piezas: r[2] || [], eventos: r[3] || [], grabaciones: r[4] || [], grabacion_eventos: r[5] || [] };
     });

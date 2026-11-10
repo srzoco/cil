@@ -679,11 +679,15 @@ end $$;
 drop function if exists public._llegada(uuid);
 drop function if exists public._llegada(uuid, text);
 drop function if exists public._llegada(uuid, text, uuid);
-create or replace function public._llegada(p_persona uuid, p_verif text default null, p_local uuid default null, p_hora timestamptz default null) returns json
+drop function if exists public._llegada(uuid, text, uuid, timestamptz);
+create or replace function public._llegada(p_persona uuid, p_verif text default null, p_local uuid default null, p_hora timestamptz default null,
+                                           p_servidor boolean default false) returns json
 language plpgsql security definer set search_path = public as $$
 declare aj public.tareas_ajustes; ya public.asistencia; dev int := 0; comp int := 0; min_comp int := 0; r record; u record;
-  -- Marcado sin conexión: vale la hora en que lo tocó (hasta 3 horas antes y del mismo día); si no, la de ahora
-  ahora timestamptz := case when p_hora is not null and p_hora <= now() and p_hora >= now() - interval '3 hours'
+  -- Marcado sin conexión: vale la hora en que lo tocó (hasta 3 horas antes y del mismo día); si no, la de ahora.
+  -- p_servidor: la hora la anotó el servidor (primer intento desde la red del local), no el teléfono: vale cualquier hora de hoy
+  -- (gerencia puede tardar más de 3 horas en registrar la red nueva y eso no debe dejar a nadie «tarde»)
+  ahora timestamptz := case when p_hora is not null and p_hora <= now() and (p_servidor or p_hora >= now() - interval '3 hours')
                               and (p_hora at time zone 'America/Caracas')::date = public.hoy() then p_hora else now() end;
   pe public.personas; inicio timestamptz := (public.hoy()::timestamp at time zone 'America/Caracas');
   v json;
@@ -859,7 +863,7 @@ begin
   if v->>'verif' = 'wifi' and v_ip is not null then
     select min(creado_en) into primer from llegada_intentos where persona_id = auth.uid() and fecha = public.hoy() and ip = v_ip;
     if primer is not null then
-      return public._llegada(auth.uid(), 'wifi', (v->>'local')::uuid, primer);
+      return public._llegada(auth.uid(), 'wifi', (v->>'local')::uuid, primer, true);
     end if;
   end if;
   return public._llegada(auth.uid(), nullif(v->>'verif', 'libre'), (v->>'local')::uuid);
@@ -882,6 +886,28 @@ begin
   if not public.es_admin() then raise exception 'Solo gerencia.'; end if;
   update locales set sin_wifi_fecha = case when p_activo then public.hoy() else null end where id = p_local;
 end $$;
+-- Al registrar una red como Wi-Fi de un local, quienes intentaron marcar «Llegué» hoy desde esa red quedan con su llegada
+-- marcada sola, desde su primer intento (no tienen que volver a tocar el botón), y les llega un aviso.
+create or replace function public._llegadas_de_red(p_ip text, p_local uuid) returns int
+language plpgsql security definer set search_path = public as $$
+declare r record; n int := 0; v json;
+begin
+  if p_ip is null then return 0; end if;
+  for r in
+    select i.persona_id, min(i.creado_en) as primer
+    from llegada_intentos i join personas pe on pe.id = i.persona_id
+    where i.ip = p_ip and i.fecha = public.hoy() and pe.activo and (pe.rol = 'admin' or 'tareas' = any (pe.accesos))
+      and not exists (select 1 from asistencia s where s.persona_id = i.persona_id and s.fecha = public.hoy() and s.estado = 'presente')
+    group by i.persona_id
+  loop
+    perform public.generar_dia(public.hoy());
+    v := public._llegada(r.persona_id, 'wifi', p_local, r.primer, true);
+    insert into avisos_cola (persona_id, titulo, cuerpo, url)
+    values (r.persona_id, 'Tu llegada quedó marcada', 'A las ' || to_char(r.primer at time zone 'America/Caracas', 'FMHH12:MI am') || '. Ya puedes marcar tus tareas.', './#/');
+    n := n + 1;
+  end loop;
+  return n;
+end $$;
 -- Gerencia: la red nueva sí es del local. Se registra y se borran los intentos desde esa red.
 create or replace function public.aceptar_red(p_red uuid, p_local uuid) returns void
 language plpgsql security definer set search_path = public as $$
@@ -893,12 +919,13 @@ begin
   update locales set redes = array_remove(redes, x) where id <> p_local and x = any (redes);
   update locales set redes = array_append(array_remove(redes, x), x) where id = p_local;
   delete from redes_nuevas where ip = x;
+  perform public._llegadas_de_red(x, p_local);
 end $$;
 
 drop function if exists public.registrar_red();
 create or replace function public.registrar_red(p_local uuid) returns json
 language plpgsql security definer set search_path = public as $$
-declare ip text := public._ip_cliente(); r text[];
+declare ip text := public._ip_cliente(); r text[]; esta text;
 begin
   if not public.es_admin() then raise exception 'Solo gerencia.'; end if;
   if ip is null then raise exception 'No se pudo detectar la red. Intenta de nuevo.'; end if;
@@ -910,6 +937,9 @@ begin
     r := (array_append(r, ip))[greatest(1, cardinality(r) + 1 - 4):];  -- se guardan las últimas 5
     update locales set redes = r where id = p_local;
   end if;
+  esta := ip;  -- (otra variable: «ip» también es una columna de redes_nuevas)
+  delete from redes_nuevas rn where rn.ip = esta;
+  perform public._llegadas_de_red(ip, p_local);
   return json_build_object('ip', ip, 'redes', cardinality(r));
 end $$;
 
@@ -3765,6 +3795,17 @@ begin
   perform cron.unschedule(jobid) from cron.job where jobname in ('robot_verificar_2', 'robot_verificar_3');
   perform cron.schedule('robot_verificar_2', '35 17 * * 1-6', $q$select public.robot_verificar()$q$);
   perform cron.schedule('robot_verificar_3', '5 22 * * 1-6', $q$select public.robot_verificar()$q$);
+end $$;
+
+-- Limpieza del historial de los relojes: pg_cron anota cada corrida en cron.job_run_details y nunca lo borra.
+-- Con el reloj de avisos cada minuto son más de 1.400 filas al día; en el plan gratis (500 MB) eso llena la base con el tiempo.
+-- Se dejan los últimos 7 días (4:30 a. m.). Si el proyecto no deja tocar esa tabla, no pasa nada.
+do $$
+begin
+  if to_regclass('cron.job') is null or to_regclass('cron.job_run_details') is null then return; end if;
+  perform cron.unschedule(jobid) from cron.job where jobname = 'limpieza_relojes';
+  perform cron.schedule('limpieza_relojes', '30 8 * * *', $q$delete from cron.job_run_details where end_time < now() - interval '7 days'$q$);
+exception when others then raise notice 'limpieza_relojes: %', sqlerrm;
 end $$;
 
 -- Listo. Siguiente paso de la guía: poner tu correo (y los de gerencia) como admin.

@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gloock&family=Montserrat:wght@500;600;700;800&display=swap" media="print" onload="this.media='all'">
   <!-- Quien solo usa un módulo (por ejemplo Tareas) va directo, sin esperar a que cargue el menú -->
-  <script>try { var d = localStorage.getItem('barquero_directo'); if (d && /^[a-z]+\/$/.test(d) && !sessionStorage.getItem('barquero_en_menu') && !/avisos/.test(location.search)) location.replace(d); } catch (e) { /* sigue al menú */ }</script>
+  <script>try { var d = localStorage.getItem('barquero_directo'); if (d && /^[a-z]+\/$/.test(d) && !sessionStorage.getItem('barquero_en_menu') && !/avisos|bandeja/.test(location.search)) location.replace(d); } catch (e) { /* sigue al menú */ }</script>
   <script src="comun/tema.js?v=4"></script>
   <link rel="stylesheet" href="comun/tema.css?v=3">
   <link rel="stylesheet" href="comun/hub.css?v=8">
@@ -25,6 +25,6 @@
   <div id="hub"><div class="hub-centro"><div class="hub-spinner"></div></div></div>
   <noscript>Esta app necesita JavaScript.</noscript>
   <script src="config.js" defer></script>
-  <script src="comun/hub.js?v=15" defer></script>
+  <script src="comun/hub.js?v=16" defer></script>
 </body>
 </html>
