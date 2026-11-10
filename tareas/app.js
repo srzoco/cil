@@ -1417,12 +1417,19 @@
   function bloqueWifi() {
     var red = S.red || {};
     var autos = (S.data && S.data.redes_auto) || [];
-    return '<section class="card wifi-locales"><h2>Wi-Fi de los locales</h2><p class="ayuda sin-margen">Se registra estando en el local, conectada a su Wi-Fi.</p>' + locales().map(function (l) {
-      var aqui = (red.locales || []).indexOf(l.id) >= 0, nRedes = (l.redes || []).length;
-      var h = '<div class="tienda-fila"><div><b>' + esc(l.nombre) + '</b><span class="muted">' + (nRedes ? plural(nRedes, 'red registrada', 'redes registradas') : 'Ninguna red registrada') +
+    // Locales del mismo sitio comparten Wi-Fi (CIL y BQTO): salen juntos, con un solo botón
+    var grupos = [], porSitio = {};
+    locales().forEach(function (l) {
+      if (l.sitio) { if (!porSitio[l.sitio]) { porSitio[l.sitio] = []; grupos.push(porSitio[l.sitio]); } porSitio[l.sitio].push(l); } else grupos.push([l]);
+    });
+    return '<section class="card wifi-locales"><h2>Wi-Fi de los locales</h2><p class="ayuda sin-margen">Se registra estando en el local, conectada a su Wi-Fi.</p>' + grupos.map(function (ls) {
+      var ids = ls.map(function (l) { return l.id; }), redes = {};
+      ls.forEach(function (l) { (l.redes || []).forEach(function (x) { redes[x] = 1; }); });
+      var aqui = ids.some(function (id) { return (red.locales || []).indexOf(id) >= 0; }), nRedes = Object.keys(redes).length;
+      var h = '<div class="tienda-fila"><div><b>' + esc(ls.map(function (l) { return l.nombre; }).join(' y ')) + '</b><span class="muted">' + (ls.length > 1 ? 'Mismo Wi-Fi · ' : '') + (nRedes ? plural(nRedes, 'red registrada', 'redes registradas') : 'Ninguna red registrada') +
         (red.ip ? (aqui ? ' · <span class="ok-txt">este teléfono está aquí</span>' : '') : (S.red === null ? ' · revisando…' : '')) + '</span></div>' +
-        (aqui ? '' : '<button class="btn sec chico" type="button" data-acc="registrar-red" data-id="' + esc(l.id) + '">Registrar esta red</button>') + '</div>';
-      autos.filter(function (a) { return a.local_id === l.id; }).forEach(function (a) {
+        (aqui ? '' : '<button class="btn sec chico" type="button" data-acc="registrar-red" data-id="' + esc(ls[0].id) + '">Registrar esta red</button>') + '</div>';
+      autos.filter(function (a) { return ids.indexOf(a.local_id) >= 0; }).forEach(function (a) {
         h += '<div class="tienda-fila red-sola"><div><b>Se registró sola una red nueva</b><span class="muted">' + esc(L.fmtFecha(String(a.creado_en).slice(0, 10))) + ' · ' + esc(L.fmtHora(a.creado_en)) + ' · ' +
           esc((a.personas || []).map(nombreDe).join(', ')) + '</span></div><button class="btn warn chico" type="button" data-acc="deshacer-red" data-id="' + esc(a.id) + '">Deshacer</button></div>';
       });

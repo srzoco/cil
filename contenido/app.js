@@ -642,7 +642,8 @@
     var html = '<a href="#/tablero" class="volver" data-act="volver">‹ Volver</a>' +
       '<article class="pieza t-' + p.tipo + '">' +
       '<header class="pieza-head"><div class="tarjeta-top">' + tipoTag(p, true) + badgesPlat(p) + '</div>' +
-      '<div class="titulo-fila"><h1>' + esc(p.titulo) + '</h1><button class="btn link chico" data-act="editar" data-id="' + p.id + '" aria-label="Cambiar el nombre">✏️ Cambiar nombre</button></div><div class="pieza-estado">' + pill(p) + limiteChip(p) + '</div>' + stepper(p) + '</header>';
+      '<div class="titulo-fila"><h1>' + esc(p.titulo) + '</h1><button class="btn link chico" data-act="editar" data-id="' + p.id + '" aria-label="Cambiar el nombre">✏️ Cambiar nombre</button></div><div class="pieza-estado">' + pill(p) + limiteChip(p) + '</div>' + stepper(p) +
+      (L.pasoAnterior(p) ? '<button class="btn link devolver" data-act="paso-anterior" data-id="' + p.id + '">↩ Devolver a «' + esc(L.pasoAnterior(p).texto) + '»</button>' : '') + '</header>';
     if (p.fase === 'idea') html += bloqueIdea(p);
     if (p.revisar_despues && miRol === 'aprueba') html += tarjetaDespues(p);
     if (p.fase === 'produccion') {
@@ -683,8 +684,6 @@
     html += historialHtml(p);
     html += '<div class="mas-acciones">' +
       (!p.en_espera && p.fase !== 'publicada' && p.fase !== 'archivada' ? '<button class="btn sec" data-act="espera" data-id="' + p.id + '">📦 En espera de mercancía</button>' : '') +
-      (L.puedeVolverARevision(p) && rol() === 'aprueba' ? '<button class="btn sec" data-act="a-revision" data-id="' + p.id + '">↩ Volver a revisión</button>' : '') +
-      (L.puedeVolverAIdea(p) ? '<button class="btn sec" data-act="a-idea" data-id="' + p.id + '">💡 Volver a ideas</button>' : '') +
       (p.fase === 'archivada' ? '<button class="btn sec" data-act="reabrir" data-id="' + p.id + '">Reabrir</button>' : '<button class="btn fantasma" data-act="archivar" data-id="' + p.id + '">Archivar</button>') +
       '</div></article>';
     return html;
@@ -1039,15 +1038,27 @@
     var html = '<a href="#/" class="volver" data-act="volver">‹ Volver</a>' + tarjetaGrabacion(g, false);
     var planeadas = piezas().filter(function (p) { return p.grabacion_id === g.id && p.fase !== 'archivada'; });
     var abierta = g.estado !== 'cancelada';
-    html += '<section class="card"><h2>Qué vamos a grabar <span class="cuenta">' + planeadas.filter(function (p) { return p.fase === 'idea'; }).length + ' por grabar</span></h2>' +
-      (planeadas.length ? '<div class="lista-tarjetas">' + planeadas.map(function (p) {
-        var listo = p.fase !== 'idea';
-        return '<div class="fila-accion">' + tarjeta(p) + (listo ? '<span class="pill ok">Grabado</span>' : '<div class="fila-btns"><button class="btn sec" data-act="no-grabo-video" data-id="' + p.id + '">No se grabó</button><button class="btn ok" data-act="grabado" data-id="' + p.id + '">Grabado ✓</button></div>') + '</div>';
-      }).join('') + '</div>' : '<p class="muted">Todavía no hay videos planificados.</p>') +
+    // Dos grupos: lo que falta por grabar y lo ya grabado en esta sesión
+    var porGrabar = planeadas.filter(function (p) { return p.fase === 'idea'; }), grabados = planeadas.filter(function (p) { return p.fase !== 'idea'; });
+    html += '<section class="card"><h2>Por grabar <span class="cuenta">' + porGrabar.length + '</span></h2>' +
+      (porGrabar.length ? '<div class="lista-tarjetas">' + porGrabar.map(function (p) {
+        return '<div class="fila-accion">' + tarjeta(p) + '<div class="fila-btns"><button class="btn sec" data-act="no-grabo-video" data-id="' + p.id + '">No se grabó</button><button class="btn ok" data-act="grabado" data-id="' + p.id + '">Grabado ✓</button></div></div>';
+      }).join('') + '</div>' : '<p class="muted">' + (grabados.length ? 'Nada pendiente: todo lo planificado se grabó.' : 'Todavía no hay videos planificados.') + '</p>') +
       (abierta ? '<form data-form="titulo-grab" data-id="' + g.id + '" class="agregar-titulo"><input name="titulo" placeholder="Título del video" autocomplete="off" required>' +
         '<select name="tipo" aria-label="Tipo"><option value="reel">Reel</option><option value="carrusel">Carrusel</option><option value="historia">Historia</option></select>' +
         '<select name="plats" aria-label="Plataformas"><option value="ambas">IG + TikTok</option><option value="tt">Solo TikTok</option><option value="ig">Solo IG</option></select>' +
         '<button class="btn chico" type="submit">Agregar</button></form>' : '') + '</section>';
+    if (grabados.length) html += '<section class="card"><h2>Grabados <span class="cuenta">' + grabados.length + '</span></h2><div class="lista-tarjetas">' + grabados.map(function (p) {
+      return '<div class="fila-accion">' + tarjeta(p) + '<button class="btn fantasma chico" data-act="a-grabacion" data-id="' + p.id + '" data-grab="">Quitar</button></div>';
+    }).join('') + '</div></section>';
+    // Videos que ya están creados (en edición, por aprobar o listos) y no están en ninguna grabación: se anotan aquí como grabados
+    if (abierta) {
+      var sueltos = piezas().filter(function (p) { return (p.fase === 'produccion' || p.fase === 'aprobada') && !p.grabacion_id && p.tipo !== 'carrusel'; });
+      if (sueltos.length) html += '<details class="card plegable"><summary><b>Videos ya creados</b> <span class="muted">' + sueltos.length + ' sin grabación</span></summary>' +
+        '<p class="ayuda">¿Se grabó en esta sesión? Anótalo aquí y queda en «Grabados». No cambia de paso.</p><div class="lista-tarjetas">' + sueltos.map(function (p) {
+          return '<div class="fila-accion">' + tarjeta(p) + '<button class="btn sec" data-act="a-grabacion" data-id="' + p.id + '" data-grab="' + g.id + '">+ Se grabó aquí</button></div>';
+        }).join('') + '</div></details>';
+    }
     if (abierta && g.estado !== 'hecha') {
       var pendientesAnt = piezas().filter(function (p) { return p.fase === 'idea' && p.grabacion_id && p.grabacion_id !== g.id; });
       if (pendientesAnt.length) {
@@ -1427,20 +1438,17 @@
       try { r = L.accionIniciar(p, {}); } catch (e) { return aviso(e.message); }
       accion(function () { return ejecutar(p, r); }, function () { S.flash = { titulo: p.tipo !== 'carrusel' ? '🎬 Grabado' : '▶️ En producción', texto: '«' + p.titulo + '» pasó a edición.' }; });
     },
-    'a-revision': function (el) {
-      var p = pieza(el.dataset.id), r;
-      try { r = L.accionVolverARevision(p); } catch (e) { return aviso(e.message); }
-      accion(function () { return ejecutar(p, r); }, function () { S.flash = { titulo: 'Volvió a revisión', texto: '«' + p.titulo + '» queda por aprobar otra vez.' }; });
-    },
     'desmarcar-pub': function (el) {
       var p = pieza(el.dataset.id), r;
       try { r = L.accionDesmarcarPublicado(p, el.dataset.plat); } catch (e) { return aviso(e.message); }
       accion(function () { return ejecutar(p, r); }, function () { S.flash = { titulo: 'Desmarcado', texto: 'Ya no figura como publicado en ' + L.PLATAFORMAS[el.dataset.plat] + '.' }; });
     },
-    'a-idea': function (el) {
-      var p = pieza(el.dataset.id), r;
-      try { r = L.accionVolverAIdea(p); } catch (e) { return aviso(e.message); }
-      accion(function () { return ejecutar(p, r); }, function () { S.flash = { titulo: '💡 Volvió a ideas', texto: '«' + p.titulo + '» queda en Ideas hasta que se grabe.' }; });
+    'paso-anterior': function (el) {
+      var p = pieza(el.dataset.id), d = p && L.pasoAnterior(p), r;
+      if (!d) return;
+      if (!confirm('¿Devolver «' + p.titulo + '» a «' + d.texto + '»?' + (d.a === 'ideas' || d.a === 'grabar' ? ' Lo que se haya subido de edición queda en el historial.' : ''))) return;
+      try { r = L.accionPasoAnterior(p); } catch (e) { return aviso(e.message); }
+      accion(function () { return ejecutar(p, r); }, function () { S.flash = { titulo: '↩ Devuelta', texto: '«' + p.titulo + '» volvió a «' + d.texto + '».' }; });
     },
     'a-grabacion': function (el) {
       var p = pieza(el.dataset.id), r;

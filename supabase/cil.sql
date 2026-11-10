@@ -802,6 +802,14 @@ revoke all on public.llegada_intentos from anon, authenticated;
 -- Redes que gerencia registró EN PERSONA, estando en el local («Registrar esta red»). Son las únicas que sirven de
 -- referencia para que una red nueva se registre sola (decisión de Sara, 10/11/2026).
 alter table public.locales add column if not exists redes_persona text[] not null default '{}';
+-- Locales que están en el mismo sitio y comparten Wi-Fi (CIL y BQTO: los teléfonos se conectan a veces a una red y a veces
+-- a la otra; decisión de Sara, 10/11/2026). Mismo «sitio» = las redes de uno valen para el otro, y para registrar sola
+-- una red nueva cuentan las personas y las redes registradas en persona de todos los locales del sitio.
+alter table public.locales add column if not exists sitio text;
+create or replace function public._mismo_sitio(a uuid, b uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select a = b or exists (select 1 from locales x join locales y on y.sitio = x.sitio where x.id = a and y.id = b and x.sitio is not null and x.sitio <> '')
+$$;
 -- Redes que se registraron solas: queda quién lo intentó, para avisar a gerencia y poder deshacer.
 create table if not exists public.redes_auto (
   id         uuid primary key default gen_random_uuid(),
@@ -837,7 +845,10 @@ begin
   select local_id into propio from personas where id = p_persona;
   -- Wi-Fi: su local primero
   for lo in select id, redes from locales order by (id = propio) desc, principal desc loop
-    if ip is not null and ip = any (lo.redes) then return json_build_object('verif', 'wifi', 'local', lo.id); end if;
+    if ip is not null and ip = any (lo.redes) then
+      -- red de otro local del mismo sitio (comparten Wi-Fi): la llegada es en su propio local
+      return json_build_object('verif', 'wifi', 'local', case when propio is not null and public._mismo_sitio(propio, lo.id) then propio else lo.id end);
+    end if;
   end loop;
   -- Un local sin Wi-Fi registrado ya no deja marcar desde cualquier red: la red nueva le llega a gerencia para aprobarla
   -- Gerencia marcó que hoy no hay Wi-Fi en su local
@@ -913,7 +924,7 @@ declare ip text := public._ip_cliente();
 begin
   if not public.es_admin() then raise exception 'Solo gerencia.'; end if;
   return json_build_object('ip', ip, 'locales',
-    coalesce((select json_agg(id) from locales where ip is not null and ip = any (redes)), '[]'::json));
+    coalesce((select json_agg(l.id) from locales l where ip is not null and exists (select 1 from locales s where ip = any (s.redes) and public._mismo_sitio(l.id, s.id))), '[]'::json));
 end $$;
 
 -- Gerencia: hoy no hay Wi-Fi en este local (se puede marcar «Llegué» sin revisar la red). Se apaga solo al día siguiente.
@@ -938,7 +949,9 @@ begin
     group by i.persona_id
   loop
     perform public.generar_dia(public.hoy());
-    v := public._llegada(r.persona_id, 'wifi', p_local, r.primer, true);
+    v := public._llegada(r.persona_id, 'wifi',
+           (select case when pe.local_id is not null and public._mismo_sitio(pe.local_id, p_local) then pe.local_id else p_local end from personas pe where pe.id = r.persona_id),
+           r.primer, true);
     insert into avisos_cola (persona_id, titulo, cuerpo, url)
     values (r.persona_id, 'Tu llegada quedó marcada', 'A las ' || to_char(r.primer at time zone 'America/Caracas', 'FMHH12:MI am') || '. Ya puedes marcar tus tareas.', './#/');
     n := n + 1;
@@ -959,12 +972,12 @@ begin
   if exists (select 1 from redes_auto where ip = p_ip and deshecha) then return null; end if;
   for lo in
     select l.id, l.nombre from locales l
-    where exists (select 1 from unnest(l.redes_persona) x where public._familia_red(x) = public._familia_red(p_ip))
+    where exists (select 1 from locales s, unnest(s.redes_persona) x where public._mismo_sitio(l.id, s.id) and public._familia_red(x) = public._familia_red(p_ip))
     order by l.principal desc
   loop
     select array_agg(distinct i.persona_id) into quienes
     from llegada_intentos i join personas pe on pe.id = i.persona_id
-    where i.ip = p_ip and i.fecha = public.hoy() and pe.activo and pe.rol = 'empleado' and 'tareas' = any (pe.accesos) and pe.local_id = lo.id;
+    where i.ip = p_ip and i.fecha = public.hoy() and pe.activo and pe.rol = 'empleado' and 'tareas' = any (pe.accesos) and public._mismo_sitio(pe.local_id, lo.id);
     if coalesce(cardinality(quienes), 0) >= 2 then
       update locales set redes = array_append(array_remove(redes, p_ip), p_ip) where id = lo.id;
       insert into redes_auto (local_id, ip, personas) values (lo.id, p_ip, quienes);
@@ -1016,7 +1029,7 @@ begin
   if not public.es_admin() then raise exception 'Solo gerencia.'; end if;
   if ip is null then raise exception 'No se pudo detectar la red. Intenta de nuevo.'; end if;
   -- una red pertenece a un solo local
-  update locales set redes = array_remove(redes, ip) where id <> p_local and ip = any (redes);
+  update locales set redes = array_remove(redes, ip) where id <> p_local and ip = any (redes) and not public._mismo_sitio(id, p_local);
   select redes into r from locales where id = p_local;
   if r is null then raise exception 'Ese local no existe.'; end if;
   if not ip = any (r) then
@@ -1024,7 +1037,7 @@ begin
     update locales set redes = r where id = p_local;
   end if;
   -- registrada en persona: sirve de referencia para las redes que se registran solas (se guardan las últimas 5)
-  update locales set redes_persona = array_remove(redes_persona, ip) where id <> p_local and ip = any (redes_persona);
+  update locales set redes_persona = array_remove(redes_persona, ip) where id <> p_local and ip = any (redes_persona) and not public._mismo_sitio(id, p_local);
   update locales set redes_persona = (array_append(array_remove(redes_persona, ip), ip))[greatest(1, cardinality(array_remove(redes_persona, ip)) + 1 - 4):] where id = p_local;
   esta := ip;  -- (otra variable: «ip» también es una columna de redes_nuevas)
   delete from redes_nuevas rn where rn.ip = esta;
@@ -2185,6 +2198,18 @@ language sql stable security definer set search_path = public as $$
   select case when public.es_admin() then (select json_build_object('ultimo', r.ultimo, 'ahora', now()) from reloj_avisos r where r.id = 1) end
 $$;
 
+-- Espacio usado del plan gratis de Supabase: base de datos (500 MB) y fotos (1 GB). Si se llena, deja de guardar sin avisar.
+create or replace function public._espacio() returns json
+language plpgsql stable security definer set search_path = public as $$
+declare base numeric := round(pg_database_size(current_database()) / 1048576.0); fotos numeric := 0;
+begin
+  if to_regclass('storage.objects') is not null then
+    begin execute $q$select coalesce(round(sum((metadata->>'size')::numeric) / 1048576.0), 0) from storage.objects$q$ into fotos;
+    exception when others then fotos := 0; end;
+  end if;
+  return json_build_object('base_mb', base, 'base_pct', round(base * 100 / 500), 'fotos_mb', fotos, 'fotos_pct', round(fotos * 100 / 1024));
+end $$;
+
 create or replace function public.avisos_pendientes() returns table (persona_id uuid, endpoint text, p256dh text, auth text, titulo text, cuerpo text, url text)
 language plpgsql security definer set search_path = public as $$
 declare aj public.tareas_ajustes; ahora timestamptz := now(); hoy date := public.hoy(); hace timestamptz := now() - interval '10 minutes';
@@ -2335,6 +2360,20 @@ begin
     update redes_nuevas set avisado = true where not avisado and fecha = hoy;
   end if;
 
+  -- 4g) Espacio (10/11/2026): una vez al día a las 8:40, a gerencia, si la base de datos o las fotos pasan de 70 % del plan gratis
+  --     (va en el resumen de las 8:45). Desde 85 % sale con 🔴 y suena.
+  if public._ts_hoy(time '08:40') <= ahora and public._ts_hoy(time '08:40') > hace then
+    insert into _avisos (persona_id, clave, titulo, cuerpo, url, urgente)
+    select ad.id, 'espacio:' || hoy || ':' || ad.id,
+           case when greatest(e.b, e.f) >= 85 then '🔴 ' else '' end || 'Espacio: ' ||
+             case when e.b >= e.f then 'la base de datos va por ' || e.b || ' %' else 'las fotos van por ' || e.f || ' %' end,
+           'Base de datos: ' || e.bm || ' de 500 MB. Fotos: ' || e.fm || ' de 1.024 MB. Si se llena, la app deja de guardar: hay que limpiar historial o pasar al plan pago.',
+           './?bandeja', greatest(e.b, e.f) >= 85
+    from (select (x->>'base_pct')::int as b, (x->>'fotos_pct')::int as f, x->>'base_mb' as bm, x->>'fotos_mb' as fm from (select public._espacio() as x) z) e,
+         personas ad
+    where ad.activo and ad.rol = 'admin' and greatest(e.b, e.f) >= 70;
+  end if;
+
   -- 5) Gerencia: temperatura fuera de rango
   --    Un solo aviso por ronda (todos los equipos fuera de rango de esa toma)
   insert into _avisos
@@ -2433,6 +2472,7 @@ begin
     case when v.url like 'pendientes/%' then '📋'
          when v.url like '%contenido%' then '🎬'
          when v.url like 'mensajes/%' or v.url = './' then '💬'
+         when v.url like './?%' then '⚙️'
          else '✅' end || ' ' || regexp_replace(v.titulo, '^(🔴|🟢|📲|⏰|🔔)\s*', '')
   where v.clave not like 'bandeja:%';
 
@@ -3328,6 +3368,26 @@ begin
   if exists (select 1 from public.cil_migraciones where nombre = 'redes-persona-2026-11-10') then return; end if;
   update public.locales set redes_persona = redes where redes_persona = '{}';
   insert into public.cil_migraciones (nombre) values ('redes-persona-2026-11-10');
+end $$;
+
+-- Una sola vez (10/11/2026): CIL y BQTO están en el mismo sitio y comparten Wi-Fi
+do $$
+begin
+  if exists (select 1 from public.cil_migraciones where nombre = 'sitio-cil-bqto-2026-11-10') then return; end if;
+  update public.locales set sitio = 'cil-bqto' where sitio is null and (nombre ilike '%cil%' or nombre ilike '%bqto%' or nombre ilike '%barquisimeto%');
+  insert into public.cil_migraciones (nombre) values ('sitio-cil-bqto-2026-11-10');
+end $$;
+
+-- Una sola vez (10/11/2026): feriados de diciembre para todos los locales (24, 25 y 31; pedido de Sara).
+-- Lo semanal o mensual que caiga esos días pasa al día laboral anterior, como cualquier feriado.
+do $$
+begin
+  if exists (select 1 from public.cil_migraciones where nombre = 'feriados-dic-2026') then return; end if;
+  insert into public.dias_especiales (fecha, local_id, tipo, nombre)
+  select f.fecha, null, 'libre', f.nombre
+  from (values (date '2026-12-24', 'Nochebuena'), (date '2026-12-25', 'Navidad'), (date '2026-12-31', 'Fin de año')) as f(fecha, nombre)
+  where not exists (select 1 from public.dias_especiales d where d.fecha = f.fecha and d.local_id is null);
+  insert into public.cil_migraciones (nombre) values ('feriados-dic-2026');
 end $$;
 
 -- 27/10/2026: empezar de cero la semana de práctica (la limpieza programada no llegó a correr: seguían saliendo

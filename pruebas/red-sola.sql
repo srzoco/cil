@@ -78,5 +78,37 @@ do $$ declare r json; begin
   if r->>'error' is null then raise exception 'FALLO: registró sola sin ninguna red registrada en persona'; end if;
   if public._familia_red('190.5.77.7') <> '190.5' or public._familia_red('2800:484:1:2::/64') is null or public._familia_red('basura') is not null then raise exception 'FALLO: familia de red'; end if;
 end $$;
+-- H) Dos locales en el mismo sitio (CIL y BQTO comparten Wi-Fi, 10/11/2026): cuentan juntos.
+--    Red registrada en persona en uno; 1 persona de cada local la intenta desde una red nueva de la misma familia → se registra,
+--    y cada quien queda marcado en SU local. La red de un local sirve para marcar a los del otro.
+do $$ declare r json; pr uuid := (select id from locales where principal); ot uuid := (select id from locales where nombre = 'Otro local de prueba'); begin
+  delete from asistencia; delete from llegada_intentos; delete from redes_nuevas; delete from redes_auto;
+  update locales set redes = '{}', redes_persona = '{}', sitio = null;
+  update locales set redes = '{190.5.1.1}', redes_persona = '{190.5.1.1}' where id = pr;
+  -- sin sitio: la red del principal NO deja marcar en su local a la del otro local… (queda marcada en el principal, como siempre)
+  r := pg_temp.intenta('e1000000-0000-0000-0000-000000000009', '190.5.99.9'); r := pg_temp.intenta('e3000000-0000-0000-0000-000000000009', '190.5.99.9');
+  if r->>'error' is null then raise exception 'FALLO: sin compartir sitio contó a personas de locales distintos'; end if;
+  -- con sitio
+  update locales set sitio = 'juntos' where id in (pr, ot);
+  delete from llegada_intentos; delete from redes_nuevas;
+  r := pg_temp.intenta('e1000000-0000-0000-0000-000000000009', '190.5.99.9'); r := pg_temp.intenta('e3000000-0000-0000-0000-000000000009', '190.5.99.9');
+  if r->>'error' is not null then raise exception 'FALLO: en el mismo sitio no se registró con una persona de cada local: %', r; end if;
+  if (select local_id from asistencia where persona_id = 'e1000000-0000-0000-0000-000000000009' and fecha = hoy()) is distinct from pr
+     or (select local_id from asistencia where persona_id = 'e3000000-0000-0000-0000-000000000009' and fecha = hoy()) is distinct from ot then raise exception 'FALLO: en el mismo sitio cada quien debía quedar marcado en su local'; end if;
+  -- la red registrada del principal sirve a la persona del otro local, y queda en SU local
+  delete from asistencia;
+  r := pg_temp.intenta('e3000000-0000-0000-0000-000000000009', '190.5.1.1');
+  if r->>'error' is not null or (select local_id from asistencia where persona_id = 'e3000000-0000-0000-0000-000000000009' and fecha = hoy()) is distinct from ot then raise exception 'FALLO: la red del local vecino no marcó en su propio local: %', r; end if;
+end $$;
+-- registrar en persona la misma red en el otro local del sitio no se la quita al primero
+set local request.headers = '{"x-real-ip": "190.5.1.1"}';
+set test.uid = 'ea000000-0000-0000-0000-000000000009'; set role authenticated;
+select registrar_red((select id from locales where nombre = 'Otro local de prueba')) \gset
+do $$ begin if json_array_length((mi_red())->'locales') <> 2 then raise exception 'FALLO: «este teléfono está aquí» debía salir en los dos locales del sitio: %', mi_red(); end if; end $$;
+reset role;
+do $$ begin
+  if (select count(*) from locales where '190.5.1.1' = any (redes)) <> 2 then raise exception 'FALLO: registrar la red en el local vecino se la quitó al primero'; end if;
+  if (public._espacio()->>'base_mb') is null or (public._espacio()->>'fotos_pct') is null then raise exception 'FALLO: _espacio'; end if;
+end $$;
 rollback;
 \echo 'OK: la red nueva se registra sola solo con las dos condiciones, avisa y se puede deshacer'

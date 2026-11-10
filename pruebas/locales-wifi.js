@@ -40,6 +40,12 @@ const BASE = process.env.BASE || 'http://localhost:8765';
   const d = await p.evaluate(() => { const db = JSON.parse(localStorage.getItem('tareasbf_demo_v1')); return { redes: db.locales[0].redes, des: db.redes_auto[0].deshecha }; });
   ok(d.des && d.redes.indexOf('190.5.77.7') < 0, 'Deshacer no quitó la red: ' + JSON.stringify(d));
   ok(await p.locator('[data-acc="deshacer-red"]').count() === 0, 'La red deshecha sigue en pantalla');
+  // Locales del mismo sitio (CIL y BQTO comparten Wi-Fi): una sola fila con los dos nombres y un solo botón
+  const nAntes = await p.locator('.wifi-locales > .tienda-fila:not(.red-sola)').count();
+  await p.evaluate(() => { const db = JSON.parse(localStorage.getItem('tareasbf_demo_v1')); db.locales.forEach(l => { l.sitio = 'juntos'; }); localStorage.setItem('tareasbf_demo_v1', JSON.stringify(db)); });
+  await p.reload(); await p.waitForTimeout(700); await p.goto(BASE + '/tareas/#/equipo/locales'); await p.waitForTimeout(800);
+  const filas = await p.locator('.wifi-locales > .tienda-fila:not(.red-sola)').allInnerTexts();
+  ok(nAntes >= 2 && filas.length === 1 && / y /.test(filas[0]) && /Mismo Wi-Fi/.test(filas[0]), 'Los locales del mismo sitio no salen juntos: ' + JSON.stringify(filas));
   const w = await p.evaluate(() => Math.max(document.documentElement.scrollWidth, ...[...document.querySelectorAll('.desliza, #app')].map(e => e.scrollWidth)));
   ok(w <= 361, 'Locales se sale de la pantalla (' + w + ' px)');
   await b.close();

@@ -668,11 +668,41 @@
     return { patch: { grabacion_id: null }, match: { fase: 'idea' },
       eventos: [{ tipo: 'editada', texto: 'no se grabó: ' + String(motivo).trim().slice(0, 200), datos: { no_grabo: true, grabacion_id: p.grabacion_id } }] };
   }
+  // Una idea se planifica para grabar. Un video ya creado (en edición, por aprobar o listo) también se puede anotar en una
+  // grabación: no cambia de paso, solo queda en la lista de esa sesión como «Grabado» (10/11/2026).
   function accionAGrabacion(p, grabacionId) {
-    if (p.fase !== 'idea') throw err('Solo las ideas se planifican para grabar.');
+    if (['idea', 'produccion', 'aprobada'].indexOf(p.fase) < 0) throw err('Esta pieza ya no se puede anotar en una grabación.');
     if ((p.grabacion_id || null) === (grabacionId || null)) throw err(grabacionId ? 'Ya está en esa grabación.' : 'No estaba en ninguna grabación.');
-    return { patch: { grabacion_id: grabacionId || null }, match: { fase: 'idea' },
-      eventos: [{ tipo: 'editada', texto: grabacionId ? 'planificada para grabar' : 'quitada de la grabación', datos: { grabacion_id: grabacionId || null } }] };
+    var idea = p.fase === 'idea';
+    return { patch: { grabacion_id: grabacionId || null }, match: { fase: p.fase },
+      eventos: [{ tipo: 'editada', texto: grabacionId ? (idea ? 'planificada para grabar' : 'anotada en la grabación (ya estaba grabada)') : 'quitada de la grabación', datos: { grabacion_id: grabacionId || null } }] };
+  }
+
+  // Devolver una pieza al paso anterior, desde cualquier paso (10/11/2026, pedido de Sara):
+  //   Lista → Por aprobar · Por aprobar → En edición · En edición → la etapa anterior (carrusel) o Por grabar / Ideas ·
+  //   Por grabar → Ideas. Lo publicado no se devuelve (para eso está «No se publicó», 24 horas).
+  // pasoAnterior(p) dice a dónde volvería (o null si no hay paso anterior).
+  function pasoAnterior(p) {
+    if (p.fase === 'aprobada') return puedeVolverARevision(p) ? { a: 'aprobar', texto: 'Por aprobar' } : null;
+    if (p.fase === 'produccion') {
+      if (p.turno === 'aprueba') return { a: 'editar', texto: 'En edición' };
+      var et = etapasDe(p), i = et.indexOf(etapaNorm(p));
+      if (i > 0) return { a: 'etapa', texto: 'Por aprobar · ' + ETAPA_LABEL[et[i - 1]], etapa: et[i - 1] };
+      return p.grabacion_id ? { a: 'grabar', texto: 'Por grabar' } : { a: 'ideas', texto: 'Ideas' };
+    }
+    if (p.fase === 'idea' && p.grabacion_id) return { a: 'ideas', texto: 'Ideas' };
+    return null;
+  }
+  function accionPasoAnterior(p) {
+    var d = pasoAnterior(p);
+    if (!d) throw err('Esta pieza no tiene un paso anterior al que volver.');
+    if (p.fase === 'aprobada') return accionVolverARevision(p);
+    if (p.fase === 'idea') return accionAGrabacion(p, null);
+    var ev = function (t) { return [{ tipo: 'editada', texto: t, datos: { paso_anterior: d.a } }]; };
+    if (d.a === 'editar') return { patch: { turno: 'edita' }, match: { fase: 'produccion', turno: 'aprueba' }, eventos: ev('volvió a edición (se devolvió al paso anterior)') };
+    if (d.a === 'etapa') return { patch: { etapa: d.etapa, turno: 'aprueba', nota_version: null, enlace_version: null }, match: { fase: 'produccion', turno: 'edita' }, eventos: ev('volvió a «' + d.texto + '» (se devolvió al paso anterior)') };
+    return { patch: { fase: 'idea', etapa: null, turno: null, version: 0, nota_version: null, enlace_version: null }, match: { fase: 'produccion', turno: 'edita' },
+      eventos: ev(d.a === 'grabar' ? 'volvió a «Por grabar» (se devolvió al paso anterior)' : 'volvió a ideas (se devolvió al paso anterior)') };
   }
 
   // Vuelve a ideas una pieza que se pasó a edición por error (todavía no se ha enviado ninguna versión)
@@ -1089,7 +1119,7 @@
     horasEntre: horasEntre, haceCuanto: haceCuanto, fmtHoras: fmtHoras,
     plataformasDe: plataformasDe, fechaDe: fechaDe, publicadoEn: publicadoEn, pendientesDePublicar: pendientesDePublicar,
     etapasDe: etapasDe, etapaNorm: etapaNorm, esFinal: esFinal, gruposChips: gruposChips, COLUMNAS: COLUMNAS, columnaDe: columnaDe, leToca: leToca, pasosDe: pasosDe,
-    entrega: entrega, proximaFecha: proximaFecha, fechaLimite: fechaLimite, accionAGrabacion: accionAGrabacion, puedeVolverARevision: puedeVolverARevision, accionVolverARevision: accionVolverARevision,
+    entrega: entrega, proximaFecha: proximaFecha, fechaLimite: fechaLimite, accionAGrabacion: accionAGrabacion, pasoAnterior: pasoAnterior, accionPasoAnterior: accionPasoAnterior, puedeVolverARevision: puedeVolverARevision, accionVolverARevision: accionVolverARevision,
     puedeDesmarcarPublicado: puedeDesmarcarPublicado, accionDesmarcarPublicado: accionDesmarcarPublicado, puedeVolverAIdea: puedeVolverAIdea, accionVolverAIdea: accionVolverAIdea, eventosEtapaActual: eventosEtapaActual, ocupa: ocupa, diaCfg: diaCfg, cron: cron, slotTipo: slotTipo, publicable: publicable, cabe: cabe, checklistDe: checklistDe, minimo: minimo, enBanco: enBanco, estadoDe: estadoDe, fueraDeTipo: fueraDeTipo, accionNoSeGrabo: accionNoSeGrabo, textoFueraDeTipo: textoFueraDeTipo, slotExtra: slotExtra, cabePrincipal: cabePrincipal,
     ocupado: ocupado, slotLibre: slotLibre, sugerirFechas: sugerirFechas, validarFechas: validarFechas,
     huecos: huecos, candidatosHueco: candidatosHueco,
