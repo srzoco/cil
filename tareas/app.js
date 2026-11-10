@@ -1261,9 +1261,9 @@
     if (sec === 'locales') {
       S.redCheck();
       h += '<h1>Locales</h1><p class="ayuda sin-margen">Cada local tiene sus días de trabajo, su Wi-Fi y su ubicación. Las tareas y los empleados de un local no se mezclan con los del otro.</p>';
-      h += bloqueRedesNuevas();
+      h += bloqueWifi();
       locales().forEach(function (l) { h += tarjetaLocal(l); });
-      return h + '<button class="btn sec" data-acc="agregar-local">' + ICON.mas + 'Agregar local</button>';
+      return h + '<button class="btn sec" data-acc="agregar-local">' + ICON.mas + 'Agregar local</button>' + bloqueRedesNuevas();
     }
     if (sec === 'frio') return h + seccionEquipos();
     if (sec === 'calendario') return h + seccionCalendario();
@@ -1397,38 +1397,53 @@
   }
 
   // Alguien intentó marcar «Llegué» desde una red que la app no conoce (el proveedor pudo cambiarla)
+  // Intentos de «Llegué» desde redes sin registrar: al final de Locales, plegado, solo con el número.
+  // Sin botones «Es de …»: gerencia no tiene cómo saber desde dónde marcó cada quien; la red se registra estando en el local.
   function bloqueRedesNuevas() {
     var rs = (S.data && S.data.redes_nuevas) || [];
     if (!rs.length) return '';
     var porIp = {};
     rs.forEach(function (r) { (porIp[r.ip] = porIp[r.ip] || []).push(r); });
-    return '<section class="card alerta-card"><h2>Redes nuevas por revisar</h2><p class="ayuda sin-margen">Alguien no pudo marcar «Llegué» desde estas redes. Si es el Wi-Fi del local (el proveedor a veces lo cambia), regístrala aquí: su llegada queda marcada sola, a la hora en que lo intentaron.</p>' +
+    return '<details class="card plegable redes-nuevas"><summary><b>Intentos desde redes sin registrar</b><span class="cuenta-n">' + rs.length + '</span></summary>' +
+      '<p class="ayuda sin-margen">Alguien tocó «Llegué» desde una red que no es la registrada. Si el Wi-Fi del local cambió, ve al local y toca «Registrar esta red» arriba: su llegada queda marcada sola, a la hora en que lo intentaron.</p>' +
       Object.keys(porIp).map(function (ip) {
         var lista = porIp[ip], r = lista[0];
         return '<div class="tienda-fila"><div><b>' + esc(lista.map(function (x) { return nombreDe(x.persona_id); }).filter(function (v, i, a) { return a.indexOf(v) === i; }).join(', ')) + '</b>' +
           '<span class="muted">' + esc(L.fmtFecha(String(r.creado_en).slice(0, 10))) + ' · ' + esc(L.fmtHora(r.creado_en)) + '</span></div>' +
-          '<div class="acciones">' + locales().map(function (l) { return '<button class="btn chico" data-acc="aceptar-red" data-id="' + esc(r.id) + '" data-local="' + esc(l.id) + '">Es de ' + esc(l.nombre) + '</button>'; }).join('') +
-          '<button class="btn fantasma chico" data-acc="ignorar-red" data-id="' + esc(lista.map(function (x) { return x.id; }).join(',')) + '">No es del local</button></div></div>';
-      }).join('') + '</section>';
+          '<button class="btn fantasma chico" data-acc="ignorar-red" data-id="' + esc(lista.map(function (x) { return x.id; }).join(',')) + '">Quitar</button></div>';
+      }).join('') + '</details>';
+  }
+  // Arriba de Locales: el Wi-Fi de cada local con su botón de registrar, y las redes que se registraron solas (con «Deshacer»)
+  function bloqueWifi() {
+    var red = S.red || {};
+    var autos = (S.data && S.data.redes_auto) || [];
+    return '<section class="card wifi-locales"><h2>Wi-Fi de los locales</h2><p class="ayuda sin-margen">Se registra estando en el local, conectada a su Wi-Fi.</p>' + locales().map(function (l) {
+      var aqui = (red.locales || []).indexOf(l.id) >= 0, nRedes = (l.redes || []).length;
+      var h = '<div class="tienda-fila"><div><b>' + esc(l.nombre) + '</b><span class="muted">' + (nRedes ? plural(nRedes, 'red registrada', 'redes registradas') : 'Ninguna red registrada') +
+        (red.ip ? (aqui ? ' · <span class="ok-txt">este teléfono está aquí</span>' : '') : (S.red === null ? ' · revisando…' : '')) + '</span></div>' +
+        (aqui ? '' : '<button class="btn sec chico" type="button" data-acc="registrar-red" data-id="' + esc(l.id) + '">Registrar esta red</button>') + '</div>';
+      autos.filter(function (a) { return a.local_id === l.id; }).forEach(function (a) {
+        h += '<div class="tienda-fila red-sola"><div><b>Se registró sola una red nueva</b><span class="muted">' + esc(L.fmtFecha(String(a.creado_en).slice(0, 10))) + ' · ' + esc(L.fmtHora(a.creado_en)) + ' · ' +
+          esc((a.personas || []).map(nombreDe).join(', ')) + '</span></div><button class="btn warn chico" type="button" data-acc="deshacer-red" data-id="' + esc(a.id) + '">Deshacer</button></div>';
+      });
+      return h;
+    }).join('') + '</section>';
   }
 
   function tarjetaLocal(l) {
-    var red = S.red || {}, aqui = (red.locales || []).indexOf(l.id) >= 0, nRedes = (l.redes || []).length, hayGps = l.lat != null;
+    var hayGps = l.lat != null;
     var nEmp = empleadosDe(l.id).length;
     var h = '<form data-form="local" data-id="' + esc(l.id) + '" class="card local-card">';
     h += '<div class="local-head"><input name="nombre" value="' + esc(l.nombre) + '" maxlength="40" aria-label="Nombre del local" required><span class="muted">' + plural(nEmp, 'empleado', 'empleados') + '</span></div>';
     h += '<div class="campo"><span>Días que trabaja</span><div class="dias">' + [1, 2, 3, 4, 5, 6, 0].map(function (dd) {
       return '<label class="dia"><input type="checkbox" name="lab" value="' + dd + '"' + ((l.dias_laborables || []).indexOf(dd) >= 0 ? ' checked' : '') + '><span>' + L.DIAS_CORTOS[dd] + '</span></label>';
     }).join('') + '</div></div>';
-    h += '<div class="tienda-fila"><div><b>Wi-Fi</b><span class="muted">' + (nRedes ? plural(nRedes, 'red registrada', 'redes registradas') : 'Ninguna red registrada') +
-      (red.ip ? (aqui ? ' · <span class="ok-txt">este teléfono está aquí</span>' : '') : (S.red === null ? ' · revisando…' : '')) + '</span></div>' +
-      (aqui ? '' : '<button class="btn sec chico" type="button" data-acc="registrar-red" data-id="' + esc(l.id) + '">Registrar esta red</button>') + '</div>';
     h += '<div class="tienda-fila"><div><b>Ubicación</b><span class="muted">' + (hayGps ? 'Guardada · <a href="https://maps.google.com/?q=' + l.lat + ',' + l.lng + '" target="_blank" rel="noopener">ver en el mapa</a>' : 'Sin guardar') + '</span></div>' +
       '<button class="btn sec chico" type="button" data-acc="guardar-ubicacion" data-id="' + esc(l.id) + '">' + (hayGps ? 'Actualizar' : 'Usar mi ubicación') + '</button></div>';
     h += '<label class="fila-inline">Radio <select name="radio_m">' + [100, 150, 250, 400].map(function (m) {
       return '<option value="' + m + '"' + (l.radio_m === m ? ' selected' : '') + '>' + m + ' m</option>';
     }).join('') + '</select><small class="muted">alrededor del local</small></label>';
-    h += '<p class="ayuda">Wi-Fi y ubicación se registran estando en ese local. Si deja de reconocer el Wi-Fi, vuelve a registrarlo desde ahí. ¿El local tiene dos redes? Conéctate a la otra, toca ↻ arriba y «Registrar esta red» otra vez (se guardan hasta 5).</p>';
+    h += '<p class="ayuda">El Wi-Fi se registra arriba, estando en el local. ¿Tiene dos redes? Conéctate a la otra, toca ↻ y «Registrar esta red» otra vez (se guardan hasta 5). Si el proveedor cambia la dirección y 2 personas de este local lo intentan desde la red nueva, se registra sola y te avisa.</p>';
     var sinWifi = l.sin_wifi_fecha === S.hoy;
     h += '<div class="tienda-fila"><div><b>¿Se cayó el Wi-Fi?</b><span class="muted">' + (sinWifi ? '<span class="ok-txt">Hoy pueden marcar «Llegué» sin el Wi-Fi</span>' : 'Permite marcar «Llegué» sin el Wi-Fi solo por hoy') + '</span></div>' +
       '<button class="btn ' + (sinWifi ? 'sec' : 'warn') + ' chico" type="button" data-acc="sin-wifi" data-id="' + esc(l.id) + '" data-v="' + (sinWifi ? '0' : '1') + '">' + (sinWifi ? 'Ya volvió' : 'Hoy no hay Wi-Fi') + '</button></div>';
@@ -2123,11 +2138,11 @@
       var on = el.getAttribute('data-v') === '1';
       ejecutar(store.rpc('sin_wifi_hoy', { p_local: id, p_activo: on }), on ? 'Listo: hoy pueden marcar «Llegué» sin el Wi-Fi en «' + nombreLocal(id) + '».' : 'Listo: «Llegué» vuelve a pedir el Wi-Fi.');
     }
-    else if (acc === 'aceptar-red') {
-      var locR = el.getAttribute('data-local');
-      var ipR = (((S.data && S.data.redes_nuevas) || []).filter(function (x) { return x.id === id; })[0] || {}).ip;
-      revisarDatosMoviles(ipR, false, function () {
-        ejecutar(store.rpc('aceptar_red', { p_red: id, p_local: locR }), 'Red registrada en «' + nombreLocal(locR) + '». Quien lo intentó desde ahí ya quedó con su llegada marcada.', true);
+    else if (acc === 'deshacer-red') {
+      confirmar('¿Esa red no era del local? Se quita y no se vuelve a registrar sola.', 'Deshacer', function () {
+        ejecutar(store.rpc('deshacer_red_sola', { p_id: id }), function (r) {
+          return 'Red quitada.' + (r && r.hoy && r.personas ? ' Revisa en Hoy la llegada de ' + r.personas + ': marcaron desde ella.' : '');
+        }, true);
       });
     }
     else if (acc === 'ignorar-red') {

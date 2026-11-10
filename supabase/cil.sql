@@ -799,6 +799,37 @@ create table if not exists public.llegada_intentos (
 alter table public.llegada_intentos enable row level security;
 revoke all on public.llegada_intentos from anon, authenticated;
 
+-- Redes que gerencia registró EN PERSONA, estando en el local («Registrar esta red»). Son las únicas que sirven de
+-- referencia para que una red nueva se registre sola (decisión de Sara, 10/11/2026).
+alter table public.locales add column if not exists redes_persona text[] not null default '{}';
+-- Redes que se registraron solas: queda quién lo intentó, para avisar a gerencia y poder deshacer.
+create table if not exists public.redes_auto (
+  id         uuid primary key default gen_random_uuid(),
+  local_id   uuid not null references public.locales (id) on delete cascade,
+  ip         text not null,
+  fecha      date not null default public.hoy(),
+  personas   uuid[] not null default '{}',
+  deshecha   boolean not null default false,
+  creado_en  timestamptz not null default now()
+);
+alter table public.redes_auto enable row level security;
+revoke all on public.redes_auto from anon, authenticated;
+grant select on public.redes_auto to authenticated;
+drop policy if exists redes_auto_admin on public.redes_auto;
+create policy redes_auto_admin on public.redes_auto for select to authenticated using (public.es_admin());
+
+-- «Familia» de una red: la parte de la dirección que identifica a la compañía y la zona (los dos primeros números en
+-- IPv4; los primeros 32 bits en IPv6). Cuando el proveedor cambia la dirección del local, la nueva suele ser de la misma familia.
+create or replace function public._familia_red(p_ip text) returns text
+language plpgsql immutable as $$
+begin
+  if p_ip is null or p_ip = '' then return null; end if;
+  if p_ip like '%:%' then return host(network(set_masklen(split_part(p_ip, '/', 1)::inet, 32))); end if;
+  if p_ip ~ '^\d+\.\d+\.\d+\.\d+$' then return split_part(p_ip, '.', 1) || '.' || split_part(p_ip, '.', 2); end if;
+  return null;
+exception when others then return null;
+end $$;
+
 create or replace function public._ubicar(p_persona uuid, p_lat double precision, p_lng double precision, p_precision double precision) returns json
 language plpgsql stable security definer set search_path = public as $$
 declare propio uuid; ip text := public._ip_cliente(); lo record;
@@ -850,6 +881,12 @@ begin
       insert into redes_nuevas (persona_id, ip) values (auth.uid(), v_ip) on conflict do nothing;
       insert into llegada_intentos (persona_id, ip) values (auth.uid(), v_ip) on conflict do nothing;
       delete from llegada_intentos where fecha < public.hoy() - 7;
+      -- ¿Ya son 2 personas del mismo local desde una red de la familia de la del local? Se registra sola y quedan marcadas
+      -- (en dos pasos: dentro de una misma consulta no se vería la llegada que se acaba de marcar)
+      nuevo := public._registrar_red_sola(v_ip);
+      if nuevo is not null and exists (select 1 from asistencia where persona_id = auth.uid() and fecha = public.hoy() and estado = 'presente') then
+        return public._llegada(auth.uid());
+      end if;
     end if;
     return json_build_object('error', 'No se pudo marcar tu llegada. Si el problema sigue, avísale a gerencia.');
   end if;
@@ -908,6 +945,55 @@ begin
   end loop;
   return n;
 end $$;
+-- La red nueva se registra SOLA únicamente si se cumplen las DOS cosas (decisión de Sara, 10/11/2026):
+--   1) es de la misma familia que una red que gerencia registró en persona en ese local, y
+--   2) hoy la intentaron 2 personas distintas de ese mismo local.
+-- Si no se cumplen las dos, no se registra. Gerencia recibe un aviso y lo puede deshacer.
+create or replace function public._registrar_red_sola(p_ip text) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare lo record; quienes uuid[]; nombres text;
+begin
+  if p_ip is null or public._familia_red(p_ip) is null then return null; end if;
+  if exists (select 1 from locales where p_ip = any (redes)) then return null; end if;
+  -- una red que gerencia ya deshizo no se vuelve a registrar sola
+  if exists (select 1 from redes_auto where ip = p_ip and deshecha) then return null; end if;
+  for lo in
+    select l.id, l.nombre from locales l
+    where exists (select 1 from unnest(l.redes_persona) x where public._familia_red(x) = public._familia_red(p_ip))
+    order by l.principal desc
+  loop
+    select array_agg(distinct i.persona_id) into quienes
+    from llegada_intentos i join personas pe on pe.id = i.persona_id
+    where i.ip = p_ip and i.fecha = public.hoy() and pe.activo and pe.rol = 'empleado' and 'tareas' = any (pe.accesos) and pe.local_id = lo.id;
+    if coalesce(cardinality(quienes), 0) >= 2 then
+      update locales set redes = array_append(array_remove(redes, p_ip), p_ip) where id = lo.id;
+      insert into redes_auto (local_id, ip, personas) values (lo.id, p_ip, quienes);
+      delete from redes_nuevas where ip = p_ip;
+      select string_agg(coalesce(nullif(pe.nombre, ''), pe.email), ', ' order by pe.nombre) into nombres from personas pe where pe.id = any (quienes);
+      insert into avisos_cola (persona_id, titulo, cuerpo, url)
+      select ad.id, 'Wi-Fi de ' || lo.nombre || ': se registró una red nueva sola',
+             left(nombres || ' marcaron «Llegué» desde ella. Si no era del local, deshazlo en Equipo → Locales.', 180), './#/equipo/locales'
+      from personas ad where ad.activo and ad.rol = 'admin';
+      perform public._llegadas_de_red(p_ip, lo.id);
+      return lo.id;
+    end if;
+  end loop;
+  return null;
+end $$;
+-- Gerencia: deshacer una red que se registró sola (no era del local). La red se quita y no se vuelve a registrar sola.
+-- La asistencia de quienes marcaron desde ella no se toca: gerencia la revisa en Hoy.
+create or replace function public.deshacer_red_sola(p_id uuid) returns json
+language plpgsql security definer set search_path = public as $$
+declare x public.redes_auto; nombres text;
+begin
+  if not public.es_admin() then raise exception 'Solo gerencia.'; end if;
+  select * into x from redes_auto where id = p_id;
+  if x.id is null then raise exception 'Esa red ya no está en la lista.'; end if;
+  update locales set redes = array_remove(redes, x.ip) where id = x.local_id and not x.ip = any (redes_persona);
+  update redes_auto set deshecha = true where id = p_id;
+  select string_agg(coalesce(nullif(pe.nombre, ''), pe.email), ', ' order by pe.nombre) into nombres from personas pe where pe.id = any (x.personas);
+  return json_build_object('personas', coalesce(nombres, ''), 'hoy', x.fecha = public.hoy());
+end $$;
 -- Gerencia: la red nueva sí es del local. Se registra y se borran los intentos desde esa red.
 create or replace function public.aceptar_red(p_red uuid, p_local uuid) returns void
 language plpgsql security definer set search_path = public as $$
@@ -937,6 +1023,9 @@ begin
     r := (array_append(r, ip))[greatest(1, cardinality(r) + 1 - 4):];  -- se guardan las últimas 5
     update locales set redes = r where id = p_local;
   end if;
+  -- registrada en persona: sirve de referencia para las redes que se registran solas (se guardan las últimas 5)
+  update locales set redes_persona = array_remove(redes_persona, ip) where id <> p_local and ip = any (redes_persona);
+  update locales set redes_persona = (array_append(array_remove(redes_persona, ip), ip))[greatest(1, cardinality(array_remove(redes_persona, ip)) + 1 - 4):] where id = p_local;
   esta := ip;  -- (otra variable: «ip» también es una columna de redes_nuevas)
   delete from redes_nuevas rn where rn.ip = esta;
   perform public._llegadas_de_red(ip, p_local);
@@ -1658,6 +1747,8 @@ begin
     'companeros', public._companeros(hoy),
     'redes_nuevas', (select coalesce(json_agg(json_build_object('id', r.id, 'ip', r.ip, 'persona_id', r.persona_id, 'creado_en', r.creado_en) order by r.creado_en desc), '[]'::json)
                      from redes_nuevas r where r.fecha >= hoy - 3),
+    'redes_auto', (select coalesce(json_agg(json_build_object('id', a.id, 'local_id', a.local_id, 'personas', a.personas, 'creado_en', a.creado_en) order by a.creado_en desc), '[]'::json)
+                   from redes_auto a where not a.deshecha and a.fecha >= hoy - 3),
     'con_avisos', public._con_avisos(),
     'avisos_tel', public._avisos_tel(),
     'reloj', public._reloj(),
@@ -2239,7 +2330,7 @@ begin
     select ad.id, 'redes:' || hoy || ':' || extract(epoch from ahora)::bigint || ':' || ad.id,
            'No pudieron marcar «Llegué»: ' || (select string_agg(distinct coalesce(nullif(pe.nombre, ''), pe.email), ', ')
                                                from redes_nuevas r join personas pe on pe.id = r.persona_id where not r.avisado and r.fecha = hoy),
-           'Lo intentaron desde una red que la app no conoce. Si es el Wi-Fi del local, regístrala en Equipo → Locales.', './#/equipo/locales'
+           'Lo intentaron desde una red que la app no conoce. Si cambió el Wi-Fi del local, regístralo estando allí: Equipo → Locales → «Registrar esta red».', './#/equipo/locales'
     from personas ad where ad.activo and ad.rol = 'admin';
     update redes_nuevas set avisado = true where not avisado and fecha = hoy;
   end if;
@@ -2420,7 +2511,7 @@ revoke execute on all functions in schema public from anon, authenticated, publi
 alter default privileges in schema public revoke execute on functions from anon, authenticated, public;
 grant execute on function public.hoy(), public.es_admin(), public.tiene_acceso(text), public._urgente(public.asignaciones), public._puede_rescatar(uuid, uuid), public.generar_dia(date),
   public.marcar_llegada(double precision, double precision, double precision, timestamptz), public.mi_red(), public.registrar_red(uuid),
-  public.sin_wifi_hoy(uuid, boolean), public.aceptar_red(uuid, uuid),
+  public.sin_wifi_hoy(uuid, boolean), public.aceptar_red(uuid, uuid), public.deshacer_red_sola(uuid),
   public.marcar_hecha(uuid, boolean), public.tomar_del_pool(uuid), public.reasignar(jsonb, text), public.repartir_sin_dueno(uuid),
   public.marcar_asistencia(uuid, text), public.mi_perfil(text, text),
   public.justificar(uuid, text), public.revisar_justificacion(uuid, boolean),
@@ -3199,6 +3290,15 @@ do $$ begin
     raise warning 'No se pudieron cerrar las sesiones (permisos): %', sqlerrm; return;
   end;
   insert into public.cil_migraciones (nombre) values ('cerrar-sesiones-2026-10-27');
+end $$;
+
+-- Una sola vez (10/11/2026): las redes que cada local ya tenía cuentan como registradas en persona
+-- (las de datos móviles registradas por error se borraron el 3/11; las que quedan son el Wi-Fi real).
+do $$
+begin
+  if exists (select 1 from public.cil_migraciones where nombre = 'redes-persona-2026-11-10') then return; end if;
+  update public.locales set redes_persona = redes where redes_persona = '{}';
+  insert into public.cil_migraciones (nombre) values ('redes-persona-2026-11-10');
 end $$;
 
 -- 27/10/2026: empezar de cero la semana de práctica (la limpieza programada no llegó a correr: seguían saliendo

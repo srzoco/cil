@@ -686,3 +686,14 @@ a.asis { text-decoration: none; }
 .asis-carga { display: block; width: 100%; margin: 2px 0 0; }
 .cuotas { display: flex; flex-wrap: wrap; gap: 4px 16px; }
 .cuotas .fila-inline { margin-top: 4px; }
+
+/* Locales (10/11/2026): Wi-Fi arriba; intentos desde redes sin registrar, plegados al final */
+.wifi-locales h2 { margin: 0 0 2px; }
+.red-sola { background: var(--amber-bg, #FCEFD9); border-radius: 10px; padding: 8px 10px; border-top: 0; }
+.redes-nuevas { margin-top: 16px; }
+.redes-nuevas > summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; cursor: pointer; list-style: none; min-height: 32px; }
+.redes-nuevas > summary::-webkit-details-marker { display: none; }
+.redes-nuevas > summary::before { content: '›'; font-size: 1.2rem; color: var(--muted); transition: transform .15s; }
+.redes-nuevas[open] > summary::before { transform: rotate(90deg); }
+.redes-nuevas > summary b { flex: 1; }
+.cuenta-n { min-width: 26px; padding: 2px 8px; border-radius: 999px; background: var(--line); font-weight: 700; font-size: .85rem; text-align: center; }

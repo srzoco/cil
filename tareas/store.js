@@ -122,6 +122,8 @@
         completo: !!completo,
         mi_mes: (adm || db.ajustes.mostrar_record) ? L.puntualidadMes(self.db, yo.id, hoy) : null,
         almorzando_grupo: L.almorzandoGrupo(self.db, yo.id, new Date()),
+        redes_nuevas: adm ? (db.redes_nuevas || []) : [],
+        redes_auto: adm ? (db.redes_auto || []).filter(function (x) { return !x.deshecha; }) : [],
         dias_sin_puntualidad: db.dias_sin_puntualidad || [],
         equipos: db.equipos || [],
         salidas_rato: (db.salidas_rato || []).filter(function (x) { return x.fecha >= desde && (adm || x.persona_id === yo.id); }),
@@ -656,6 +658,13 @@
           ta.estado = 'pendiente'; ta.hecha_en = null; ta.hecha_por = null; ta.repetir = true; ta.arrastra = true; ta.asignado_a = quienR;
           this._evento(ta.id, 'repetir', null, quienR, rv.nota);
         }
+      } else if (nombre === 'deshacer_red_sola') {
+        if (!adm) throw errorUsuario('Solo gerencia.');
+        var ra = (db.redes_auto || []).filter(function (x) { return x.id === args.p_id; })[0];
+        if (!ra) throw errorUsuario('Esa red ya no está en la lista.');
+        ra.deshecha = true;
+        db.locales.forEach(function (l) { if (l.id === ra.local_id) l.redes = (l.redes || []).filter(function (x) { return x !== ra.ip; }); });
+        r = { personas: (ra.personas || []).map(function (id) { var pe = db.personas.filter(function (x) { return x.id === id; })[0]; return pe ? pe.nombre : ''; }).join(', '), hoy: true };
       } else if (nombre === 'mi_red') {
         if (!adm) throw errorUsuario('Solo gerencia.');
         var ipA = this._ip();
@@ -920,7 +929,7 @@
       (d.asignaciones || []).forEach(function (a) { if (a.antes) a.antes = String(a.antes).slice(0, 5); if (a.desde) a.desde = String(a.desde).slice(0, 5); });
       return { completo: !!d.completo, mi_mes: d.mi_mes || null, dias_sin_puntualidad: d.dias_sin_puntualidad || [], equipos: d.equipos || [], lecturas: d.lecturas || [], salidas_rato: d.salidas_rato || [], yo: yo, personas: personas, ajustes: aj, locales: d.locales || [], grupos: d.grupos || [], dias_especiales: d.dias_especiales || [],
         revisiones: d.revisiones || [], marcadas_por_otro: d.marcadas_por_otro || [], plantillas: d.plantillas || [], asignaciones: d.asignaciones || [], asistencia: d.asistencia || [],
-        companeros: d.companeros || {}, almorzando_grupo: d.almorzando_grupo || [], redes_nuevas: d.redes_nuevas || [], con_avisos: d.con_avisos || null, avisos_tel: d.avisos_tel || {}, reloj: d.reloj || null, consumo: d.consumo || null };
+        companeros: d.companeros || {}, almorzando_grupo: d.almorzando_grupo || [], redes_nuevas: d.redes_nuevas || [], redes_auto: d.redes_auto || [], con_avisos: d.con_avisos || null, avisos_tel: d.avisos_tel || {}, reloj: d.reloj || null, consumo: d.consumo || null };
     });
   };
   // En la base unificada, dos tablas de Tareas llevan prefijo (Contenido ya usa esos nombres)

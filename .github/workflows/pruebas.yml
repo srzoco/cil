@@ -44,6 +44,9 @@ jobs:
       - name: Llegada desde el primer intento en la red del local
         env: { PGPASSWORD: prueba }
         run: psql -h localhost -U postgres -d cil -v ON_ERROR_STOP=1 -q -f pruebas/llegada-intentos.sql
+      - name: La red nueva se registra sola solo con las dos condiciones
+        env: { PGPASSWORD: prueba }
+        run: psql -h localhost -U postgres -d cil -v ON_ERROR_STOP=1 -q -f pruebas/red-sola.sql
       - name: Robot de Yobel, descuento de las cuentas de cobro
         env: { PGPASSWORD: prueba }
         run: psql -h localhost -U postgres -d cil -v ON_ERROR_STOP=1 -q -f pruebas/robot-descuento.sql
@@ -61,6 +64,7 @@ jobs:
           node pruebas/humo.js
           node pruebas/recorrido.js
           node pruebas/red-movil.js
+          node pruebas/locales-wifi.js
           node pruebas/contenido.js
           node pruebas/contenido-checklist.js
           node pruebas/contenido-historias.js
