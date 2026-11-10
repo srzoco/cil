@@ -6,6 +6,7 @@
 const { chromium } = require(process.env.PLAYWRIGHT || 'playwright');
 const BASE = process.env.BASE || 'http://localhost:8765';
 const ses = (id, exp) => JSON.stringify({ access_token: 'tok-' + id, refresh_token: 'ref-' + id, expires_at: exp || 4e9, user: { id: id, email: id + '@x.com' } });
+process.on('unhandledRejection', e => { console.error('FALLA de la prueba (no de la app): ' + (e && e.stack || e)); process.exit(1); });
 (async () => {
   const b = await chromium.launch({ executablePath: process.env.CHROMIUM || undefined });
   const p = await b.newPage({ viewport: { width: 360, height: 720 } });
@@ -20,7 +21,7 @@ const ses = (id, exp) => JSON.stringify({ access_token: 'tok-' + id, refresh_tok
     if (u.includes('/personas')) return r.fulfill({ contentType: 'application/json', body: JSON.stringify([{ nombre: tok, email: tok + '@x.com', rol: 'empleado', accesos: ['tareas'], activo: true }]) });
     return r.fulfill({ status: 401, contentType: 'application/json', body: '{"message":"JWT"}' });
   });
-  const intentar = async (f) => { for (let i = 0; i < 10; i++) { try { return await f(); } catch (e) { if (!/destroyed|navigat/i.test(e.message)) throw e; await p.waitForTimeout(300); } } };
+  const intentar = async (f) => { for (let i = 0; i < 10; i++) { try { return await f(); } catch (e) { if (!/destroyed|navigat|detached|closed|context|frame/i.test(e.message)) throw e; await p.waitForTimeout(300); } } };
   const claves = () => intentar(() => p.evaluate(() => [localStorage.getItem('barquero_sesion'), localStorage.getItem('bfcontenido_sesion')].map(x => x && JSON.parse(x).user.id)));
   for (const app of ['/', '/tareas/', '/pendientes/', '/contenido/']) {
     await p.goto(BASE + app); await p.evaluate(() => localStorage.clear());
@@ -42,9 +43,17 @@ const ses = (id, exp) => JSON.stringify({ access_token: 'tok-' + id, refresh_tok
   await p.goto(BASE + '/').catch(() => {}); await p.waitForTimeout(500);
   await intentar(() => p.evaluate((s) => { localStorage.clear(); sessionStorage.setItem('barquero_en_menu', '1'); localStorage.setItem('barquero_sesion', s); localStorage.setItem('bfcontenido_sesion', s); }, ses('yure')));
   await p.goto(BASE + '/').catch(() => {}); await p.waitForTimeout(600);
-  await p.reload(); await p.waitForTimeout(700);
+  await p.reload().catch(() => {}); await p.waitForTimeout(700);  // la página puede estar redirigiéndose sola
   const salir = await p.waitForSelector('#salir', { timeout: 6000 }).catch(() => null);
-  if (!salir) fallas.push('No apareció el botón «Salir» del menú'); else { await salir.click(); await p.waitForTimeout(400); }
+  if (!salir) fallas.push('No apareció el botón «Salir» del menú');
+  else {
+    // El menú se vuelve a pintar cuando llegan los datos: si el toque cae justo en ese momento se pierde, así que se repite una vez
+    for (let i = 0; i < 2; i++) {
+      await p.locator('#salir').click({ timeout: 3000 }).catch(() => {});
+      await p.waitForTimeout(600);
+      const k = await claves(); if (!k[0] && !k[1]) break;
+    }
+  }
   const k3 = await claves(); if (k3[0] || k3[1]) fallas.push('Al salir quedó una sesión guardada (' + k3.join(', ') + ')');
   // Servidor caído u ocupado al renovar (503, 429): la sesión NO se borra (antes sacaba a la persona y había que darle la clave).
   // Solo se borra si el servidor dice que ya no vale (400).
