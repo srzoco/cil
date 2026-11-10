@@ -65,6 +65,7 @@ jobs:
           node pruebas/contenido-checklist.js
           node pruebas/contenido-historias.js
           node pruebas/contenido-copy.js
+          node pruebas/contenido-inicio.js
           node pruebas/sesiones.js
           node pruebas/armador.js
           node pruebas/armador-stock.js

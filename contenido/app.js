@@ -220,8 +220,7 @@
         tab('#/tablero', 'tablero', ICON.tablero, 'Tablero') +
         '<a href="#/nueva" class="tab tab-nueva' + (sec === 'nueva' ? ' activo' : '') + '" aria-label="Nueva pieza o idea"><span class="mas-ic">' + ICON.mas + '</span><span>Nueva</span></a>' +
         tab('#/calendario', 'calendario', ICON.cal, 'Calendario') +
-        tab('#/metricas', 'metricas', ICON.met, 'Métricas') +
-        '</nav>');
+        '</nav>');  // Métricas: en Ajustes (casi no se usa)
   }
 
   // ---------- Fragmentos de pieza ----------
@@ -242,16 +241,6 @@
       return f ? L.PLAT_CORTO[pl] + ' ' + L.fmtFecha(f) : null;
     }).filter(Boolean).join(' · ');
   }
-  function turnoChip(p) {
-    var t = L.leToca(p);
-    if (!t) return '';
-    var y = rol();
-    // De quién es el turno y desde cuándo espera (para ver lo que está trancado del otro lado)
-    var dias = p.actualizado_en ? L.diffDias(L.hoyISO(new Date(p.actualizado_en)), S.hoy) : 0;
-    var hace = dias >= 2 ? ' · ' + dias + ' días' : '';
-    var txt = t === 'ambas' ? 'Grabación' : (t === y ? 'Te toca' : 'Le toca a ' + nombreRol(t));
-    return '<span class="turno ' + (t === y ? 'mio' : t === 'ambas' ? 'ambas' : 'otro') + (dias >= 3 ? ' tranca' : '') + '">' + esc(txt + hace) + '</span>';
-  }
   // Fecha límite (entregar) o espera de mercancía
   function limiteChip(p) {
     if (p.en_espera && p.fase !== 'publicada') return '<span class="chip-info espera">📦 Espera: ' + esc(p.espera_producto || 'mercancía') + '</span>';
@@ -266,21 +255,18 @@
   function tarjeta(p, extra) {
     var f = fechasTxt(p);
     var buscar = [p.titulo, p.producto, p.espera_producto, L.estadoDe(p, S.hoy).texto].join(' ').toLowerCase();
+    // Una tarjeta = título + una línea. Lo demás (pasos, brief, historial) está al abrirla.
+    // Solo sale un aviso si algo pide atención: lleva 3 días o más esperando, se vence pronto o espera mercancía.
+    var t = L.leToca(p), dias = p.actualizado_en ? L.diffDias(L.hoyISO(new Date(p.actualizado_en)), S.hoy) : 0;
+    var tranca = t && t !== 'ambas' && dias >= 3 ? '<span class="chip-info tranca">' + dias + (t === rol() ? ' días contigo' : ' días con ' + esc(nombreRol(t))) + '</span>' : '';
+    var lim = limiteChip(p), urge = /pronto|vencida|espera/.test(lim) ? lim : '';
     return '<a class="tarjeta t-' + p.tipo + (p.en_espera ? ' en-espera' : '') + '" href="#/p/' + p.id + '" data-buscar="' + esc(buscar) + '">' +
-      '<span class="tarjeta-top">' + tipoTag(p) + badgesPlat(p) + turnoChip(p) + '</span>' +
-      '<span class="tarjeta-titulo">' + esc(p.titulo) + '</span>' + miniPasos(p) +
-      '<span class="tarjeta-pie">' + (f ? '<span class="fechas-txt">📅 ' + esc(f) + '</span>' : '<span class="fechas-txt muted">Sin fecha</span>') + limiteChip(p) + '</span>' +
+      '<span class="tarjeta-titulo">' + esc(p.titulo) + '</span>' +
+      '<span class="tarjeta-pie"><span class="muted">' + esc(L.TIPOS[p.tipo] || 'Reel') + '</span>' + badgesPlat(p) +
+      (f ? '<span class="fechas-txt">' + esc(f) + '</span>' : '<span class="muted">sin fecha</span>') + '</span>' +
+      (tranca || urge ? '<span class="tarjeta-pie">' + tranca + urge + '</span>' : '') +
       (extra ? '<span class="tarjeta-extra">' + extra + '</span>' : '') +
       '</a>';
-  }
-  // Barrita de pasos en cada tarjeta: idea → … → publicada. En corrección, el paso de edición sale en rojo.
-  function miniPasos(p) {
-    var s = L.pasosDe(p);
-    if (s.actual < 0) return '';
-    var corr = p.fase === 'produccion' && p.turno === 'edita' && (p.version || 0) > 0;
-    return '<span class="mini-pasos" title="Paso ' + (s.actual + 1) + ' de ' + s.pasos.length + ': ' + esc(s.pasos[s.actual]) + '">' + s.pasos.map(function (n, i) {
-      return '<i class="' + (i < s.actual || s.terminado ? 'h' : i === s.actual ? (corr ? 'corr' : 'act') : '') + '"></i>';
-    }).join('') + '<small>' + esc(corr ? 'Corrección v' + p.version : s.pasos[s.actual]) + '</small></span>';
   }
   function resumenCorreccion(ev) {
     if (!ev) return '';
@@ -328,46 +314,101 @@
   }
   // Inicio: «Lo que te toca hoy» en una sola lista ordenada por urgencia (máximo 5 a la vista; el resto plegado)
   // y la planificación (huecos y esperas) plegada debajo.
+  // Fila corta para las listas del inicio: título + una línea, y un solo botón a la derecha
+  function filaPieza(p, linea, boton) {
+    return '<div class="item fila-pieza t-' + p.tipo + '"><a class="item-cuerpo" href="#/p/' + p.id + '"><span class="item-titulo">' + esc(p.titulo) + '</span>' +
+      '<span class="item-meta">' + linea + '</span></a>' + (boton || '') + '</div>';
+  }
+  // «Hoy se publica»: una fila por plataforma, con lo que sale hoy y cómo va (igual para las dos personas)
+  function bloqueHoy() {
+    var filas = ['ig', 'tt'].map(function (pl) {
+      var en = piezas().filter(function (p) { return p[pl] && L.fechaDe(p, pl) === S.hoy && L.ocupa(p); });
+      var st = L.slotTipo(ajustes(), pl, S.hoy);
+      var cont = en.map(function (p) {
+        var pub = L.publicadoEn(p, pl), col = L.columnaDe(p), der;
+        if (pub) der = '<span class="pill ok">✅ Publicado</span>';
+        else if (p.fase === 'aprobada') der = '<button class="btn chico" data-act="publicar" data-id="' + p.id + '" data-plat="' + pl + '">Ya se publicó</button>';
+        else der = '<a class="pill corregir" href="#/p/' + p.id + '">⚠️ ' + esc(L.estadoDe(p, S.hoy).texto.split(' · ')[0]) + '</a>';
+        return '<div class="hoy-pieza"><a href="#/p/' + p.id + '">' + esc(p.titulo) + '</a>' + der + '</div>';
+      }).join('');
+      if (!en.filter(function (p) { return !L.esHistoria(p); }).length) {
+        if (L.publicable(st)) cont += '<div class="hoy-pieza"><span class="rojo">Sin pieza (' + esc(L.TIPO_DIA[st].toLowerCase()) + ')</span>' +
+          '<button class="btn sec chico" data-act="hueco" data-fecha="' + S.hoy + '" data-plat="' + pl + '" data-tipo="' + st + '">Llenar</button></div>';
+        else if (!en.length) cont += '<div class="hoy-pieza"><span class="muted">' + esc(L.TIPO_DIA[st] || 'Nada') + '</span></div>';
+      }
+      return '<div class="hoy-fila"><span class="plat ' + pl + '">' + L.PLAT_CORTO[pl] + '</span><div class="hoy-items">' + cont + '</div></div>';
+    }).join('');
+    return '<section class="card hoy-publica"><div class="bloque-head"><h2>Hoy se publica</h2><small class="muted">' + esc(L.ventanaPublicar(ajustes()).texto) + '</small></div>' + filas + '</section>';
+  }
+  // «Videos pendientes»: cuántas piezas hay en cada paso (para no llevar la cuenta de memoria). Cada número abre esa lista.
+  function bloquePendientes() {
+    var n = { ideas: 0, grabar: 0, editar: 0, aprobar: 0, lista: 0 }, sinFecha = 0;
+    piezas().forEach(function (p) { var c = L.columnaDe(p); if (c in n) { n[c]++; if (c === 'lista' && L.enBanco(p)) sinFecha++; } });
+    var total = n.grabar + n.editar + n.aprobar + n.lista;
+    return '<section class="bloque"><div class="bloque-head"><h2>Videos pendientes <span class="cuenta">' + total + '</span></h2><a class="btn link" href="#/tablero">Ver todos ›</a></div>' +
+      '<div class="embudo">' + L.COLUMNAS.filter(function (c) { return c.clave !== 'publicada'; }).map(function (c) {
+        var de = c.clave === 'editar' ? nombreRol('edita') : c.clave === 'aprobar' ? nombreRol('aprueba') : c.clave === 'lista' && sinFecha ? sinFecha + ' sin fecha' : '';
+        return '<a class="embudo-paso c-' + c.clave + (n[c.clave] ? '' : ' cero') + '" href="#/tablero?col=' + c.clave + '"><b>' + n[c.clave] + '</b><span>' + c.titulo + '</span>' + (de && n[c.clave] ? '<small>' + esc(de) + '</small>' : '') + '</a>';
+      }).join('') + '</div></section>';
+  }
+  // «Esta semana»: los próximos 6 días en una línea por plataforma (mañana → …). El detalle está en Calendario.
+  function bloqueSemana() {
+    var html = '';
+    for (var i = 1; i <= 6; i++) {
+      var d = L.addDias(S.hoy, i);
+      var celdas = ['ig', 'tt'].map(function (pl) {
+        var en = piezas().filter(function (p) { return p[pl] && L.fechaDe(p, pl) === d && L.ocupa(p); });
+        var st = L.slotTipo(ajustes(), pl, d);
+        var cont = en.map(function (p) {
+          var col = L.columnaDe(p), listo = col === 'lista' || col === 'publicada';
+          return '<a class="sem-pieza' + (listo ? '' : ' riesgo') + '" href="#/p/' + p.id + '">' + (listo ? '🟢' : ICON_COL[col] || '') + ' ' + esc(p.titulo) + (listo ? '' : ' <small>(' + esc(L.estadoDe(p, S.hoy).texto.split(' · ')[0].toLowerCase()) + ')</small>') + '</a>';
+        }).join('');
+        if (!en.filter(function (p) { return !L.esHistoria(p); }).length && L.publicable(st)) cont += '<button class="cal-hueco" data-act="hueco" data-fecha="' + d + '" data-plat="' + pl + '" data-tipo="' + st + '">Sin pieza · llenar</button>';
+        return cont ? '<div class="cal-fila"><span class="plat ' + pl + '">' + L.PLAT_CORTO[pl] + '</span><div class="cal-items">' + cont + '</div></div>' : '';
+      }).join('');
+      var g = grabaciones().filter(function (x) { return x.fecha === d && x.estado !== 'cancelada'; })[0];
+      if (!celdas && !g) continue;
+      html += '<div class="sem-dia"><b>' + esc(L.fmtFecha(d)) + '</b>' + (g ? '<a class="cal-grab" href="#/grabacion/' + g.id + '">🎬 Grabación ' + L.fmtHora(g.hora) + '</a>' : '') + celdas + '</div>';
+    }
+    return '<section class="bloque"><div class="bloque-head"><h2>Esta semana</h2><a class="btn link" href="#/calendario">Calendario ›</a></div>' +
+      (html ? '<div class="card semana">' + html + '</div>' : '<p class="muted">Nada programado en los próximos 6 días.</p>') + '</section>';
+  }
   function vistaInicio() {
     var r = L.pendientes(piezas(), eventos(), rol(), S.hoy, ajustes());
-    var html = '<h1 class="saludo">' + saludo() + ', ' + esc(yo().nombre) + '</h1><p class="fecha-hoy">' + L.fmtFechaLarga(S.hoy) + ' · ' + esc(hoyToca()) + '</p>';
+    var html = '<h1 class="saludo">' + saludo() + ', ' + esc(yo().nombre) + '</h1><p class="fecha-hoy">' + L.fmtFechaLarga(S.hoy) + '</p>';
     html += bannerPush();
-    var acc = [];  // [html de la fila]
-    var conBoton = function (p, extra, boton) { return '<div class="fila-accion">' + tarjeta(p, extra) + boton + '</div>'; };
-    var botonReagendar = function (p) { return '<button class="btn sec" data-act="fechas" data-id="' + p.id + '">📅 Reagendar</button>'; };
-    var botonPub = function (x, txt, sec) { return '<button class="btn' + (sec ? ' sec' : '') + '" data-act="publicar" data-id="' + x.pieza.id + '" data-plat="' + x.plataforma + '">' + txt + ' ' + L.PLAT_CORTO[x.plataforma] + '</button>'; };
+    html += bloqueHoy();
+    // La grabación sube aquí solo cuando espera por ti (confirmar); si no, va abajo
+    var grabArriba = grabNecesitaMe();
+    if (grabArriba) html += tarjetaGrabacion(grabSemana(), true);
+    // Te toca: solo lo que espera por ti, una fila por cosa y un botón
+    var acc = [];
+    var ver = function (p, txt, sec) { return '<a class="btn chico' + (sec ? ' sec' : '') + '" href="#/p/' + p.id + '">' + txt + '</a>'; };
+    var botonPub = function (x, txt) { return '<button class="btn chico" data-act="publicar" data-id="' + x.pieza.id + '" data-plat="' + x.plataforma + '">' + txt + '</button>'; };
+    var botonFecha = function (p, txt) { return '<button class="btn sec chico" data-act="fechas" data-id="' + p.id + '">' + txt + '</button>'; };
     if (rol() === 'aprueba') {
-      r.hoy.forEach(function (x) {
-        var listo = x.pieza.fase === 'aprobada' && !L.publicadoEn(x.pieza, x.plataforma);
-        acc.push(conBoton(x.pieza, '<b>Hoy se publica</b> · ' + L.PLATAFORMAS[x.plataforma] + ' · ' + L.ventanaPublicar(ajustes()).texto, listo ? botonPub(x, 'Publicado en') : ''));
-      });
-      r.atrasadas.forEach(function (x) { acc.push(conBoton(x.pieza, '<span class="rojo">No se publicó</span> · ' + L.PLATAFORMAS[x.plataforma] + ' · era ' + L.fmtFecha(x.fecha), '<div class="fila-btns">' + botonReagendar(x.pieza) + botonPub(x, 'Ya se publicó en', true) + '</div>')); });
-      // Cada fila con su botón grande: lo que hay que hacer, a un toque
-      r.revisarDespues.forEach(function (p) { acc.push(conBoton(p, '<b>🔍 Revisar después de publicar</b> · se aprobó sola', '<a class="btn" href="#/p/' + p.id + '">Revisar</a>')); });
-      r.riesgo.forEach(function (x) { acc.push(conBoton(x.pieza, '<span class="rojo">Se publica pronto y no está aprobada</span>', '<a class="btn" href="#/p/' + x.pieza.id + '">Revisar</a>')); });
-      r.revisar.forEach(function (p) { acc.push(conBoton(p, '<b>Por aprobar</b>', '<a class="btn" href="#/p/' + p.id + '">Revisar</a>')); });
-      r.programar.forEach(function (p) { acc.push(conBoton(p, 'Lista sin fecha', '<button class="btn sec" data-act="fechas" data-id="' + p.id + '">📅 Ponerle fecha</button>')); });
+      r.atrasadas.forEach(function (x) { acc.push(filaPieza(x.pieza, '<span class="rojo">No se publicó en ' + L.PLATAFORMAS[x.plataforma] + '</span> · era ' + L.fmtFecha(x.fecha), botonFecha(x.pieza, 'Reagendar'))); });
+      r.riesgo.forEach(function (x) { if (x.pieza.turno !== 'aprueba') acc.push(filaPieza(x.pieza, '<span class="rojo">Sale el ' + esc(L.fmtFecha(x.fecha)) + ' y no está lista</span>', ver(x.pieza, 'Ver', true))); });
+      r.revisar.forEach(function (p) { acc.push(filaPieza(p, '<b>Por aprobar</b> · ' + esc(L.nombreEtapa(L.etapaNorm(p))) + (p.version > 1 ? ' v' + p.version : '') + (L.proximaFecha(p) ? ' · sale ' + esc(L.fmtFecha(L.proximaFecha(p))) : ''), ver(p, 'Revisar'))); });
+      r.revisarDespues.forEach(function (p) { acc.push(filaPieza(p, '🔍 Revisar después de publicar · se aprobó sola', ver(p, 'Revisar', true))); });
+      r.programar.forEach(function (p) { acc.push(filaPieza(p, 'Lista, sin fecha', botonFecha(p, 'Ponerle fecha'))); });
     } else {
-      r.publicar.forEach(function (x) { acc.push(conBoton(x.pieza, '<b>' + L.PLATAFORMAS[x.plataforma] + '</b>' + (x.atrasada ? ' · era ' + L.fmtFecha(x.fecha) : ' · ' + L.ventanaPublicar(ajustes()).texto), x.atrasada ? '<div class="fila-btns">' + botonReagendar(x.pieza) + botonPub(x, 'Publicar en') + '</div>' : botonPub(x, 'Publicar en'))); });
-      r.editar.forEach(function (p) { acc.push(conBoton(p, p.version > 0 ? resumenCorreccion(L.ultimaCorreccion(eventos(), p)) : 'Por editar', '<a class="btn" href="#/p/' + p.id + '">' + (p.version > 0 ? 'Corregir' : 'Subir versión') + '</a>')); });
-      r.vistas.forEach(function (x) { acc.push(conBoton(x.pieza, 'Anotar vistas · ' + L.PLATAFORMAS[x.plataforma], '<button class="btn sec" data-act="vistas" data-id="' + x.pieza.id + '">Anotar</button>')); });
+      r.publicar.forEach(function (x) { if (x.atrasada) acc.push(filaPieza(x.pieza, '<span class="rojo">No se publicó en ' + L.PLATAFORMAS[x.plataforma] + '</span> · era ' + L.fmtFecha(x.fecha), botonPub(x, 'Ya se publicó'))); });
+      r.editar.forEach(function (p) { acc.push(filaPieza(p, p.version > 0 ? resumenCorreccion(L.ultimaCorreccion(eventos(), p)) : 'Por editar' + (L.proximaFecha(p) ? ' · sale ' + esc(L.fmtFecha(L.proximaFecha(p))) : ''), ver(p, p.version > 0 ? 'Corregir' : 'Subir'))); });
+      r.vistas.forEach(function (x) { acc.push(filaPieza(x.pieza, 'Anotar vistas · ' + L.PLATAFORMAS[x.plataforma], '<button class="btn sec chico" data-act="vistas" data-id="' + x.pieza.id + '">Anotar</button>')); });
     }
-    var cab = '<div class="bloque-head"><h2>Te toca hoy' + (acc.length ? ' <span class="cuenta">' + acc.length + '</span>' : '') + '</h2>' +
-      '</div>' + (rol() === 'aprueba' && r.revisar.length > 1 ? '<a class="btn grande cta-revisar" href="#/revisar">👀 Revisar ' + r.revisar.length + ' en fila</a>' : '');
-    if (!acc.length) html += '<section class="hero tranquilo"><p class="hero-t">Todo al día</p><p class="muted">' + (rol() === 'aprueba' ? 'Nada por aprobar ni por publicar.' : 'Cuando grabes algo nuevo, créalo con el botón +.') + '</p></section>';
-    else html += '<section class="bloque">' + cab + '<div class="lista-tarjetas">' + acc.slice(0, 5).join('') + '</div>' +
-      (acc.length > 5 ? '<details class="mas"><summary>Ver ' + (acc.length - 5) + ' más</summary><div class="lista-tarjetas">' + acc.slice(5).join('') + '</div></details>' : '') + '</section>';
-    if (rol() !== 'aprueba' && r.revisar.length) html += '<p class="nota-suave">Le toca a ' + esc(nombreRol('aprueba')) + ' aprobar ' + plural(r.revisar.length, 'pieza', 'piezas') + '.</p>';
-    // La grabación y el buscador, después de lo que te toca
-    html += tarjetaGrabacion(grabSemana(), true);
+    var cab = '<div class="bloque-head"><h2>Te toca' + (acc.length ? ' <span class="cuenta">' + acc.length + '</span>' : '') + '</h2></div>' +
+      (rol() === 'aprueba' && r.revisar.length > 1 ? '<a class="btn grande cta-revisar" href="#/revisar">👀 Revisar ' + r.revisar.length + ' seguidas</a>' : '');
+    if (!acc.length) html += '<section class="bloque"><div class="bloque-head"><h2>Te toca</h2></div><p class="card al-dia">✅ Nada espera por ti.' +
+      (rol() !== 'aprueba' && r.revisar.length ? ' ' + esc(nombreRol('aprueba')) + ' tiene ' + plural(r.revisar.length, 'pieza', 'piezas') + ' por aprobar.' : '') + '</p></section>';
+    else html += '<section class="bloque">' + cab + '<div class="lista">' + acc.slice(0, 6).join('') + '</div>' +
+      (acc.length > 6 ? '<details class="mas"><summary>Ver ' + (acc.length - 6) + ' más</summary><div class="lista">' + acc.slice(6).join('') + '</div></details>' : '') +
+      (rol() !== 'aprueba' && r.revisar.length ? '<p class="nota-suave">' + esc(nombreRol('aprueba')) + ' tiene ' + plural(r.revisar.length, 'pieza', 'piezas') + ' por aprobar.</p>' : '') + '</section>';
+    html += bloquePendientes();
+    html += bloqueSemana();
+    if (!grabArriba) html += tarjetaGrabacion(grabSemana(), true);
     html += '<input type="search" class="buscar" placeholder="Buscar pieza o producto" data-ir-buscar aria-label="Buscar pieza o producto">';
-    // Planificación plegada
-    var esperas = L.esperasPorProducto(piezas());
-    if (r.huecos.length || esperas.length) {
-      html += '<details class="card plegable"><summary><b>Planificación</b><span class="muted">' +
-        [r.huecos.length ? plural(r.huecos.length, 'hueco', 'huecos') + ' en 7 días' : '', esperas.length ? plural(esperas.length, 'producto', 'productos') + ' en espera' : ''].filter(Boolean).join(' · ') +
-        '</span></summary>' + (r.huecos.length ? '<h3>Huecos en los próximos 7 días</h3>' + listaHuecos(r.huecos, 4) : '') + listaEsperas() + '</details>';
-    }
+    if (L.esperasPorProducto(piezas()).length) html += listaEsperas();
     return html;
   }
   function listaHuecos(hs, max) {
@@ -396,13 +437,16 @@
     var T = S.tablero;
     if (q.get('col')) T.col = q.get('col');
     if (!T.col) T.col = colPorDefecto();
-    var verArch = q.get('f') === 'archivadas';
+    var verArch = q.get('f') === 'archivadas', verPub = q.get('f') === 'publicadas';
+    if (T.col === 'publicada') T.col = colPorDefecto();
+    var COLS = L.COLUMNAS.filter(function (c) { return c.clave !== 'publicada'; });  // lo publicado ya no ocupa el tablero
     var filtrar = function (p) {
       if (T.tipo !== 'todos' && p.tipo !== T.tipo) return false;
       if (T.espera && !p.en_espera) return false;
       return true;
     };
-    var html = '<div class="tablero-head"><h1>Tablero</h1><a class="btn link" href="#/tablero' + (verArch ? '' : '?f=archivadas') + '">' + (verArch ? '‹ Volver al tablero' : 'Archivadas') + '</a></div>';
+    var html = '<div class="tablero-head"><h1>' + (verPub ? 'Publicadas' : verArch ? 'Archivadas' : 'Tablero') + '</h1>' + (verArch || verPub ? '<a class="btn link" href="#/tablero">‹ Volver al tablero</a>'
+      : '<span class="enlaces-tablero"><a class="btn link" href="#/tablero?f=publicadas">Publicadas</a><a class="btn link" href="#/tablero?f=archivadas">Archivadas</a></span>') + '</div>';
     html += '<div class="filtros-tablero">' +
       '<input type="search" class="buscar" placeholder="Buscar por título o producto" data-buscar-en=".tablero" value="' + esc(T.q) + '" aria-label="Buscar">' +
       '<div class="seg-tabs chico" role="group" aria-label="Tipo">' + [['todos', 'Todos'], ['reel', 'Reels'], ['carrusel', 'Carruseles'], ['historia', 'Historias']].map(function (x) {
@@ -412,6 +456,11 @@
     if (verArch) {
       var arch = piezas().filter(function (p) { return p.fase === 'archivada' && filtrar(p); });
       return html + '<div class="tablero todo"><div class="lista-tarjetas">' + (arch.length ? arch.map(function (p) { return tarjeta(p); }).join('') : '<p class="muted vacio">No hay piezas archivadas.</p>') + '</div></div>';
+    }
+    if (verPub) {
+      var pubs = piezas().filter(function (p) { return p.fase === 'publicada' && filtrar(p); })
+        .sort(function (a, b) { return String(b.publicado_ig_en || b.publicado_tt_en || '') > String(a.publicado_ig_en || a.publicado_tt_en || '') ? 1 : -1; });
+      return html + '<div class="tablero todo"><div class="lista-tarjetas">' + (pubs.length ? pubs.slice(0, 200).map(function (p) { return tarjeta(p); }).join('') : '<p class="muted vacio">Todavía no hay piezas publicadas.</p>') + '</div></div>';
     }
     var grupos = {};
     L.COLUMNAS.forEach(function (c) { grupos[c.clave] = []; });
@@ -423,18 +472,16 @@
     };
     grupos.publicada.sort(function (a, b) { return String(b.publicado_ig_en || b.publicado_tt_en || '') > String(a.publicado_ig_en || a.publicado_tt_en || '') ? 1 : -1; });
     ['ideas', 'grabar', 'editar', 'aprobar', 'lista'].forEach(function (k) { grupos[k].sort(orden); });
-    html += '<div class="col-chips" role="tablist">' + L.COLUMNAS.map(function (c) {
+    html += '<div class="col-chips" role="tablist">' + COLS.map(function (c) {
       return '<button type="button" role="tab" aria-selected="' + (T.col === c.clave) + '" data-act="col" data-col="' + c.clave + '" class="col-chip c-' + c.clave + (T.col === c.clave ? ' on' : '') + '">' + c.icono + ' ' + c.titulo + '<b>' + grupos[c.clave].length + '</b></button>';
     }).join('') + '</div>';
-    html += '<div class="tablero">' + L.COLUMNAS.map(function (c) {
+    html += '<div class="tablero">' + COLS.map(function (c) {
       var items = grupos[c.clave];
       var cuerpo;
       if (c.clave === 'lista') {
         var sin = items.filter(function (p) { return L.enBanco(p) || p.en_espera; }), con = items.filter(function (p) { return !(L.enBanco(p) || p.en_espera); });
         cuerpo = (con.length ? '<p class="sub-col">Programadas</p>' + con.map(function (p) { return tarjeta(p); }).join('') : '') +
           (sin.length ? '<p class="sub-col">Sin fecha</p>' + sin.map(function (p) { return tarjeta(p); }).join('') : '');
-      } else if (c.clave === 'publicada') {
-        cuerpo = items.slice(0, 30).map(function (p) { return tarjeta(p); }).join('') + (items.length > 30 ? '<p class="muted">… y ' + (items.length - 30) + ' más</p>' : '');
       } else {
         cuerpo = items.map(function (p) { return tarjeta(p, c.clave === 'editar' && p.version > 0 ? resumenCorreccion(L.ultimaCorreccion(eventos(), p)) : ''); }).join('');
       }
@@ -442,7 +489,10 @@
         : c.clave === 'ideas' ? '<a class="btn link" href="#/nueva?modo=idea">+ Idea</a>' : '';
       return '<section class="col c-' + c.clave + (T.col === c.clave ? ' sel' : '') + '" data-col="' + c.clave + '"><div class="col-head"><h2>' + c.icono + ' ' + c.titulo + ' <span class="cuenta">' + items.length + '</span></h2>' + accionCol + '</div>' +
         '<div class="lista-tarjetas">' + (cuerpo || '<p class="muted vacio">Nada aquí.</p>') + '</div></section>';
-    }).join('') + '</div>';
+    }).join('') +
+      // Las publicadas no ocupan el tablero: solo aparecen aquí cuando se busca algo por nombre
+      '<section class="col c-publicada solo-busca" data-col="publicada"><div class="col-head"><h2>🚀 Publicadas</h2></div><div class="lista-tarjetas">' +
+      grupos.publicada.slice(0, 200).map(function (p) { return tarjeta(p); }).join('') + '</div></section></div>';
     return html;
   }
 
@@ -458,16 +508,17 @@
       (env ? '<span class="muted">' + esc(nombreDe(env.autor)) + ' · ' + L.haceCuanto(env.creado_en) + '</span>' : '') + '</div>' +
       '<h2 class="rev-titulo">' + (enLoteFlag ? '<a href="#/p/' + p.id + '">' + esc(p.titulo) + '</a>' : esc(p.titulo)) + '</h2>' +
       (fechasTxt(p) ? '<p class="muted">📅 ' + esc(fechasTxt(p)) + '</p>' : '') +
-      briefHtml(p, enLoteFlag) +
+      // 1.º ver el video o el diseño; el brief queda plegado (se abre si hace falta)
+      (et === 'video' || et === 'diseno' ? archivoAviso(p) : '') +
+      briefHtml(p, true) +
       (p.nota_version ? '<div class="nota"><b>Qué cambió:</b> ' + nl2br(p.nota_version) + '</div>' : '') +
       (antes ? '<div class="antes"><b>Lo que pediste en v' + antes.version + ':</b>' + listaCorreccion(antes, resueltas) + '</div>' : '');
     html += '<form data-form="aprobar" data-id="' + p.id + '">';
-    if (et === 'video' || et === 'diseno') html += archivoAviso(p);
     if (et === 'texto') {
       html += '<label class="campo">Texto del carrusel <small>Puedes arreglar algo pequeño aquí mismo antes de aprobar.</small><textarea name="texto_carrusel" rows="8">' + esc(p.texto_carrusel) + '</textarea></label>';
     }
     if (L.esFinal(p)) html += camposCopy(p, 'Puedes arreglar algo pequeño aquí mismo antes de aprobar.');
-    html += '<div class="acciones"><button class="btn ok" type="submit">✅ Aprobar</button>' +
+    html += '<div class="acciones pegadas"><button class="btn ok" type="submit">✅ Aprobar</button>' +
       '<button class="btn warn" type="button" data-act="abrir-corregir">✏️ Corregir</button>' +
       (enLoteFlag ? '<button class="btn fantasma" type="button" data-act="saltar">Saltar</button>' : '') + '</div></form>' +
       formCorregir(p) + '</section>';
@@ -492,7 +543,7 @@
   }
   function archivoAviso(p) {
     var cosa = L.etapaNorm(p) === 'diseno' ? 'El diseño' : 'El video';
-    return '<div class="archivo">' + (p.enlace_version ? '<a class="btn sec" href="' + url(p.enlace_version) + '" target="_blank" rel="noopener">▶️ Ver ' + cosa.toLowerCase() + ' en CapCut</a>' : '📱 ' + cosa + ' llega por WhatsApp.') + '</div>';
+    return '<div class="archivo">' + (p.enlace_version ? '<a class="btn grande" href="' + url(p.enlace_version) + '" target="_blank" rel="noopener">▶️ Ver ' + cosa.toLowerCase() + ' en CapCut</a>' : '📱 ' + cosa + ' llega por WhatsApp.') + '</div>';
   }
   function camposCopy(p, ayuda) {
     return L.plataformasDe(p).map(function (pl) {
@@ -1072,7 +1123,7 @@
   function vistaAjustes() {
     var aj = ajustes();
     var editable = rol() === 'aprueba';
-    var html = '<h1>Ajustes</h1>' + seccion('Tu perfil', formPerfil(yo())) + seccion('Notificaciones', bloquePushAjustes());
+    var html = '<h1>Ajustes</h1><a class="item enlace-fila" href="#/metricas"><span class="item-cuerpo"><span class="item-titulo">📊 Métricas</span><span class="item-meta"><span class="muted">Vistas y cuánto se publicó</span></span></span><span class="flecha">›</span></a>' + seccion('Tu perfil', formPerfil(yo())) + seccion('Notificaciones', bloquePushAjustes());
     var cr = L.cron(aj);
     html += seccion('Cronograma', '<form data-form="ajustes" class="card"><div class="cron"><div class="cron-fila cron-head"><span></span><b>Instagram</b><b>TikTok</b></div>' + [1, 2, 3, 4, 5, 6, 0].map(function (i) {
       return '<div class="cron-fila"><b>' + L.DIAS[i] + '</b>' + ['ig', 'tt'].map(function (pl) {
@@ -1163,8 +1214,15 @@
           '<label class="check"><input type="checkbox" name="otra" checked> Si va en las dos plataformas, programar la otra con la regla de ' + L.minimo(ajustes()) + ' días</label>' +
           '<button class="btn grande" type="submit">Programar</button></form>';
       } else {
-        cuerpo += '<p>No hay piezas sin fecha que sirvan para este hueco.</p><a class="btn" href="#/nueva" data-act="cerrar-modal">Crear pieza</a>';
+        cuerpo += '<p class="muted">No hay piezas sin fecha que sirvan para este día.</p>';
       }
+      // Planificar en un paso: se escribe el nombre y queda como idea con este día ya puesto
+      var tipoH = m.tipoPieza === 'carrusel' ? 'carrusel' : 'reel';
+      cuerpo += '<form data-form="hueco-nueva" data-fecha="' + m.fecha + '" data-plat="' + m.plat + '" class="hueco-nueva"><p class="sub-col">' + (cands.length ? 'O una idea nueva para ese día' : 'Idea nueva para ese día') + '</p>' +
+        '<input name="titulo" required autocomplete="off" placeholder="Ej. Cómo cortar el manchego" aria-label="Nombre de la idea">' +
+        (m.tipoPieza === 'cualquiera' ? '<div class="seg tipo-sel">' + ['reel', 'carrusel'].map(function (t) { return '<label class="op-' + t + '"><input type="radio" name="tipo" value="' + t + '"' + (t === 'reel' ? ' checked' : '') + '> ' + L.TIPOS[t] + '</label>'; }).join('') + '</div>'
+          : '<input type="hidden" name="tipo" value="' + tipoH + '">') +
+        '<button class="btn sec" type="submit">Crear y programar</button></form>';
     } else if (m.tipo === 'reagendar') {
       var g = grabacion(m.id);
       cuerpo = '<h2>Proponer otro día</h2><p class="muted">Ahora: ' + esc(cuandoG(g)) + '. La otra persona tendrá que confirmar de nuevo.</p>' +
@@ -1667,6 +1725,25 @@
         var d = r.eventos[0].datos;
         var txt = L.PLATAFORMAS[plat] + ': ' + L.fmtFechaLarga(fecha) + (fe['fecha_' + otra] ? ' · ' + L.PLATAFORMAS[otra] + ': ' + L.fmtFechaLarga(fe['fecha_' + otra]) : '');
         S.flash = { titulo: '📅 «' + p.titulo + '» programada', texto: txt + (d.limite ? '. Entregar antes del ' + L.fmtFecha(d.limite) + '.' : '') };
+      }, btn);
+    },
+    'hueco-nueva': function (f, btn) {
+      var plat = f.dataset.plat, fecha = f.dataset.fecha, r, tipo = radio(f, 'tipo') || val(f, 'tipo') || 'reel';
+      // va en las dos plataformas (como toda pieza nueva); la fecha se pone solo en la del día elegido
+      var datos = { titulo: val(f, 'titulo'), tipo: tipo, ig: true, tt: true, idea: true };
+      try { r = L.nuevaPieza(datos, { id: ST.uuid(), hoy: S.hoy }); } catch (e) { return aviso(e.message); }
+      accion(function () {
+        return store.insertar('piezas', r.fila).then(function (fila) {
+          var sec = Promise.resolve();
+          r.eventos.forEach(function (ev) { sec = sec.then(function () { return store.insertar('eventos', Object.assign({ pieza_id: fila.id }, ev)); }); });
+          return sec.then(function () {
+            var fe = { primero: plat }; fe['fecha_' + plat] = fecha;
+            return ejecutar(fila, L.accionFechas(fila, fe, ajustes())).then(function () { return fila; });
+          });
+        });
+      }, function (fila) {
+        S.modal = null;
+        S.flash = { titulo: '💡 «' + fila.titulo + '» planificada', texto: L.PLATAFORMAS[plat] + ': ' + L.fmtFechaLarga(fecha) + '. Queda en Ideas hasta que se grabe.' };
       }, btn);
     },
     reagendar: function (f, btn) {

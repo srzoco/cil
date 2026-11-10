@@ -102,7 +102,7 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 .contenido { max-width: 720px; margin: 0 auto; padding: 18px 16px calc(120px + env(safe-area-inset-bottom)); }
 
 .tabs {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: grid; grid-template-columns: repeat(5, 1fr);
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: grid; grid-template-columns: repeat(4, 1fr);
   background: var(--card); border-top: 1px solid var(--line);
   padding: 6px max(8px, calc((100% - 720px) / 2)) calc(6px + env(safe-area-inset-bottom));
 }
@@ -527,7 +527,7 @@ button.filtro { cursor: pointer; font-family: var(--sans); }
 .tablero.buscando .col + .col { margin-top: 14px; }
 @media (min-width: 1000px) {
   .col-chips { display: none; }
-  .tablero { display: grid; grid-template-columns: repeat(6, minmax(200px, 1fr)); gap: 12px; align-items: start; }
+  .tablero { display: grid; grid-template-columns: repeat(5, minmax(200px, 1fr)); gap: 12px; align-items: start; }
   .tablero .col { display: block; background: var(--gray-bg); border-radius: 14px; padding: 10px; min-height: 120px; }
   .tablero.buscando .col + .col { margin-top: 0; }
   .tablero .tarjeta { padding: 9px 10px 9px 12px; }
@@ -661,3 +661,52 @@ html.marco-fijo .desliza:has(~ .tabs) .contenido { padding-bottom: 28px; }
 @media (max-width: 400px) { .seg-tabs.chico { gap: 2px; } .seg-tabs.chico button { padding: 7px 5px; font-size: .78rem; } }
 .bloque-copy .copy-plat { margin-top: 10px; }
 .bloque-copy .copy-plat h3 { margin: 0; font: 600 .95rem var(--sans); }
+
+/* ---------- Rediseño del 10/11/2026: inicio con «Hoy se publica», «Te toca», «Videos pendientes» y la semana ---------- */
+.tablero .col.solo-busca { display: none; }
+.tablero.buscando .col.solo-busca:has(.tarjeta:not([hidden])) { display: block; }
+.tablero-head { flex-wrap: wrap; }
+.enlaces-tablero { display: flex; gap: 4px; flex-wrap: wrap; }
+.enlaces-tablero .btn.link { padding-left: 6px; padding-right: 6px; }
+.tarjeta { gap: 5px; }
+.tarjeta-pie .muted { font-weight: 600; }
+.chip-info.tranca { background: var(--amber-bg); color: var(--amber); }
+.enlace-fila { margin-bottom: 14px; }
+.hoy-publica { padding: 14px; margin-bottom: 18px; border: 1.5px solid var(--accent); }
+.hoy-publica .bloque-head { margin-bottom: 10px; }
+.hoy-fila { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-top: 1px solid var(--line); }
+.hoy-fila .plat { width: 52px; text-align: center; flex: none; margin-top: 4px; }
+.hoy-items { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.hoy-pieza { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 36px; }
+.hoy-pieza > a:first-child, .hoy-pieza > span:first-child { flex: 1; min-width: 0; font-weight: 600; color: var(--ink); text-decoration: none; overflow-wrap: anywhere; line-height: 1.25; }
+.hoy-pieza > span.muted:first-child { font-weight: 500; color: var(--muted); }
+.hoy-pieza > span.rojo:first-child { color: var(--wine); }
+.hoy-pieza .pill, .hoy-pieza .btn { flex: none; white-space: nowrap; text-decoration: none; }
+.fila-pieza { border-left: 4px solid var(--line); padding: 10px 12px; gap: 10px; }
+.fila-pieza.t-reel { border-left-color: var(--reel); }
+.fila-pieza.t-carrusel { border-left-color: var(--carr); }
+.fila-pieza.t-historia { border-left-color: var(--hist); }
+.fila-pieza .item-meta { color: var(--muted); display: block; line-height: 1.35; }
+.fila-pieza .item-meta b { color: var(--ink); }
+.fila-pieza .item-meta .rojo { color: var(--wine); font-weight: 600; }
+.fila-pieza .btn { flex: none; white-space: nowrap; }
+.al-dia { margin: 0; padding: 14px; color: var(--muted); }
+.embudo { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.embudo-paso { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 9px 2px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; text-decoration: none; color: var(--ink); text-align: center; min-width: 0; }
+.embudo-paso b { font: 400 1.5rem/1.1 var(--serif); color: var(--accent); }
+.embudo-paso span { font-size: .68rem; font-weight: 600; line-height: 1.15; }
+.embudo-paso small { font-size: .62rem; color: var(--muted); line-height: 1.15; overflow-wrap: anywhere; }
+.embudo-paso.cero b { color: var(--muted); opacity: .6; }
+.embudo-paso.c-aprobar:not(.cero) { border-color: var(--accent); border-width: 1.5px; }
+.semana { padding: 4px 14px; }
+.sem-dia { padding: 10px 0; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
+.sem-dia:first-child { border-top: 0; }
+.sem-dia > b { font-size: .85rem; }
+.sem-pieza { color: var(--ink); text-decoration: none; font-weight: 500; overflow-wrap: anywhere; line-height: 1.3; }
+.sem-pieza.riesgo { color: var(--amber); }
+.sem-pieza small { color: var(--muted); }
+/* Revisar: «Aprobar / Corregir» siempre a la vista, sin bajar hasta el final */
+.acciones.pegadas { position: sticky; bottom: 0; z-index: 5; background: var(--card); margin: 14px -4px 0; padding: 10px 4px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); }
+.revision .archivo { background: none; padding: 0; margin: 10px 0; }
+.revision .archivo .btn.grande { width: 100%; text-align: center; }
+.hueco-nueva { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; padding-top: 6px; border-top: 1px solid var(--line); }

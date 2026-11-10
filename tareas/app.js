@@ -1159,15 +1159,16 @@
 
   // ---------- Gerencia: Equipo, locales y ajustes ----------
   // Equipo: un menú corto y cada sección en su propia pantalla (antes era una sola página larguísima).
+  // Dos grupos (10/11/2026): lo que se toca cada semana arriba; lo que se configura una vez, abajo
   var SECCIONES_EQUIPO = [
-    ['personas', 'Personas', 'Quién trabaja, en qué local, a qué entra y su clave'],
-    ['grupos', 'Grupos', 'Tareas que solo rotan entre algunos'],
-    ['locales', 'Locales', 'Días de trabajo, Wi-Fi y ubicación'],
-    ['frio', 'Equipos de frío', 'Neveras, cavas y contenedores'],
-    ['calendario', 'Calendario', 'Feriados, vacaciones y días extra'],
-    ['consumibles', 'Consumibles', 'Café, lavaplatos, desinfectante… y quién los recibe'],
-    ['avisos', 'Avisos', 'Notificaciones en el teléfono'],
-    ['ajustes', 'Ajustes', 'Horarios, puntualidad y reglas generales']
+    ['personas', 'Personas', 'Quién trabaja, en qué local, a qué entra y su clave', 'dia'],
+    ['calendario', 'Calendario', 'Feriados, vacaciones y días extra', 'dia'],
+    ['consumibles', 'Consumibles', 'Café, lavaplatos, desinfectante… y quién los recibe', 'dia'],
+    ['grupos', 'Grupos', 'Tareas que solo rotan entre algunos', 'conf'],
+    ['locales', 'Locales y Wi-Fi', 'Días de trabajo, Wi-Fi y ubicación', 'conf'],
+    ['frio', 'Equipos de frío', 'Neveras, cavas y contenedores', 'conf'],
+    ['avisos', 'Avisos', 'Notificaciones en el teléfono', 'conf'],
+    ['ajustes', 'Ajustes', 'Horarios, puntualidad y reglas generales', 'conf']
   ];
   var UNIDADES = ['unidad', 'galón', 'litro', 'rollo', 'paquete de 500 g', 'kg', 'caja'];
   function seccionConsumibles() {
@@ -1244,10 +1245,14 @@
         locales: plural(locales().length, 'local', 'locales'),
         frio: plural(((d.equipos) || []).filter(function (e) { return e.activo !== false; }).length, 'equipo activo', 'equipos activos')
       };
-      return '<h1>Equipo</h1><div class="lista">' + SECCIONES_EQUIPO.map(function (x) {
-        return '<a class="item" href="#/equipo/' + x[0] + '"><span class="item-cuerpo"><span class="item-titulo">' + esc(x[1]) + '</span>' +
-          '<span class="item-meta"><span class="extra">' + esc(x[2]) + (resumen[x[0]] ? ' · ' + esc(resumen[x[0]]) : '') + '</span></span></span><span class="flecha">›</span></a>';
-      }).join('') + '</div>' +
+      var grupoEq = function (g) {
+        return '<div class="lista">' + SECCIONES_EQUIPO.filter(function (x) { return x[3] === g; }).map(function (x) {
+          return '<a class="item" href="#/equipo/' + x[0] + '"><span class="item-cuerpo"><span class="item-titulo">' + esc(x[1]) + '</span>' +
+            '<span class="item-meta"><span class="extra">' + esc(x[2]) + (resumen[x[0]] ? ' · ' + esc(resumen[x[0]]) : '') + '</span></span></span><span class="flecha">›</span></a>';
+        }).join('') + '</div>';
+      };
+      return '<h1>Equipo</h1><section class="bloque"><div class="bloque-head"><h2>Del día a día</h2></div>' + grupoEq('dia') + '</section>' +
+        '<section class="bloque"><div class="bloque-head"><h2>Configuración</h2></div>' + grupoEq('conf') + '</section>' +
         '<p class="version muted"><small>' + (store.modo === 'demo' ? 'Modo demo' : 'Conectado a la base de datos') + ' · Tareas CIL v3</small></p>';
     }
     var h = '<a class="volver" href="#/equipo">‹ Equipo</a>';
