@@ -47,6 +47,9 @@ jobs:
       - name: La red nueva se registra sola solo con las dos condiciones
         env: { PGPASSWORD: prueba }
         run: psql -h localhost -U postgres -d cil -v ON_ERROR_STOP=1 -q -f pruebas/red-sola.sql
+      - name: Avisos con emoji de la herramienta, 🔴 y agrupados
+        env: { PGPASSWORD: prueba }
+        run: psql -h localhost -U postgres -d cil -v ON_ERROR_STOP=1 -q -f pruebas/avisos-emoji.sql
       - name: Robot de Yobel, descuento de las cuentas de cobro
         env: { PGPASSWORD: prueba }
         run: psql -h localhost -U postgres -d cil -v ON_ERROR_STOP=1 -q -f pruebas/robot-descuento.sql

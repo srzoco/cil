@@ -971,7 +971,7 @@ begin
       delete from redes_nuevas where ip = p_ip;
       select string_agg(coalesce(nullif(pe.nombre, ''), pe.email), ', ' order by pe.nombre) into nombres from personas pe where pe.id = any (quienes);
       insert into avisos_cola (persona_id, titulo, cuerpo, url)
-      select ad.id, 'Wi-Fi de ' || lo.nombre || ': se registró una red nueva sola',
+      select ad.id, '🔴 Wi-Fi de ' || lo.nombre || ': se registró una red nueva sola',
              left(nombres || ' marcaron «Llegué» desde ella. Si no era del local, deshazlo en Equipo → Locales.', 180), './#/equipo/locales'
       from personas ad where ad.activo and ad.rol = 'admin';
       perform public._llegadas_de_red(p_ip, lo.id);
@@ -2203,7 +2203,7 @@ begin
   perform public.generar_dia(hoy);
   perform set_config('cil.interno', '', true);
   perform public.repartir_faltas();
-  create temp table if not exists _avisos (persona_id uuid, clave text, titulo text, cuerpo text, url text, urgente boolean not null default true) on commit drop;
+  create temp table if not exists _avisos (persona_id uuid, clave text, titulo text, cuerpo text, url text, urgente boolean not null default true, rojo boolean not null default false) on commit drop;
   delete from _avisos where true;
 
   -- 1) Te toca ahora: tareas con «desde», para quien la tiene
@@ -2384,8 +2384,8 @@ begin
     from (select coalesce((select a.pub_desde from ajustes a where a.id = 1), time '18:00') as d,
                  coalesce((select a.pub_hasta from ajustes a where a.id = 1), time '20:30') as h) v
     cross join lateral (values
-                 (v.d, 'edita', '📲 Hoy se publica:', 'Tienes hasta las ' || public._hora_txt(v.h) || ' Al publicar, márcalo en la app.'),
-                 (v.h - interval '45 minutes', 'edita', '⏰ Falta publicar:', 'Quedan 45 minutos (hasta las ' || public._hora_txt(v.h) || ').'),
+                 (v.d, 'edita', 'Hoy se publica:', 'Tienes hasta las ' || public._hora_txt(v.h) || ' Al publicar, márcalo en la app.'),
+                 (v.h - interval '45 minutes', 'edita', 'Falta publicar:', 'Quedan 45 minutos (hasta las ' || public._hora_txt(v.h) || ').'),
                  (v.h - interval '15 minutes', 'edita', '🔴 Últimos 15 min para publicar:', 'Publícalo ya y márcalo en la app.'),
                  (v.h + interval '5 minutes', 'aprueba', '🔴 No se publicó a tiempo:', 'Se pasó la hora de publicar (hasta las ' || public._hora_txt(v.h) || ').'),
                  (v.h + interval '5 minutes', 'edita', '🔴 No se publicó a tiempo:', 'Publícalo apenas puedas y márcalo, o reagéndalo.')) as r(hora, rol, titulo, cuerpo)
@@ -2399,8 +2399,15 @@ begin
     where l.lista is not null and public._ts_hoy(r.hora) <= ahora and public._ts_hoy(r.hora) > hace;
   end if;
 
-  -- 7) Avisos sueltos (prueba)
-  insert into _avisos select c.persona_id, 'cola:' || c.id, c.titulo, c.cuerpo, c.url from avisos_cola c where c.creado_en > now() - interval '1 day';
+  -- 7) Avisos sueltos (lo que dejan las demás funciones en avisos_cola).
+  --    Para que no lleguen uno detrás de otro (10/11/2026): los que no son 🔴 esperan a que pasen 2 minutos sin avisos nuevos
+  --    para esa persona (máximo 8) y salen juntos. Los 🔴 y el de prueba salen al momento.
+  insert into _avisos (persona_id, clave, titulo, cuerpo, url)
+  select c.persona_id, 'cola:' || c.id, c.titulo, c.cuerpo, c.url from avisos_cola c
+  where c.creado_en > now() - interval '1 day'
+    and (c.titulo like '🔴%' or c.titulo = 'Aviso de prueba'
+         or not exists (select 1 from avisos_cola o where o.persona_id = c.persona_id and o.titulo not like '🔴%' and o.creado_en > now() - interval '2 minutes')
+         or exists (select 1 from avisos_cola o where o.persona_id = c.persona_id and o.titulo not like '🔴%' and o.creado_en < now() - interval '8 minutes'));
   delete from avisos_cola where creado_en <= now() - interval '1 day' or id::text in (select substr(clave, 6) from _avisos where clave like 'cola:%');
 
   -- 8) Resumen de lo que no es urgente (quedó en la bandeja sin sonar): a las 8:45 a. m. y a las 5:10 p. m.
@@ -2415,8 +2422,23 @@ begin
     update avisos_log set resumido_en = now() where not urgente and resumido_en is null;
   end if;
 
-  -- Solo los que no se han mandado: se marcan como mandados, se guardan en la bandeja y los urgentes
-  -- se devuelven con cada teléfono de esa persona (los demás esperan al resumen)
+  -- 9) Cómo se ven (10/11/2026, pedido de Sara): cada aviso empieza con el emoji de su herramienta
+  --    (✅ Tareas · 🎬 Contenido · 📋 Pendientes · 💬 Mensajes, bot y robot) y lo que hay que revisar primero lleva 🔴 delante:
+  --    tarea que se está pasando, temperatura fuera de rango, no pudieron marcar «Llegué», no se publicó a tiempo,
+  --    y lo que el bot, el robot o cualquier función ya marcaba con 🔴 al principio del título.
+  update _avisos v set rojo = true
+  where v.titulo like '🔴%' or v.clave like 'urg:%' or v.clave like 'temp:%' or v.clave like 'redes:%';
+  update _avisos v set titulo =
+    case when v.rojo then '🔴 ' else '' end ||
+    case when v.url like 'pendientes/%' then '📋'
+         when v.url like '%contenido%' then '🎬'
+         when v.url like 'mensajes/%' or v.url = './' then '💬'
+         else '✅' end || ' ' || regexp_replace(v.titulo, '^(🔴|🟢|📲|⏰|🔔)\s*', '')
+  where v.clave not like 'bandeja:%';
+
+  -- Solo los que no se han mandado: se marcan como mandados, se guardan en la bandeja (uno por uno) y los que suenan
+  -- se devuelven con cada teléfono de esa persona (los demás esperan al resumen).
+  -- Si a una persona le tocan varios en el mismo minuto, suenan como uno solo: uno con los 🔴 y otro con el resto.
   return query
   with nuevos as (
     insert into avisos_enviados (clave) select v.clave from _avisos v on conflict (clave) do nothing returning avisos_enviados.clave
@@ -2424,10 +2446,17 @@ begin
     insert into avisos_log (persona_id, titulo, cuerpo, url, urgente)
     select v.persona_id, v.titulo, v.cuerpo, v.url, v.urgente from _avisos v join nuevos n on n.clave = v.clave where v.clave not like 'bandeja:%'
     returning 1
+  ), juntos as (
+    select v.persona_id, v.rojo, count(*) as n, min(v.titulo) as t1, min(v.cuerpo) as c1, min(v.url) as u1, count(distinct v.url) as nu,
+           string_agg(v.titulo, ' · ' order by v.clave) as todos
+    from _avisos v join nuevos n on n.clave = v.clave
+    where v.urgente group by v.persona_id, v.rojo
   )
-  select v.persona_id, su.endpoint, su.p256dh, su.auth, v.titulo, v.cuerpo, v.url
-  from _avisos v join nuevos n on n.clave = v.clave join suscripciones su on su.persona_id = v.persona_id
-  where v.urgente;
+  select j.persona_id, su.endpoint, su.p256dh, su.auth,
+         case when j.n = 1 then j.t1 when j.rojo then '🔴 ' || j.n || ' avisos urgentes' else '🔔 ' || j.n || ' avisos' end,
+         case when j.n = 1 then j.c1 else left(j.todos, 400) end,
+         case when j.nu = 1 then j.u1 else './?bandeja' end
+  from juntos j join suscripciones su on su.persona_id = j.persona_id;
   delete from avisos_log where creado_en < now() - interval '14 days';
   delete from avisos_enviados where enviado_en < now() - interval '3 days';
 end $$;
