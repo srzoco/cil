@@ -83,10 +83,27 @@
   function guardarCache(d) { var k = claveCache(); if (!k) return; try { localStorage.setItem(k, JSON.stringify(d)); } catch (e) { try { localStorage.removeItem(k); } catch (e2) { /* lleno */ } } }
   function leerCache() { var k = claveCache(); if (!k) return null; try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
   function borrarCache() { var k = claveCache(); if (k) try { localStorage.removeItem(k); } catch (e) { /* nada */ } }
+  var DIAS_RECIENTE = 30;
+  // Pantallas que necesitan lo antiguo: Publicadas, Archivadas, Métricas, semanas pasadas del calendario y una pieza que no está en lo reciente
+  function necesitaTodo() {
+    if (S.todo) return true;
+    var r = ruta(), s0 = r.parts[0];
+    if (s0 === 'metricas') return true;
+    if ((s0 === 'tablero' || s0 === 'piezas') && r.q.get('f')) return true;
+    if (s0 === 'calendario' && (parseInt(r.q.get('d') || '0', 10) || 0) < 0) return true;
+    if (s0 === 'p' && S.data && !pieza(r.parts[1])) return true;
+    return false;
+  }
+  function faltaLoAntiguo() { return !!S.data && !S.data.completo && necesitaTodo(); }
   function recargar(silencioso, sinPintar) {
     if (!store.sesion()) { S.cargando = false; render(); return Promise.resolve(); }
     if (!silencioso) S.cargando = true;
-    return store.cargarTodo().then(function (d) {
+    // Al abrir se baja lo reciente (DIAS_RECIENTE); lo antiguo, solo cuando una pantalla lo necesita (y de ahí en adelante, todo)
+    if (necesitaTodo()) S.todo = true;
+    var pedido = !!S.todo;
+    return store.cargarTodo(pedido ? null : DIAS_RECIENTE).then(function (d) {
+      if (store.modo === 'demo' || pedido) d.completo = true;
+      if (S.todo && !d.completo) return;  // mientras tanto se pidió todo: esta respuesta ya no sirve
       var firma = JSON.stringify(d).length + '|' + d.eventos.length + '|' + d.piezas.map(function (p) { return p.actualizado_en; }).join(',') + '|' + (d.grabaciones || []).map(function (g) { return g.actualizado_en; }).join(',');
       var cambio = firma !== S.firma;
       S.firma = firma;
@@ -177,6 +194,10 @@
   }
   function vistaRuta() {
     var r = ruta();
+    if (faltaLoAntiguo()) {
+      if (!S.pidiendoTodo) { S.pidiendoTodo = true; S.todo = true; recargar(true).then(function () { S.pidiendoTodo = false; render(); }); }
+      return '<div class="centro"><div class="spinner"></div><p class="muted">Buscando también lo de hace más de ' + DIAS_RECIENTE + ' días…</p></div>';
+    }
     switch (r.parts[0]) {
       case undefined: return vistaInicio();
       case 'tablero': case 'piezas': return vistaTablero(r.q);
@@ -452,7 +473,8 @@
       '<div class="seg-tabs chico" role="group" aria-label="Tipo">' + [['todos', 'Todos'], ['reel', 'Reels'], ['carrusel', 'Carruseles'], ['historia', 'Historias']].map(function (x) {
         return '<button type="button" data-act="filtro-tipo" data-val="' + x[0] + '" class="' + (T.tipo === x[0] ? 'on' : '') + '">' + x[1] + '</button>';
       }).join('') + '</div>' +
-      '<button type="button" class="filtro' + (T.espera ? ' on' : '') + '" data-act="filtro-espera">📦 En espera</button></div>';
+      '<button type="button" class="filtro' + (T.espera ? ' on' : '') + '" data-act="filtro-espera">📦 En espera</button>' +
+      (S.data && !S.data.completo ? '<button type="button" class="filtro" data-act="cargar-todo">Buscar también en lo antiguo</button>' : '') + '</div>';
     if (verArch) {
       var arch = piezas().filter(function (p) { return p.fase === 'archivada' && filtrar(p); });
       return html + '<div class="tablero todo"><div class="lista-tarjetas">' + (arch.length ? arch.map(function (p) { return tarjeta(p); }).join('') : '<p class="muted vacio">No hay piezas archivadas.</p>') + '</div></div>';
@@ -1318,6 +1340,7 @@
   // ---------- Acciones (clics) ----------
   var ACC = {
     'reintentar': function () { recargar(); },
+    'cargar-todo': function () { S.todo = true; aviso('Buscando lo de hace más de ' + DIAS_RECIENTE + ' días…', 'ok'); recargar(true).then(render); },
     'salir': function () { borrarCache(); store.salir().then(function () { S.data = null; S.firma = ''; location.hash = '#/'; render(); }); },
     'volver': function () { if (history.length > 1) history.back(); else location.hash = '#/'; },
     'demo-rol': function (el) { store.cambiarUsuario(el.dataset.id); S.lote = null; S.tablero.col = null; recargar(true).then(render); },

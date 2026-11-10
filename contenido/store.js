@@ -260,17 +260,40 @@
     }
     return pagina(0);
   };
-  SupabaseStore.prototype.cargarTodo = function () {
+  // dias (30): al abrir solo se baja lo que está en proceso (tenga la edad que tenga) y lo publicado o archivado que se
+  // movió en los últimos «dias» días, con el historial de esas piezas nada más. Sin «dias» se baja todo (Publicadas,
+  // Archivadas, Métricas, semanas pasadas del calendario y la búsqueda en lo antiguo lo piden así).
+  SupabaseStore.prototype.cargarTodo = function (dias) {
     var self = this;
-    return Promise.all([
+    var resto = [
       self._rest('GET', 'equipo?select=*'),
       self._rest('GET', 'ajustes?select=*'),
-      self._todas('piezas?select=*&order=creado_en.desc,id.asc'),
-      self._todas('eventos?select=*&order=creado_en.asc,id.asc'),
       self._rest('GET', 'grabaciones?select=*&order=semana.desc'),
       self._todas('grabacion_eventos?select=*&order=creado_en.asc,id.asc')
-    ]).then(function (r) {
-      return { equipo: r[0] || [], ajustes: (r[1] && r[1][0]) || null, piezas: r[2] || [], eventos: r[3] || [], grabaciones: r[4] || [], grabacion_eventos: r[5] || [] };
+    ];
+    var piezasEv;
+    if (!dias) {
+      piezasEv = Promise.all([self._todas('piezas?select=*&order=creado_en.desc,id.asc'), self._todas('eventos?select=*&order=creado_en.asc,id.asc')]);
+    } else {
+      var corte = new Date(Date.now() - dias * 864e5).toISOString().slice(0, 19) + 'Z';
+      piezasEv = self._todas('piezas?select=*&or=(fase.not.in.(publicada,archivada),actualizado_en.gte.' + corte + ',publicado_ig_en.gte.' + corte + ',publicado_tt_en.gte.' + corte + ')&order=creado_en.desc,id.asc').then(function (ps) {
+        // el historial se pide solo de esas piezas, de 60 en 60 (la dirección tiene un largo máximo)
+        var grupos = [];
+        for (var i = 0; i < ps.length; i += 60) grupos.push(ps.slice(i, i + 60).map(function (x) { return x.id; }));
+        return Promise.all(grupos.map(function (ids) { return self._todas('eventos?select=*&pieza_id=in.(' + ids.join(',') + ')&order=creado_en.asc,id.asc'); })).then(function (partes) {
+          var ev = [].concat.apply([], partes);
+          ev.sort(function (a, b) { return a.creado_en < b.creado_en ? -1 : a.creado_en > b.creado_en ? 1 : (a.id < b.id ? -1 : 1); });
+          return [ps, ev];
+        });
+      }).catch(function (e) {
+        // Red de seguridad: si el servidor no acepta la consulta de «lo reciente», se baja todo como antes (más lento, pero abre)
+        if (e && (e.red || e.sesion)) throw e;
+        dias = null;
+        return Promise.all([self._todas('piezas?select=*&order=creado_en.desc,id.asc'), self._todas('eventos?select=*&order=creado_en.asc,id.asc')]);
+      });
+    }
+    return Promise.all(resto.concat([piezasEv])).then(function (r) {
+      return { equipo: r[0] || [], ajustes: (r[1] && r[1][0]) || null, piezas: r[4][0] || [], eventos: r[4][1] || [], grabaciones: r[2] || [], grabacion_eventos: r[3] || [], completo: !dias };
     });
   };
   SupabaseStore.prototype.insertar = function (tabla, fila, opciones) {

@@ -25,6 +25,18 @@ const fetchFalso = async (url) => {
   if (nEv !== 3) fallas.push('eventos: ' + nEv + ' consultas (debían ser 3)');
   if (nPz !== 2) fallas.push('piezas: ' + nPz + ' consultas (1.000 exactas = 2)');
   if (pedidos.some(x => /^(eventos|piezas|grabacion_eventos)\?/.test(x) && !/order=[^&]*id\.asc/.test(x))) fallas.push('una consulta por páginas sin orden fijo (id)');
+  // Al abrir (30 días): las piezas se piden con el filtro de «en proceso o recientes» y el historial solo de esas piezas, de 60 en 60
+  filas.piezas = 130; filas.eventos = 5; pedidos.length = 0;
+  const d2 = await s.cargarTodo(30);
+  const pz = pedidos.filter(x => x.indexOf('piezas?') === 0), ev = pedidos.filter(x => x.indexOf('eventos?') === 0);
+  if (d2.completo !== false || d.completo !== true) fallas.push('no dice si lo que bajó es todo o solo lo reciente');
+  if (pz.length !== 1 || !/fase\.not\.in\.\(publicada,archivada\)/.test(decodeURIComponent(pz[0])) || !/actualizado_en\.gte\.20\d\d-/.test(decodeURIComponent(pz[0]))) fallas.push('las piezas recientes no se piden con el filtro: ' + pz.join(' | '));
+  if (ev.length !== 3 || !ev.every(x => /pieza_id=in\.\(piezas\d+/.test(decodeURIComponent(x)))) fallas.push('el historial no se pide solo de las piezas bajadas, de 60 en 60 (' + ev.length + ' consultas)');
+  if (d2.piezas.length !== 130 || d2.grabaciones.length !== 30 || !d2.ajustes) fallas.push('lo reciente llegó incompleto');
+  // Si el servidor rechaza la consulta de «lo reciente», baja todo como antes en vez de quedarse sin abrir
+  const s3 = new ST.SupabaseStore({ supabaseUrl: 'http://sb.test', supabaseKey: 'k', fetch: async (url) => /or=/.test(url) ? { ok: false, status: 400, text: async () => '{"message":"failed to parse logic tree"}' } : fetchFalso(url) });
+  const d3 = await s3.cargarTodo(30);
+  if (d3.piezas.length !== 130 || d3.completo !== true) fallas.push('si falla la consulta de lo reciente no baja todo (' + d3.piezas.length + ', completo ' + d3.completo + ')');
   if (fallas.length) { console.error('FALLAS:\n- ' + fallas.join('\n- ')); process.exit(1); }
-  console.log('OK: Contenido carga todo aunque pase de 1.000 filas (por páginas).');
+  console.log('OK: Contenido carga todo aunque pase de 1.000 filas (por páginas) y al abrir pide solo lo reciente.');
 })();
