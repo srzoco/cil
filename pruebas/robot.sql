@@ -223,5 +223,31 @@ do $$ begin
   if exists (select 1 from bot_avisos where tipo = 'robot_nuevos') then raise exception 'FALLO: avisó un descartado'; end if;
 end $$;
 
+-- Descripción de Yobel (11/11/2026): el robot la trae, no se borra si viene vacía y el bot la ve en ficha_producto
+update armador_datos set datos = jsonb_set(datos, '{robot,fecha}', to_jsonb(now() - interval '1 hour')) where id = 1;
+set role anon;
+do $$ begin
+  perform robot_subir((select t from t_token), (
+    select jsonb_agg(jsonb_build_object('ref', v->>'ref', 'producto', p->>'nombre', 'precio', (v->>'precio')::numeric, 'stock', 5)
+      || case when p->>'id' = 'p1' then '{"descripcion":"Queso de vaca madurado."}'::jsonb else '{}'::jsonb end)
+    from armador_datos a, jsonb_array_elements(a.datos->'productos') p, jsonb_array_elements(p->'presentaciones') v where a.id = 1 and v ? 'ref'));
+end $$;
+reset role;
+update armador_datos set datos = jsonb_set(datos, '{robot,fecha}', to_jsonb(now() - interval '1 hour')) where id = 1;
+set role anon;
+do $$ begin
+  perform robot_subir((select t from t_token), (
+    select jsonb_agg(jsonb_build_object('ref', v->>'ref', 'producto', p->>'nombre', 'precio', (v->>'precio')::numeric, 'stock', 5, 'descripcion', ''))
+    from armador_datos a, jsonb_array_elements(a.datos->'productos') p, jsonb_array_elements(p->'presentaciones') v where a.id = 1 and v ? 'ref'));
+end $$;
+reset role;
+do $$ declare nom text; f json; begin
+  select p->>'nombre' into nom from armador_datos a, jsonb_array_elements(a.datos->'productos') p where a.id = 1 and p->>'id' = 'p1';
+  if (select p->>'descripcion' from armador_datos a, jsonb_array_elements(a.datos->'productos') p where a.id = 1 and p->>'id' = 'p1') is distinct from 'Queso de vaca madurado.' then
+    raise exception 'FALLO: la descripción del robot no llegó o se borró'; end if;
+  f := ficha_producto(nom);
+  if f::text not like '%Queso de vaca madurado.%' then raise exception 'FALLO: el bot no ve la descripción: %', f; end if;
+end $$;
+
 rollback;
 \echo 'OK: pruebas del robot'

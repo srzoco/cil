@@ -389,6 +389,13 @@ body.usd #usd-badge{display:inline-block}
      Las presentaciones sin "ref" (agregadas a mano) no se tocan. */
   function medidaDe(v){ return v && v.medida != null ? String(v.medida) : (v && v.kilo ? 'kg' : ''); }
   // Producto del armador a partir de filas de Yobel ({ref, producto, categoria, precio, stock, kilo?, texto?}); ids = los que ya existen
+  // Descripción de Yobel de un producto: las distintas de sus filas (si varían por presentación, cada una con su nombre)
+  function descDe(filas){
+    var vistas = [], out = [];
+    filas.forEach(function(f){ var d = String(f.descripcion || '').trim(); if (d && vistas.indexOf(d) < 0){ vistas.push(d); out.push({ d: d, t: f.texto || '' }); } });
+    var txt = out.length > 1 ? out.map(function(x){ return (x.t ? x.t + ': ' : '') + x.d; }).join('\n\n') : (out[0] ? out[0].d : '');
+    return txt.slice(0, 3000);
+  }
   function textoDeRef(ref){ var x = String(ref || '').split('|'); return textoOf({ producto: x[0], talla: x[1], presentacion: x[2], sabor: x[3], modelo: x[4], peso: x[5] }); }
   function productoNuevo(filas, ids, ahora){
     var r0 = filas[0], id = slug(r0.producto), n = 2;
@@ -397,6 +404,7 @@ body.usd #usd-badge{display:inline-block}
     return {
       id: id, nombre: r0.producto, categoria: r0.categoria || '', emoji: emojiFor(r0.producto, r0.categoria),
       pregunta: preguntaFor(g),
+      descripcion: descDe(filas.map(function(f, i){ return { descripcion: f.descripcion, texto: g[i].texto }; })),
       presentaciones: filas.map(function(f, i){ var o = { texto: g[i].texto, precio: Number(f.precio), kilo: !!f.kilo, ref: f.ref }; if (f.kilo) o.medida = 'kg'; if (f.stock != null && isFinite(f.stock)) o.stock = Number(f.stock); return o; }),
       actualizado: ahora || new Date().toISOString()
     };
@@ -423,9 +431,9 @@ body.usd #usd-badge{display:inline-block}
     var porRef = {};
     validas.forEach(function(v){ porRef[v.ref] = v; });
 
-    var usadas = {}, cambios = [], eliminadas = [], categorias = [], out = [];
+    var usadas = {}, cambios = [], eliminadas = [], categorias = [], descripciones = [], out = [];
     (productos || []).forEach(function(p){
-      var pres = [], toco = false, cat = '';
+      var pres = [], toco = false, cat = '', dfilas = [];
       p.presentaciones.forEach(function(v){
         if (!v.ref){ pres.push(v); return; }
         var n = porRef[v.ref];
@@ -437,6 +445,7 @@ body.usd #usd-badge{display:inline-block}
         }
         usadas[v.ref] = 1;
         if (n.r.categoria) cat = clean(n.r.categoria);
+        dfilas.push({ descripcion: n.r.descripcion, texto: v.texto });
         // Si gerencia eligió la medida a mano (por gramo, por unidad…), el archivo no la cambia
         var aMano = ['', 'kg'].indexOf(medidaDe(v)) < 0;
         if (n.precio !== v.precio || (!aMano && n.kilo !== !!v.kilo)){
@@ -451,7 +460,10 @@ body.usd #usd-badge{display:inline-block}
       // La categoría manda Yobel: si la corrigieron allá, se actualiza aquí
       var cambioCat = cat && cat !== (p.categoria || '');
       if (cambioCat) categorias.push({ nombre: p.nombre, antes: p.categoria || '', despues: cat });
-      if (pres.length) out.push(Object.assign({}, p, { presentaciones: pres, actualizado: toco || cambioCat ? ahora : p.actualizado }, cambioCat ? { categoria: cat } : {}));
+      // La descripción también manda Yobel (si viene vacía no se borra)
+      var d = descDe(dfilas), cambioDesc = d && d !== (p.descripcion || '');
+      if (cambioDesc) descripciones.push({ nombre: p.nombre, nueva: !p.descripcion });
+      if (pres.length) out.push(Object.assign({}, p, { presentaciones: pres, actualizado: toco || cambioCat ? ahora : p.actualizado }, cambioCat ? { categoria: cat } : {}, cambioDesc ? { descripcion: d } : {}));
     });
 
     var grupos = [], porNombre = {};
@@ -469,9 +481,9 @@ body.usd #usd-badge{display:inline-block}
       var filas = g.filter(function(v){ return !desc[v.ref]; });
       if (!filas.length) return;
       nuevos.push(g[0].r.producto);
-      filas.forEach(function(v){ var o = { ref: v.ref, producto: v.r.producto, categoria: v.r.categoria || '', precio: v.precio, kilo: v.kilo, texto: v.texto }; if (isFinite(v.stock)) o.stock = v.stock; cola.push(o); });
+      filas.forEach(function(v){ var o = { ref: v.ref, producto: v.r.producto, categoria: v.r.categoria || '', precio: v.precio, kilo: v.kilo, texto: v.texto }; if (isFinite(v.stock)) o.stock = v.stock; if (v.r.descripcion) o.descripcion = v.r.descripcion.slice(0, 3000); cola.push(o); });
     });
-    return { productos: out, cola: cola, informe: { cambios: cambios, categorias: categorias, nuevos: nuevos, eliminadas: eliminadas, piezas: piezas, raros: raros, inactivas: inactivas, filas: R.recs.length } };
+    return { productos: out, cola: cola, informe: { cambios: cambios, categorias: categorias, descripciones: descripciones, nuevos: nuevos, eliminadas: eliminadas, piezas: piezas, raros: raros, inactivas: inactivas, filas: R.recs.length } };
   }
 
   /* Costos del archivo de Yobel (columna «Costo promedio»): solo referencia, costo y unidad.
@@ -920,9 +932,14 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
             <p class="hint">Se usa cuando el mensaje lleva solo este producto.</p>
             <label class="v-kilo" for="f-pedido" style="margin-top:6px"><input id="f-pedido" type="checkbox"> Bajo pedido (reposición en 1 día)</label>
             <p class="hint">Se ofrece aunque no haya stock en Yobel. El bot da el precio y pasa el chat a una persona.</p>
+            <div id="f-desc-box" hidden>
+              <p class="flabel" style="margin:0">Descripción de Yobel</p>
+              <p id="f-desc" class="hint" style="white-space:pre-line;margin:4px 0 0"></p>
+              <p class="hint">Se cambia en Yobel y llega con el CSV. El bot la usa junto con la ficha.</p>
+            </div>
             <label class="flabel" for="f-ficha">Ficha técnica (solo datos comprobados)</label>
             <textarea id="f-ficha" class="field" rows="3" maxlength="2000" placeholder="Acidez 0,2 %. Origen: Jaén, España."></textarea>
-            <p class="hint">El bot solo da datos técnicos (acidez, maduración, origen…) si están aquí.</p>
+            <p class="hint">El bot solo da datos técnicos (acidez, maduración, origen…) si están aquí o en la descripción de Yobel.</p>
             <label class="flabel" for="f-usos">Usos y platos (opcional)</label>
             <textarea id="f-usos" class="field" rows="2" maxlength="2000" placeholder="Para pasta negra, risotto y paella."></textarea>
             <p class="hint">Si queda vacío, el bot sugiere usos generales.</p>
@@ -1130,7 +1147,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
         const c = p.categoria || 'Sin categoría';
         if (c !== last){ html += `<h3 class="cgroup">${esc(c)}</h3>`; last = c; }
         const vars = p.presentaciones.map(v => `<li><span class="web">${money(v.precio)}${medidaTxt(v, true)} web</span>${d != null ? ` → <span class="hoy">${money(priceToday(v, d))}${medidaTxt(v)}</span>` : ''} ${esc(v.texto)}${stockTag(p, v, true)}</li>`).join('');
-        html += `<article class="crow"><div class="crow-main"><p class="cname">${esc(p.emoji)} ${esc(p.nombre)}</p><p class="cmeta">${p.actualizado ? 'Precio actualizado ' + esc(shortDate(p.actualizado)) : 'Sin fecha de actualización'}${p.ficha ? ' · Con ficha' : ''}${p.usos ? ' · Con usos' : ''}</p><ul class="cvars">${vars}</ul></div><button type="button" class="btn ghost small owner-only" data-edit="${esc(p.id)}">Editar</button></article>`;
+        html += `<article class="crow"><div class="crow-main"><p class="cname">${esc(p.emoji)} ${esc(p.nombre)}</p><p class="cmeta">${p.actualizado ? 'Precio actualizado ' + esc(shortDate(p.actualizado)) : 'Sin fecha de actualización'}${p.descripcion ? ' · Con descripción' : ''}${p.ficha ? ' · Con ficha' : ''}${p.usos ? ' · Con usos' : ''}</p><ul class="cvars">${vars}</ul></div><button type="button" class="btn ghost small owner-only" data-edit="${esc(p.id)}">Editar</button></article>`;
       }
       list.innerHTML = items.length ? html : `<p class="empty">Ningún producto coincide con «${esc(S.cq)}».</p>`;
     }
@@ -1209,7 +1226,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
     const inf = S.pending.res.informe;
     const li = a => a.map(x => `<li>${x}</li>`).join('');
     const sec = (title, items, open) => items.length ? `<details ${open ? 'open' : ''}><summary>${title} (${items.length})</summary><ul class="scroll">${li(items)}</ul></details>` : '';
-    const nothing = !inf.cambios.length && !inf.nuevos.length && !inf.eliminadas.length && !(inf.categorias || []).length;
+    const nothing = !inf.cambios.length && !inf.nuevos.length && !inf.eliminadas.length && !(inf.categorias || []).length && !(inf.descripciones || []).length;
     box.innerHTML = `
       <h3>Revisa antes de publicar</h3>
       <p class="hint" style="margin:0">${esc(S.pending.archivo)} · ${inf.filas} filas leídas</p>
@@ -1220,6 +1237,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
         ${inf.raros.length ? `<span class="pill alert">${inf.raros.length === 1 ? '1 con precio sospechoso' : inf.raros.length + ' con precio sospechoso'}</span>` : ''}
       </div>
       ${sec('Categorías corregidas en Yobel', (inf.categorias || []).map(c => `${esc(c.nombre)}: ${esc(c.antes || 'Sin categoría')} → <strong>${esc(c.despues)}</strong>`), true)}
+      ${sec('Descripciones de Yobel (el bot las usa)', (inf.descripciones || []).map(c => `${esc(c.nombre)}${c.nueva ? ' · nueva' : ' · cambió'}`))}
       ${sec('Precios que cambian', inf.cambios.map(c => `${esc(c.nombre)}${c.texto ? ' · ' + esc(c.texto) : ''}: ${money(c.antes)} → <strong>${money(c.despues)}</strong>${medidaTxt(c)}`), true)}
       ${sec('Nuevos por aprobar: «Publicar cambios» NO los agrega; después los apruebas uno por uno arriba del catálogo', inf.nuevos.map(esc))}
       ${sec('No vinieron en el archivo: no se borran, quedan con «stock sin actualizar» (revísalos en Yobel)', inf.eliminadas.map(x => esc(x.nombre) + (x.texto ? ' · ' + esc(x.texto) : '')))}
@@ -1246,6 +1264,8 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
     $('#f-preg').value = p ? p.pregunta : '';
     $('#f-pedido').checked = !!(p && p.bajo_pedido);
     $('#f-ficha').value = p && p.ficha ? p.ficha : '';
+    $('#f-desc').textContent = p && p.descripcion ? p.descripcion : '';
+    $('#f-desc-box').hidden = !(p && p.descripcion);
     $('#f-usos').value = p && p.usos ? p.usos : '';
     $('#ed-del').hidden = !p;
     $('#del-confirm').hidden = true;
@@ -1304,6 +1324,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
       categoria: vacio(nuevo.categoria) ? viejo.categoria : nuevo.categoria,   // la categoría manda Yobel
       emoji: vacio(viejo.emoji) || viejo.emoji === '🔹' ? nuevo.emoji : viejo.emoji,
       pregunta: vacio(viejo.pregunta) ? nuevo.pregunta : viejo.pregunta,
+      descripcion: vacio(nuevo.descripcion) ? viejo.descripcion : nuevo.descripcion,   // la descripción manda Yobel
       ficha: vacio(viejo.ficha) ? nuevo.ficha : viejo.ficha,
       usos: vacio(viejo.usos) ? nuevo.usos : viejo.usos,
       bajo_pedido: !!(viejo.bajo_pedido || nuevo.bajo_pedido),

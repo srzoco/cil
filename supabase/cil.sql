@@ -3884,12 +3884,15 @@ begin
     'mensaje', array_to_string(bloques, E'\n\n') || coalesce(E'\n\n' || pregunta, '') || E'\n\n' || pie);
 end $$;
 
--- Ficha técnica y usos sugeridos de los productos que coinciden
+-- Ficha técnica y usos sugeridos de los productos que coinciden.
+-- «ficha» = la descripción de Yobel (llega con el CSV o el robot) + la ficha escrita en el armador (11/11/2026).
 create or replace function public.ficha_producto(q text) returns json
 language sql stable security definer set search_path = public, extensions as $$
   with palabras as (select public.bot_palabras(q) as w),
   prods as (
-    select p->>'nombre' as nombre, nullif(trim(p->>'ficha'), '') as ficha, nullif(trim(p->>'usos'), '') as usos,
+    select p->>'nombre' as nombre,
+           nullif(concat_ws(E'\n\n', nullif(trim(p->>'descripcion'), ''), nullif(trim(p->>'ficha'), '')), '') as ficha,
+           nullif(trim(p->>'usos'), '') as usos,
            public.bot_norm(p->>'nombre') as nom
     from armador_datos, jsonb_array_elements(datos->'productos') p where id = 1
   )
@@ -3927,7 +3930,8 @@ begin
   return t;
 end $$;
 
--- El robot sube precio y stock. p_filas = [{ref, producto, categoria, precio, stock}] (sin costos).
+-- El robot sube precio y stock. p_filas = [{ref, producto, categoria, precio, stock, descripcion?}] (sin costos).
+-- La descripción de Yobel, si viene, reemplaza la del producto (si viene vacía no se borra).
 -- Mezcla con el armador SIN tocar nombres, emojis, preguntas, fichas, usos ni marcas de bajo pedido.
 -- Lo que no viene de Yobel no se borra ni cambia su stock: se marca sin_actualizar y se avisa.
 create or replace function public.robot_subir(p_token text, p_filas jsonb) returns json
@@ -3938,7 +3942,7 @@ declare
   mapa jsonb := '{}'; f jsonb; ref text; precio_nuevo numeric; precio_viejo numeric; stock_nuevo numeric;
   n_filas int; n_antes int; vistos text[] := '{}'; forzar boolean := _bot_cfg('robot_forzar', 'no') = 'si';
   cambios int := 0; grandes text[] := '{}'; pausados text[] := '{}'; nuevos text[] := '{}'; huerfanas text[] := '{}';
-  bajo boolean; con_ref boolean; alguno boolean; cat_y text; cola jsonb; antes_cola text[]; descartados text[];
+  bajo boolean; con_ref boolean; alguno boolean; cat_y text; desc_y text; cola jsonb; antes_cola text[]; descartados text[];
 begin
   if hash = '' or p_token is null or encode(sha256(convert_to(p_token, 'UTF8')), 'hex') <> hash then
     raise exception 'no autorizado';
@@ -3958,7 +3962,8 @@ begin
     end;
     continue when precio_nuevo is null or precio_nuevo <= 0 or precio_nuevo > 100000 or stock_nuevo < -100000 or stock_nuevo > 1000000;
     mapa := mapa || jsonb_build_object(ref, jsonb_build_object('precio', precio_nuevo, 'stock', stock_nuevo, 'producto', left(f->>'producto', 200),
-      'categoria', nullif(left(trim(coalesce(f->>'categoria', '')), 80), '')));
+      'categoria', nullif(left(trim(coalesce(f->>'categoria', '')), 80), ''),
+      'descripcion', nullif(left(trim(coalesce(f->>'descripcion', '')), 3000), '')));
   end loop;
 
   select * into fila from armador_datos where id = 1 for update;
@@ -3980,7 +3985,7 @@ begin
   for p in select value from jsonb_array_elements(fila.datos->'productos') loop
     bajo := coalesce((p->>'bajo_pedido')::boolean, false);
     nuevas_pres := '[]';
-    con_ref := false; alguno := false; cat_y := null;
+    con_ref := false; alguno := false; cat_y := null; desc_y := null;
     for v in select value from jsonb_array_elements(p->'presentaciones') loop
       ref := v->>'ref';
       if ref is not null then con_ref := true; end if;
@@ -3988,6 +3993,7 @@ begin
         alguno := true;
         vistos := vistos || ref;
         cat_y := coalesce(mapa->ref->>'categoria', cat_y);
+        desc_y := coalesce(desc_y, mapa->ref->>'descripcion');
         precio_viejo := nullif(v->>'precio', '')::numeric;
         precio_nuevo := (mapa->ref->>'precio')::numeric;
         if precio_viejo is distinct from precio_nuevo then
@@ -4012,6 +4018,7 @@ begin
     end if;
     -- la categoría manda Yobel: si la corrigieron allá, se actualiza aquí
     if cat_y is not null and cat_y is distinct from nullif(p->>'categoria', '') then p := jsonb_set(p, '{categoria}', to_jsonb(cat_y)); end if;
+    if desc_y is not null and desc_y is distinct from nullif(p->>'descripcion', '') then p := p || jsonb_build_object('descripcion', desc_y); end if;
     prods := prods || jsonb_build_array(jsonb_set(p, '{presentaciones}', nuevas_pres));
   end loop;
 
@@ -4028,8 +4035,8 @@ begin
   -- «V» delante = descontinuado; lo que gerencia ya descartó (datos.descartados) no vuelve a la fila.
   select coalesce(array_agg(x), '{}') into descartados from jsonb_array_elements_text(coalesce(fila.datos->'descartados', '[]')) x;
   select coalesce(array_agg(x->>'ref'), '{}') into antes_cola from jsonb_array_elements(coalesce(fila.datos->'nuevos', '[]')) x;
-  select coalesce(jsonb_agg(jsonb_build_object('ref', k, 'producto', mapa->k->>'producto', 'categoria', mapa->k->>'categoria',
-           'precio', (mapa->k->>'precio')::numeric, 'stock', (mapa->k->>'stock')::numeric) order by mapa->k->>'producto', k), '[]')
+  select coalesce(jsonb_agg(jsonb_strip_nulls(jsonb_build_object('ref', k, 'producto', mapa->k->>'producto', 'categoria', mapa->k->>'categoria',
+           'precio', (mapa->k->>'precio')::numeric, 'stock', (mapa->k->>'stock')::numeric, 'descripcion', mapa->k->>'descripcion')) order by mapa->k->>'producto', k), '[]')
     into cola
     from jsonb_object_keys(mapa) k where not (k = any(vistos)) and not (k = any(descartados))
      and (mapa->k->>'producto') !~ '^V[A-ZÁÉÍÓÚÑ]';
