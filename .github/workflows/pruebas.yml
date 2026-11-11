@@ -87,6 +87,7 @@ jobs:
           node pruebas/armador-unir.js
           node pruebas/armador-cola.js
           node pruebas/armador-yobel.js
+          node pruebas/armador-descripcion.js
           node pruebas/cambiar.js
           node pruebas/consumibles-gerencia.js
           PGPASSWORD=prueba PSQL="psql -h localhost -U postgres -d cil" node pruebas/pendientes.js
@@ -116,4 +117,10 @@ jobs:
           docker run --rm -e DB postgres:17 psql "$DB" -At -v ON_ERROR_STOP=1 -c "
             select 'Locales con el mismo Wi-Fi: ' || coalesce(string_agg(nombre || ' (' || sitio || ')', ', ' order by nombre), 'ninguno') from public.locales where coalesce(sitio, '') <> '';
             select 'Locales aparte: ' || coalesce(string_agg(nombre, ', ' order by nombre), 'ninguno') from public.locales where coalesce(sitio, '') = '';
-            select 'Feriados de diciembre 2026 para todos los locales: ' || coalesce(string_agg(to_char(fecha, 'DD') || ' ' || nombre, ', ' order by fecha), 'ninguno') from public.dias_especiales where fecha in ('2026-12-24', '2026-12-25', '2026-12-31') and local_id is null and tipo = 'libre';"
+            select 'Feriados de diciembre 2026 para todos los locales: ' || coalesce(string_agg(to_char(fecha, 'DD') || ' ' || nombre, ', ' order by fecha), 'ninguno') from public.dias_especiales where fecha in ('2026-12-24', '2026-12-25', '2026-12-31') and local_id is null and tipo = 'libre';
+            select 'Bot: ' || string_agg(clave || '=' || valor, ', ' order by clave) from public.bot_config where clave in ('activo','modo','proveedor','verificar_robot','descuento_yobel','descuento_aprobar');
+            select 'Bot, últimos 7 días: ' || count(*) filter (where rol = 'user') || ' mensajes de clientes, ' || count(*) filter (where rol = 'assistant' and not traspaso) || ' respuestas, ' || count(*) filter (where traspaso) || ' pasados a persona, ' || count(distinct contacto) || ' chats' from public.bot_mensajes where creado > now() - interval '7 days';
+            select 'Avisos del bot/robot (7 días): ' || coalesce(string_agg(t || ' ' || n, ', ' order by n desc), 'ninguno') from (select split_part(tipo, ':', 1) t, count(*) n from public.bot_avisos where creado > now() - interval '7 days' group by 1) x;
+            select 'Robot: última subida ' || coalesce(datos->'robot'->>'fecha', 'nunca') || ', productos ' || jsonb_array_length(datos->'productos') || ', con descripción ' || (select count(*) from jsonb_array_elements(datos->'productos') p where coalesce(p->>'descripcion','') <> '') || ', con ficha/notas ' || (select count(*) from jsonb_array_elements(datos->'productos') p where coalesce(p->>'ficha','') <> '' or coalesce(p->>'notas','') <> '') || ', nuevos por aprobar ' || coalesce(jsonb_array_length(datos->'nuevos'), 0) from public.armador_datos where id = 1;
+            select 'Avisos enviados (7 días): ' || count(*) || ', urgentes ' || count(*) filter (where urgente) || ', sin leer ' || count(*) filter (where leido_en is null) from public.avisos_log where creado_en > now() - interval '7 days';
+            select 'Contenido por paso: ' || coalesce(string_agg(fase || ' ' || n, ', '), 'nada') from (select fase, count(*) n from public.piezas group by fase order by 2 desc) x;"
