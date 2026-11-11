@@ -44,6 +44,35 @@
     if (etapa === 'texto') return [{ titulo: 'Texto', chips: CHIPS.texto }];
     return [{ titulo: 'Copy', chips: CHIPS.copy }];
   }
+  // «Tus frecuentes» (11/11/2026): lo que quien aprueba ya escribió 2 veces o más al corregir esta etapa (puntos y comentarios),
+  // para tocarlo como un chip en vez de escribirlo otra vez. Las más usadas primero; se ignora lo que ya es un chip fijo.
+  function frecuentesCorreccion(eventos, etapa, max) {
+    var fijos = {}, cuenta = {}, texto = {};
+    gruposChips(etapa).forEach(function (g) { g.chips.forEach(function (c) { fijos[norm(c)] = 1; fijos[norm('Copy: ' + c)] = 1; }); });
+    (eventos || []).forEach(function (e) {
+      if (e.tipo !== 'correccion' || (e.etapa && e.etapa !== etapa && !(etapa === 'video' && e.etapa === 'copy'))) return;
+      var d = e.datos || {}, frases = (d.puntos || []).map(function (x) { return x && x.texto; });
+      String(e.texto || '').split(/\n+/).forEach(function (l) { frases.push(l); });
+      var vistas = {};
+      frases.forEach(function (f) {
+        f = String(f || '').trim().replace(/[.;,]+$/, '');
+        var k = norm(f);
+        if (!k || k.length < 3 || f.length > 60 || fijos[k] || vistas[k]) return;
+        vistas[k] = 1; cuenta[k] = (cuenta[k] || 0) + 1; texto[k] = f;  // queda la forma más reciente
+      });
+    });
+    return Object.keys(cuenta).filter(function (k) { return cuenta[k] >= 2; })
+      .sort(function (a, b) { return cuenta[b] - cuenta[a] || (texto[a] < texto[b] ? -1 : 1); })
+      .slice(0, max || 6).map(function (k) { return texto[k]; });
+  }
+  function norm(t) { return String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim(); }
+  // «012» → «0:12», «130» → «1:30» (en el teléfono es más rápido escribir solo números)
+  function minutoTxt(v) {
+    var t = String(v || '').trim();
+    if (!/^\d{1,4}$/.test(t)) return t;
+    var n = t.padStart(3, '0');
+    return String(+n.slice(0, -2)) + ':' + n.slice(-2);
+  }
   // Cómo se ubica un punto de corrección según la etapa
   var UBICACION = { video: 'Min. 0:12', diseno: 'Slide #', texto: 'Slide #', copy: null };
 
@@ -1119,7 +1148,7 @@
     horasEntre: horasEntre, haceCuanto: haceCuanto, fmtHoras: fmtHoras,
     plataformasDe: plataformasDe, fechaDe: fechaDe, publicadoEn: publicadoEn, pendientesDePublicar: pendientesDePublicar,
     etapasDe: etapasDe, etapaNorm: etapaNorm, esFinal: esFinal, gruposChips: gruposChips, COLUMNAS: COLUMNAS, columnaDe: columnaDe, leToca: leToca, pasosDe: pasosDe,
-    entrega: entrega, proximaFecha: proximaFecha, fechaLimite: fechaLimite, accionAGrabacion: accionAGrabacion, pasoAnterior: pasoAnterior, accionPasoAnterior: accionPasoAnterior, puedeVolverARevision: puedeVolverARevision, accionVolverARevision: accionVolverARevision,
+    entrega: entrega, proximaFecha: proximaFecha, fechaLimite: fechaLimite, accionAGrabacion: accionAGrabacion, frecuentesCorreccion: frecuentesCorreccion, minutoTxt: minutoTxt, pasoAnterior: pasoAnterior, accionPasoAnterior: accionPasoAnterior, puedeVolverARevision: puedeVolverARevision, accionVolverARevision: accionVolverARevision,
     puedeDesmarcarPublicado: puedeDesmarcarPublicado, accionDesmarcarPublicado: accionDesmarcarPublicado, puedeVolverAIdea: puedeVolverAIdea, accionVolverAIdea: accionVolverAIdea, eventosEtapaActual: eventosEtapaActual, ocupa: ocupa, diaCfg: diaCfg, cron: cron, slotTipo: slotTipo, publicable: publicable, cabe: cabe, checklistDe: checklistDe, minimo: minimo, enBanco: enBanco, estadoDe: estadoDe, fueraDeTipo: fueraDeTipo, accionNoSeGrabo: accionNoSeGrabo, textoFueraDeTipo: textoFueraDeTipo, slotExtra: slotExtra, cabePrincipal: cabePrincipal,
     ocupado: ocupado, slotLibre: slotLibre, sugerirFechas: sugerirFechas, validarFechas: validarFechas,
     huecos: huecos, candidatosHueco: candidatosHueco,

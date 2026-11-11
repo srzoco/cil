@@ -78,6 +78,7 @@ jobs:
           node pruebas/contenido-copy.js
           node pruebas/contenido-inicio.js
           node pruebas/contenido-devolver.js
+          node pruebas/contenido-revisar.js
           node pruebas/sesiones.js
           node pruebas/armador.js
           node pruebas/armador-stock.js

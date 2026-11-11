@@ -539,9 +539,16 @@
       return '<li' + (hecho ? ' class="hecho"' : '') + '>' + (hecho ? '✓ ' : '') + t + '</li>';
     }).join('') + '</ul>';
   }
+  // Videos que ya se abrieron (por versión): al volver de CapCut la ficha dice «Ya lo viste» y no hay que buscar dónde ibas.
+  // Se guarda en el teléfono mientras la app esté abierta (sessionStorage), por si el teléfono la recarga al volver.
+  function vistos() { try { return JSON.parse(sessionStorage.getItem('bfcontenido_vistos') || '{}'); } catch (e) { return {}; } }
+  function vistoVideo(p) { return !!vistos()[p.id + ':' + p.version + ':' + (p.enlace_version || '')]; }
+  function marcarVisto(p) { var v = vistos(); v[p.id + ':' + p.version + ':' + (p.enlace_version || '')] = Date.now(); try { sessionStorage.setItem('bfcontenido_vistos', JSON.stringify(v)); } catch (e) { /* nada */ } }
   function archivoAviso(p) {
     var cosa = L.etapaNorm(p) === 'diseno' ? 'El diseño' : 'El video';
-    return '<div class="archivo">' + (p.enlace_version ? '<a class="btn grande" href="' + url(p.enlace_version) + '" target="_blank" rel="noopener">▶️ Ver ' + cosa.toLowerCase() + ' en CapCut</a>' : '📱 ' + cosa + ' llega por WhatsApp.') + '</div>';
+    var visto = vistoVideo(p);
+    return '<div class="archivo">' + (p.enlace_version ? (visto ? '<p class="visto">✓ Ya lo viste. ¿Cómo quedó? Aprueba o corrige abajo.</p>' : '') +
+      '<a class="btn grande' + (visto ? ' sec' : '') + '" data-act="ver-video" data-id="' + p.id + '" href="' + url(p.enlace_version) + '" target="_blank" rel="noopener">' + (visto ? '▶️ Ver otra vez ' : '▶️ Ver ') + cosa.toLowerCase() + ' en CapCut</a>' : '📱 ' + cosa + ' llega por WhatsApp.') + '</div>';
   }
   function camposCopy(p, ayuda) {
     return L.plataformasDe(p).map(function (pl) {
@@ -555,21 +562,28 @@
     var ub = L.UBICACION[et];
     return '<form data-form="corregir" data-id="' + p.id + '" class="panel-corregir" hidden>' +
       '<p class="label">¿Qué hay que cambiar?</p>' +
+      (function () {
+        var fr = L.frecuentesCorreccion(eventos(), et, 6);
+        return fr.length ? '<p class="grupo-chips">Tus frecuentes</p><div class="chips frecuentes">' + fr.map(function (c) {
+          return '<button type="button" class="chip" data-act="chip" aria-pressed="false" data-valor="' + esc(c) + '">' + esc(c) + '</button>';
+        }).join('') + '</div>' : '';
+      })() +
       L.gruposChips(et).map(function (g) {
         return '<p class="grupo-chips">' + esc(g.titulo) + '</p><div class="chips">' + g.chips.map(function (c) {
           var valor = g.titulo === 'Copy' && et !== 'copy' ? 'Copy: ' + c : c;
           return '<button type="button" class="chip" data-act="chip" aria-pressed="false" data-valor="' + esc(valor) + '">' + esc(c) + '</button>';
         }).join('') + '</div>';
       }).join('') +
-      '<p class="label">Puntos concretos <small>(opcional)</small></p>' +
+      '<p class="label">Puntos concretos <small>(opcional) · 🎤 puedes dictar con el micrófono del teclado</small></p>' +
       '<div class="puntos" data-puntos>' + puntoHtml(ub) + '</div>' +
       '<button type="button" class="btn link" data-act="agregar-punto" data-ub="' + esc(ub || '') + '">+ Otro punto</button>' +
       '<label class="campo">Comentario general <small>(opcional)</small><textarea name="comentario" rows="2"></textarea></label>' +
-      '<div class="acciones"><button class="btn warn" type="submit">Enviar corrección</button><button class="btn fantasma" type="button" data-act="cerrar-corregir">Cancelar</button></div>' +
+      '<div class="acciones pegadas"><button class="btn warn" type="submit">Enviar corrección</button><button class="btn fantasma" type="button" data-act="cerrar-corregir">Cancelar</button></div>' +
       '</form>';
   }
   function puntoHtml(ub) {
-    return '<div class="punto">' + (ub ? '<input name="ubicacion" class="ubic" placeholder="' + esc(ub) + '" autocomplete="off">' : '') +
+    var minuto = /^Min/.test(ub || '');
+    return '<div class="punto">' + (ub ? '<input name="ubicacion" class="ubic' + (minuto ? ' minuto' : '') + '" placeholder="' + esc(minuto ? '0:12' : ub) + '"' + (minuto ? ' inputmode="numeric" aria-label="Minuto (escribe 012 para 0:12)"' : '') + ' autocomplete="off">' : '') +
       '<input name="punto" placeholder="Qué cambiar" autocomplete="off"><button type="button" class="quitar" data-act="quitar-punto" aria-label="Quitar punto">×</button></div>';
   }
   function vistaLote() {
@@ -582,6 +596,7 @@
       lote.i++;
     }
     var total = lote.ids.length;
+    guardarLote();
     if (lote.i >= total) {
       var hechos = lote.hechos.filter(function (x) { return x.accion !== 'saltada'; });
       var ed = contraparte('edita');
@@ -606,8 +621,14 @@
       '<div class="progreso"><span style="width:' + pct + '%"></span></div>' + tarjetaRevision(p, true);
   }
   function iniciarLote() {
+    // Si se estaba revisando en fila y el teléfono recargó la app (por ejemplo al volver de CapCut), se sigue donde iba
+    var g = null; try { g = JSON.parse(sessionStorage.getItem('bfcontenido_lote') || 'null'); } catch (e) { /* nada */ }
+    if (g && g.dia === S.hoy && g.ids && g.ids.length) { S.lote = { ids: g.ids, i: g.i || 0, hechos: g.hechos || [] }; return; }
     var r = L.pendientes(piezas(), eventos(), 'aprueba', S.hoy, ajustes());
     S.lote = { ids: r.revisar.map(function (p) { return p.id; }), i: 0, hechos: [] };
+  }
+  function guardarLote() {
+    try { if (S.lote) sessionStorage.setItem('bfcontenido_lote', JSON.stringify({ dia: S.hoy, ids: S.lote.ids, i: S.lote.i, hechos: S.lote.hechos })); else sessionStorage.removeItem('bfcontenido_lote'); } catch (e) { /* nada */ }
   }
 
   // ---------- Vista: Pieza ----------
@@ -1292,7 +1313,8 @@
       S.lote.hechos.push({ accion: 'saltada', titulo: p ? p.titulo : '', id: p && p.id });
       S.lote.i++; S.sucio = false; render(); arriba();
     },
-    'terminar-lote': function () { S.lote = null; location.hash = '#/'; },
+    'terminar-lote': function () { S.lote = null; guardarLote(); location.hash = '#/'; },
+    'ver-video': function (el) { var p = pieza(el.dataset.id); if (p) { marcarVisto(p); S.volviendoDe = p.id; } },
     'sugerir': function (el) { sugerirEn(el.closest('fieldset.fechas')); S.sucio = true; },
     'limpiar-fechas': function (el) {
       var fs = el.closest('fieldset.fechas');
@@ -1776,7 +1798,17 @@
     render();
     arriba();
   });
+  document.addEventListener('focusout', function (e) {
+    var t = e.target;
+    if (t && t.matches && t.matches('input.ubic.minuto')) t.value = L.minutoTxt(t.value);
+  });
   document.addEventListener('visibilitychange', function () {
+    // Volvió de ver el video: la ficha muestra «Ya lo viste» y los botones de Aprobar / Corregir (si no estaba escribiendo nada)
+    if (document.visibilityState === 'visible' && S.volviendoDe) {
+      var id = S.volviendoDe; S.volviendoDe = null;
+      if (!S.sucio && !S.modal) { render(); var c = document.querySelector('.revision .visto'); if (c) c.scrollIntoView({ block: 'center' }); }
+      if (pieza(id)) return;
+    }
     if (document.visibilityState === 'visible' && !S.sucio && !S.modal && !S.ocupado && store.sesion()) recargar(true);
   });
   setInterval(function () {
