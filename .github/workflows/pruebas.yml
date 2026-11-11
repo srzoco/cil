@@ -107,3 +107,12 @@ jobs:
           set -o pipefail
           docker run --rm -e DB -v "$PWD/supabase:/sql:ro" postgres:17 sh -c 'psql "$DB" -v ON_ERROR_STOP=1 -q -f /sql/cil.sql' 2>&1 | { grep -v NOTICE || true; }
           echo "cil.sql instalado"
+      - name: Revisar lo instalado (sin datos de personas)
+        env:
+          DB: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$DB" ]; then exit 0; fi
+          docker run --rm -e DB postgres:17 psql "$DB" -At -v ON_ERROR_STOP=1 -c "
+            select 'Locales con el mismo Wi-Fi: ' || coalesce(string_agg(nombre || ' (' || sitio || ')', ', ' order by nombre), 'ninguno') from public.locales where coalesce(sitio, '') <> '';
+            select 'Locales aparte: ' || coalesce(string_agg(nombre, ', ' order by nombre), 'ninguno') from public.locales where coalesce(sitio, '') = '';
+            select 'Feriados de diciembre 2026 para todos los locales: ' || coalesce(string_agg(to_char(fecha, 'DD') || ' ' || nombre, ', ' order by fecha), 'ninguno') from public.dias_especiales where fecha in ('2026-12-24', '2026-12-25', '2026-12-31') and local_id is null and tipo = 'libre';"
