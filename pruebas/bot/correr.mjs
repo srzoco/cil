@@ -116,6 +116,22 @@ ok((enviados()[0] || "").includes("Guanciale"), "9: no envió la lista cuando Cl
 const n = sql(`select count(*) from bot_mensajes where rol = 'assistant' and traspaso`).out;
 ok(Number(n) >= 4, "10: no quedaron anotados los traspasos: " + n);
 
+// 11. Ficha con descripción y notas: el porcentaje de la ficha (acidez) no es un precio inventado; uno que no está en la ficha sí
+const conFicha = { ...datos, productos: datos.productos.map((p, i) => i === 0 ? { ...p, descripcion: "Aceite de oliva con acidez 0,2 %.", notas: "Combina con pan." } : p) };
+sql(`update armador_datos set datos = '${esc(JSON.stringify(conFicha))}'::jsonb where id = 1`);
+const nombre0 = datos.productos[0].nombre;
+reset(); guion = [herramienta("buscar_ficha", { producto: nombre0 }), (body) => {
+  const t = JSON.stringify(mensajesDe(body));
+  ok(t.includes("acidez 0,2 %") && t.includes("Notas del equipo: Combina con pan."), "11: la ficha no trae descripción y notas");
+  return texto("Tiene una acidez de 0,2 %.");
+}];
+await enviar("1011", "que acidez tiene?");
+ok((enviados()[0] || "").includes("0,2 %"), "11: no envió el dato de la ficha (lo tomó por precio): " + motivo());
+reset(); guion = [herramienta("buscar_ficha", { producto: nombre0 }), texto("Tiene 15 % de descuento.")];
+await enviar("1012", "tiene descuento?");
+ok(enviados().length === 0, "11: dejó pasar un porcentaje que no está en la ficha");
+sql(`update armador_datos set datos = '${esc(JSON.stringify(datos))}'::jsonb where id = 1`);
+
 if (fallas.length) { console.error("FALLAS (" + fallas.length + "):\n- " + fallas.join("\n- ")); process.exit(1); }
 console.log("OK (" + PROVEEDOR + "): bot v3 — precios exactos, silencio tras traspaso, foto repetida, respuesta cortada, mayoreo, inyección, marca olvidada.");
 process.exit(0);

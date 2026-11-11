@@ -20,6 +20,9 @@
 // Cambios 4 nov 2026: también funciona con Gemini (Google). bot_config: proveedor = gemini | claude,
 //  modelo_gemini / modelo_gemini_respaldo (o modelo / modelo_respaldo para Claude).
 //
+// Cambios 11 nov 2026: la ficha trae la descripción de Yobel y las notas del equipo; los porcentajes que vienen
+//  en la ficha (acidez 0,2 %) no cuentan como precio inventado.
+//
 // Secretos (Edge Functions → Secrets): GEMINI_API_KEY (o ANTHROPIC_API_KEY), BOT_TOKEN, MANYCHAT_API_KEY
 // En Settings de la función, «Verify JWT» debe estar APAGADO (la protección es x-bot-token).
 // =====================================================================
@@ -362,13 +365,15 @@ async function procesar(contacto: string, miId: number, nombre: string, canal: s
 }
 
 // Inserta los bloques de precios exactos donde Claude puso [[PRECIOS_n]]. Devuelve null si hay algo raro.
-export function armarRespuesta(texto: string, bloques: string[], porcentajesOk: number[] = []): { texto: string; ok: boolean; motivo?: string } {
+export function armarRespuesta(texto: string, bloques: string[], porcentajesOk: (number | string)[] = []): { texto: string; ok: boolean; motivo?: string } {
   let t = texto.replace(/\*\*/g, "").replace(/\r/g, "");
   const usados = new Set<number>();
   t = t.replace(/\[\[\s*PRECIOS_(\d+)\s*\]\]/gi, (_m, n) => { const i = Number(n) - 1; usados.add(i); return bloques[i] != null ? `\u0000${i}\u0000` : ""; });
   // Claude no debe escribir precios ni porcentajes: cualquier monto en su texto (fuera de los bloques) es sospechoso
   // el descuento en divisas (50 %) está en el conocimiento de la tienda: decirlo no es inventar
-  const propio = porcentajesOk.reduce((x, n) => x.replace(new RegExp(`(^|[^\\d.,])${n}\\s?%`, "g"), "$1"), t.replace(/\u0000\d+\u0000/g, ""));
+  // y los porcentajes que vienen en la ficha del producto (acidez 0,2 %, 13,5 % vol.) tampoco son precios
+  const esc = (n: number | string) => String(n).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const propio = porcentajesOk.reduce<string>((x, n) => x.replace(new RegExp(`(^|[^\\d.,])${esc(n)}\\s?%`, "g"), "$1"), t.replace(/\u0000\d+\u0000/g, ""));
   if (/\$\s?\d|\d\s?\$|\d\s?%|\d\s?(?:usd|bs\b|bs\.|bol[ií]vares|d[oó]lares|ref\b)/i.test(propio)) {
     return { texto: "", ok: false, motivo: "precio_fuera_de_lista" };
   }
@@ -490,7 +495,7 @@ async function responder(contacto: string, mensaje: string, nombre: string, cana
     },
     {
       name: "buscar_ficha",
-      description: "Ficha técnica (acidez, maduración, origen) y usos/platos sugeridos de un producto.",
+      description: "Lo que sabemos de un producto: descripción, ficha técnica, notas del equipo (origen, maduración, sabor, diferencias, con qué combina) y usos/platos sugeridos. Usa solo la parte que responde la pregunta.",
       input_schema: { type: "object", properties: { producto: { type: "string" } }, required: ["producto"] },
     },
     {
@@ -513,6 +518,7 @@ async function responder(contacto: string, mensaje: string, nombre: string, cana
   const alertasPendientes: [string, string][] = [];
   const precios: string[] = [];
   const partes: string[] = [];
+  const porcentajesFicha: string[] = [];   // «acidez 0,2 %» en la ficha no es un precio inventado
   // todo lo del cliente va marcado (no solo el último mensaje)
   const msgs: Msg[] = conv.map((m) => m.role === "user" ? { role: "user", content: `<cliente>${limpiarCliente(String(m.content))}</cliente>` } : m);
 
@@ -557,6 +563,7 @@ async function responder(contacto: string, mensaje: string, nombre: string, cana
         const { data, error } = await sb.rpc("ficha_producto", { q: String(u.input?.producto ?? "").slice(0, 100) });
         c = error ? "ERROR al buscar la ficha." : "FICHAS: " + JSON.stringify(data ?? []);
         if (!error && Array.isArray(data) && data.some((f: Any) => String(f?.ficha ?? "").trim() || String(f?.usos ?? "").trim())) huboDatos = true;
+        if (!error) for (const m of JSON.stringify(data ?? []).matchAll(/(\d+(?:[.,]\d+)?)\s?%/g)) porcentajesFicha.push(m[1]);
       } else c = "Herramienta desconocida.";
       return { id: u.id, name: u.name, content: c };
     }));
@@ -566,7 +573,7 @@ async function responder(contacto: string, mensaje: string, nombre: string, cana
   if (forzarHumano && !humano) { humano = true; motivo = forzarHumano; }   // red de seguridad: no depende de que Claude lo recuerde
   let respuesta = "";
   if (partes.length || precios.length) {
-    const r = armarRespuesta(partes.join("\n"), precios, [num(cfg.descuento_divisas, 50)]);
+    const r = armarRespuesta(partes.join("\n"), precios, [num(cfg.descuento_divisas, 50), ...porcentajesFicha]);
     if (!r.ok) {
       humano = true; motivo = r.motivo ?? "otro";
       await alertar("precio_fuera_de_lista", "El bot intentó escribir un precio por su cuenta y pasó el chat a humano. Revisa la conversación.");
