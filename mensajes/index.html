@@ -943,6 +943,9 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
             <label class="flabel" for="f-usos">Usos y platos (opcional)</label>
             <textarea id="f-usos" class="field" rows="2" maxlength="2000" placeholder="Para pasta negra, risotto y paella."></textarea>
             <p class="hint">Si queda vacío, el bot sugiere usos generales.</p>
+            <label class="flabel" for="f-notas">Notas para el bot (no salen en la web)</label>
+            <textarea id="f-notas" class="field" rows="3" maxlength="2000" placeholder="Es el más suave de los serranos. Combina con el Manchego Mancha Real. Muy pedido para regalos."></textarea>
+            <p class="hint">Lo que no está en Yobel: diferencias con otros productos, con qué combina, preguntas frecuentes. El bot usa solo la parte que responde lo que preguntan.</p>
             <p id="ed-err" class="err" role="alert" hidden></p>
             <div class="actions">
               <button type="button" class="btn primary" id="ed-save">Guardar producto</button>
@@ -1147,7 +1150,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
         const c = p.categoria || 'Sin categoría';
         if (c !== last){ html += `<h3 class="cgroup">${esc(c)}</h3>`; last = c; }
         const vars = p.presentaciones.map(v => `<li><span class="web">${money(v.precio)}${medidaTxt(v, true)} web</span>${d != null ? ` → <span class="hoy">${money(priceToday(v, d))}${medidaTxt(v)}</span>` : ''} ${esc(v.texto)}${stockTag(p, v, true)}</li>`).join('');
-        html += `<article class="crow"><div class="crow-main"><p class="cname">${esc(p.emoji)} ${esc(p.nombre)}</p><p class="cmeta">${p.actualizado ? 'Precio actualizado ' + esc(shortDate(p.actualizado)) : 'Sin fecha de actualización'}${p.descripcion ? ' · Con descripción' : ''}${p.ficha ? ' · Con ficha' : ''}${p.usos ? ' · Con usos' : ''}</p><ul class="cvars">${vars}</ul></div><button type="button" class="btn ghost small owner-only" data-edit="${esc(p.id)}">Editar</button></article>`;
+        html += `<article class="crow"><div class="crow-main"><p class="cname">${esc(p.emoji)} ${esc(p.nombre)}</p><p class="cmeta">${p.actualizado ? 'Precio actualizado ' + esc(shortDate(p.actualizado)) : 'Sin fecha de actualización'}${p.descripcion ? ' · Con descripción' : ''}${p.ficha ? ' · Con ficha' : ''}${p.usos ? ' · Con usos' : ''}${p.notas ? ' · Con notas' : ''}</p><ul class="cvars">${vars}</ul></div><button type="button" class="btn ghost small owner-only" data-edit="${esc(p.id)}">Editar</button></article>`;
       }
       list.innerHTML = items.length ? html : `<p class="empty">Ningún producto coincide con «${esc(S.cq)}».</p>`;
     }
@@ -1267,6 +1270,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
     $('#f-desc').textContent = p && p.descripcion ? p.descripcion : '';
     $('#f-desc-box').hidden = !(p && p.descripcion);
     $('#f-usos').value = p && p.usos ? p.usos : '';
+    $('#f-notas').value = p && p.notas ? p.notas : '';
     $('#ed-del').hidden = !p;
     $('#del-confirm').hidden = true;
     renderUnir(p);
@@ -1295,7 +1299,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
     const cola = colaGrupos().map((g, i) => ({ g, i, n: palabras(g.producto).filter(w => pv.has(w)).length })).sort((a, b) => b.n - a.n);
     $('#unir-sel').innerHTML = '<option value="">Elige el producto nuevo…</option>' +
       (cola.length ? '<optgroup label="Nuevos de Yobel por aprobar">' + cola.map(({ g, i, n }) => `<option value="cola:${i}">${n ? '★ ' : ''}${esc(g.producto)}</option>`).join('') + '</optgroup><optgroup label="Ya en el armador">' : '') +
-      cand.map(({ x, n }) => `<option value="${esc(x.id)}">${n ? '★ ' : ''}${esc(x.nombre)}${x.ficha || x.usos ? ' (ya tiene ficha)' : ''}</option>`).join('') + (cola.length ? '</optgroup>' : '');
+      cand.map(({ x, n }) => `<option value="${esc(x.id)}">${n ? '★ ' : ''}${esc(x.nombre)}${x.ficha || x.usos || x.notas ? ' (ya tiene ficha)' : ''}</option>`).join('') + (cola.length ? '</optgroup>' : '');
     $('#unir-prev').textContent = cand.length || cola.length ? '★ = se parece al nombre de este producto.' : 'No hay productos nuevos de Yobel para juntar.';
     $('#unir-ok').disabled = true;
   }
@@ -1327,6 +1331,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
       descripcion: vacio(nuevo.descripcion) ? viejo.descripcion : nuevo.descripcion,   // la descripción manda Yobel
       ficha: vacio(viejo.ficha) ? nuevo.ficha : viejo.ficha,
       usos: vacio(viejo.usos) ? nuevo.usos : viejo.usos,
+      notas: vacio(viejo.notas) ? nuevo.notas : viejo.notas,
       bajo_pedido: !!(viejo.bajo_pedido || nuevo.bajo_pedido),
       presentaciones: pres.concat(aMano),
       actualizado: new Date().toISOString()
@@ -1350,6 +1355,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
       bajo_pedido: $('#f-pedido').checked,
       ficha: $('#f-ficha').value.trim(),
       usos: $('#f-usos').value.trim(),
+      notas: $('#f-notas').value.trim(),
       presentaciones: S.edit.draft.presentaciones
         .map(v => { const md = medidaDe(v), o = { texto: String(v.texto || '').trim(), precio: parseNum(v.precio), kilo: md === 'kg', medida: md }; if (v.ref) o.ref = v.ref; if (v.stock != null && v.stock !== '') o.stock = v.stock; return o; })
         .filter(v => v.texto || isFinite(v.precio))
@@ -1600,7 +1606,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
   $('#ed-back').addEventListener('click', closeEditor);
   $('#ed-del').addEventListener('click', () => {
     const p = S.edit && S.products.find(x => x.id === S.edit.id);
-    $('#del-confirm span').textContent = '¿Eliminar este producto del armador? No se borra de la web.' + (p && (p.ficha || p.usos) ? ' Se pierden su ficha y sus usos.' : '');
+    $('#del-confirm span').textContent = '¿Eliminar este producto del armador? No se borra de la web.' + (p && (p.ficha || p.usos || p.notas) ? ' Se pierden su ficha, sus usos y sus notas.' : '');
     $('#del-confirm').hidden = false;
   });
   $('#del-no').addEventListener('click', () => { $('#del-confirm').hidden = true; });

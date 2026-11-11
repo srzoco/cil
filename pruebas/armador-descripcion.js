@@ -54,10 +54,17 @@ const BASE = process.env.BASE || 'http://localhost:8765';
   // El editor la muestra (solo lectura) y guardar no la borra
   await p.locator('.crow', { hasText: 'Jamón serrano' }).locator('[data-edit]').click(); await p.waitForTimeout(300);
   if (!(await p.locator('#f-desc-box').isVisible()) || !/curado en Teruel/.test(await p.locator('#f-desc').innerText())) fallas.push('El editor no muestra la descripción');
-  await p.fill('#f-usos', 'Tapas'); await p.click('#ed-save'); await p.waitForTimeout(900);
+  await p.fill('#f-usos', 'Tapas'); await p.fill('#f-notas', 'Combina con el Manchego.'); await p.click('#ed-save'); await p.waitForTimeout(900);
   if (pr('jamon').descripcion !== 'Jamón de cerdo blanco, curado en Teruel.' || pr('jamon').usos !== 'Tapas') fallas.push('Guardar el producto perdió la descripción: ' + JSON.stringify(pr('jamon')));
+  if (pr('jamon').notas !== 'Combina con el Manchego.') fallas.push('No guardó las notas para el bot');
+  // las notas se ven al volver a abrir y no se borran con otro CSV
+  await p.setInputFiles('#csv', { name: 'catalogo.csv', mimeType: 'text/csv', buffer: Buffer.from(csv.replace('30,4,kg', '31,4,kg')) }); await p.waitForTimeout(400);
+  await p.click('#imp-ok'); await p.waitForTimeout(1000);
+  if (pr('jamon').notas !== 'Combina con el Manchego.' || pr('jamon').presentaciones[0].precio !== 31) fallas.push('El CSV borró las notas: ' + JSON.stringify(pr('jamon')));
+  await p.locator('.crow', { hasText: 'Jamón serrano' }).locator('[data-edit]').click(); await p.waitForTimeout(300);
+  if ((await p.inputValue('#f-notas')) !== 'Combina con el Manchego.') fallas.push('El editor no muestra las notas');
   const w = await p.evaluate(() => document.documentElement.scrollWidth); if (w > 361) fallas.push('Se sale de la pantalla: ' + w);
   await b.close();
   if (fallas.length) { console.log('FALLAS:\n- ' + fallas.join('\n- ')); process.exit(1); }
-  console.log('OK: la descripción de Yobel llega al armador (CSV, nuevos, editor) sin borrar la ficha');
+  console.log('OK: la descripción de Yobel llega al armador (CSV, nuevos, editor) sin borrar la ficha; notas para el bot');
 })();

@@ -245,8 +245,13 @@ do $$ declare nom text; f json; begin
   select p->>'nombre' into nom from armador_datos a, jsonb_array_elements(a.datos->'productos') p where a.id = 1 and p->>'id' = 'p1';
   if (select p->>'descripcion' from armador_datos a, jsonb_array_elements(a.datos->'productos') p where a.id = 1 and p->>'id' = 'p1') is distinct from 'Queso de vaca madurado.' then
     raise exception 'FALLO: la descripción del robot no llegó o se borró'; end if;
+  update armador_datos a set datos = jsonb_set(datos, '{productos}', (select jsonb_agg(case when p->>'id' = 'p1' then p || '{"notas":"Combina con membrillo."}' else p end) from jsonb_array_elements(a.datos->'productos') p)) where id = 1;
   f := ficha_producto(nom);
   if f::text not like '%Queso de vaca madurado.%' then raise exception 'FALLO: el bot no ve la descripción: %', f; end if;
+  if f::text not like '%Notas del equipo: Combina con membrillo.%' then raise exception 'FALLO: el bot no ve las notas: %', f; end if;
+  if (select count(*) from bot_config where clave = 'reglas' and valor like '%DATOS DEL PRODUCTO (origen%') <> 1
+     or (select valor from bot_config where clave = 'reglas') like '%DATOS DEL PRODUCTO (origen%DATOS DEL PRODUCTO (origen%'
+     or (select valor from bot_config where clave = 'reglas') like '%DATOS TÉCNICOS%' then raise exception 'FALLO: reglas de la ficha'; end if;
 end $$;
 
 rollback;

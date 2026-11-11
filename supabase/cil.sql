@@ -3665,7 +3665,7 @@ Correo',
 Si buscar_precios no encuentra el producto o da error: no des precio ni escribas nada; usa pasar_a_humano.
 Si el resultado indica AL MAYOR o BAJO PEDIDO: envía los precios y usa pasar_a_humano (motivo mayoreo o bajo_pedido).
 Si el cliente no dice el producto, pregúntale cuál le interesa (una sola vez).
-DATOS TÉCNICOS (acidez, maduración, origen, diferencias entre productos): usa buscar_ficha y responde SOLO con lo que diga el campo "ficha", en un mensaje corto. Si la ficha está vacía, no inventes datos técnicos: pasa a humano.
+DATOS DEL PRODUCTO (origen, maduración, sabor, acidez, diferencias entre productos, con qué combina): usa buscar_ficha. El campo "ficha" junta la descripción, la ficha técnica y las notas del equipo: toma SOLO la parte que responde lo que preguntó el cliente y dila en 1 o 2 frases, sin agregar nada que no esté ahí. Nunca copies la descripción completa. Si lo que preguntó no está en la ficha, no lo inventes: pasa a humano (motivo ficha_vacia).
 USOS Y PLATOS (para qué se usa, qué preparar, cómo servirlo): usa buscar_ficha. Si el campo "usos" tiene contenido, básate en eso; si está vacío, sugiere usos culinarios generales y conocidos. Mensaje corto (2–4 ideas). No des recetas paso a paso ni afirmaciones de salud.
 DISPONIBILIDAD: no confirmes existencias; los productos agotados no aparecen en buscar_precios. Si un producto no aparece, dilo con honestidad y ofrece una alternativa de los resultados si la hay.
 MAYOREO, TIENDAS O DISTRIBUIDORES sin producto específico: usa pasar_a_humano sin escribir nada.
@@ -3692,6 +3692,17 @@ do $$ begin
   if exists (select 1 from public.cil_migraciones where nombre = 'bot-v3-reglas-2026-10-30') then return; end if;
   update public.bot_config set valor = replace(replace(valor, $t$Copia el resultado tal cual: nombres, emojis, montos y notas. Nunca calcules, redondees, inventes ni cambies un precio.$t$, $t$Te devuelve una marca [[PRECIOS_n]]: escríbela sola en una línea donde van los precios (el sistema pone la lista exacta). Nunca escribas un precio o monto con tus palabras.$t$), $t$usa pasar_a_humano (motivo pide_persona).$t$, $t$usa pasar_a_humano (motivo pregunta_si_es_bot).$t$), actualizado = now() where clave = 'reglas';
   insert into public.cil_migraciones (nombre) values ('bot-v3-reglas-2026-10-30');
+end $$;
+
+-- 11/11/2026: el bot toma solo la parte de la ficha (descripción de Yobel + ficha + notas) que responde la pregunta
+do $$ begin
+  if exists (select 1 from public.cil_migraciones where nombre = 'bot-ficha-fragmentos-2026-11-11') then return; end if;
+  update public.bot_config set valor = case when position($t$DATOS TÉCNICOS (acidez, maduración, origen, diferencias entre productos): usa buscar_ficha y responde SOLO con lo que diga el campo "ficha", en un mensaje corto. Si la ficha está vacía, no inventes datos técnicos: pasa a humano.$t$ in valor) > 0
+      then replace(valor, $t$DATOS TÉCNICOS (acidez, maduración, origen, diferencias entre productos): usa buscar_ficha y responde SOLO con lo que diga el campo "ficha", en un mensaje corto. Si la ficha está vacía, no inventes datos técnicos: pasa a humano.$t$, $t$DATOS DEL PRODUCTO (origen, maduración, sabor, acidez, diferencias entre productos, con qué combina): usa buscar_ficha. El campo "ficha" junta la descripción, la ficha técnica y las notas del equipo: toma SOLO la parte que responde lo que preguntó el cliente y dila en 1 o 2 frases, sin agregar nada que no esté ahí. Nunca copies la descripción completa. Si lo que preguntó no está en la ficha, no lo inventes: pasa a humano (motivo ficha_vacia).$t$)
+      when position($t$DATOS DEL PRODUCTO (origen$t$ in valor) > 0 then valor
+      else valor || E'\n' || $t$DATOS DEL PRODUCTO (origen, maduración, sabor, acidez, diferencias entre productos, con qué combina): usa buscar_ficha. El campo "ficha" junta la descripción, la ficha técnica y las notas del equipo: toma SOLO la parte que responde lo que preguntó el cliente y dila en 1 o 2 frases, sin agregar nada que no esté ahí. Nunca copies la descripción completa. Si lo que preguntó no está en la ficha, no lo inventes: pasa a humano (motivo ficha_vacia).$t$ end,
+    actualizado = now() where clave = 'reglas';
+  insert into public.cil_migraciones (nombre) values ('bot-ficha-fragmentos-2026-11-11');
 end $$;
 
 
@@ -3885,13 +3896,14 @@ begin
 end $$;
 
 -- Ficha técnica y usos sugeridos de los productos que coinciden.
--- «ficha» = la descripción de Yobel (llega con el CSV o el robot) + la ficha escrita en el armador (11/11/2026).
+-- «ficha» = la descripción de Yobel (llega con el CSV o el robot) + la ficha y las notas para el bot escritas en el armador (11/11/2026).
 create or replace function public.ficha_producto(q text) returns json
 language sql stable security definer set search_path = public, extensions as $$
   with palabras as (select public.bot_palabras(q) as w),
   prods as (
     select p->>'nombre' as nombre,
-           nullif(concat_ws(E'\n\n', nullif(trim(p->>'descripcion'), ''), nullif(trim(p->>'ficha'), '')), '') as ficha,
+           nullif(concat_ws(E'\n\n', nullif(trim(p->>'descripcion'), ''), nullif(trim(p->>'ficha'), ''),
+             'Notas del equipo: ' || nullif(trim(p->>'notas'), '')), '') as ficha,
            nullif(trim(p->>'usos'), '') as usos,
            public.bot_norm(p->>'nombre') as nom
     from armador_datos, jsonb_array_elements(datos->'productos') p where id = 1
@@ -4013,7 +4025,7 @@ begin
       nuevas_pres := nuevas_pres || jsonb_build_array(v);
     end loop;
     -- ninguna de sus presentaciones vino y tiene ficha o usos: quizá cambió de nombre en Yobel
-    if con_ref and not alguno and not bajo and (coalesce(trim(p->>'ficha'), '') <> '' or coalesce(trim(p->>'usos'), '') <> '') then
+    if con_ref and not alguno and not bajo and (coalesce(trim(p->>'ficha'), '') <> '' or coalesce(trim(p->>'usos'), '') <> '' or coalesce(trim(p->>'notas'), '') <> '') then
       huerfanas := huerfanas || coalesce(nullif(trim(p->>'nombre'), ''), p->>'id');
     end if;
     -- la categoría manda Yobel: si la corrigieron allá, se actualiza aquí
@@ -4059,7 +4071,7 @@ begin
     perform bot_aviso('robot_pausados', 'No vinieron de Yobel (el bot no da su precio hasta que vuelvan; revísalos en Yobel): ' || array_to_string((select array_agg(distinct x) from unnest(pausados) x)[1:15], ', '), true);
   end if;
   if array_length(huerfanas, 1) > 0 then
-    perform bot_aviso('robot_ficha', 'Ya no están en Yobel y tienen ficha o usos: ' || array_to_string(huerfanas[1:10], ', ')
+    perform bot_aviso('robot_ficha', 'Ya no están en Yobel y tienen ficha, usos o notas: ' || array_to_string(huerfanas[1:10], ', ')
       || '. Si cambiaron de nombre en Yobel, copia la ficha al producto nuevo en el armador.', false);
   end if;
   if array_length(nuevos, 1) > 0 then
