@@ -98,6 +98,7 @@ App web unificada **CIL** en GitHub Pages: https://srzoco.github.io/cil/
 - Bot: los porcentajes que vienen en la ficha (acidez 0,2 %) ya no cuentan como precio inventado (`porcentajesFicha` en bot/index.ts, prueba 11 de `pruebas/bot/correr.mjs`). **Falta que Sara despliegue el bot** (copiar y pegar en Supabase, «Verify JWT» apagado).
 - El job `aplicar` imprime un resumen real sin nombres: estado del bot (modo, proveedor), mensajes de 7 días, avisos del bot/robot, robot (última subida, descripciones, fichas, nuevos por aprobar), avisos por tipo y por día, Contenido por paso. Datos del 11/11: bot en modo «enviar», 160 mensajes de clientes y 87 chats en 7 días, 43 pasados a persona; 0 fichas y 0 descripciones; 5 nuevos de Yobel por aprobar; ~110–140 avisos por día hábil, casi todos de Tareas a empleados (Te toca, Urgente, Se te está pasando).
 - `armador_datos` es legible con la clave pública: fichas y notas no son secretas (el editor lo advierte). Propuesta de moverlas aparte en la página de aprobación (`x-notas-privadas`).
+- Acceso «costos» de Adolfo (12/11/2026, pedido de Sara: «todavía no puede»): migración única `costos-adolfo-2026-11-12` en cil.sql (solo si hay exactamente 1 persona activa con «percebe»/«adolfo» en nombre o correo). El job `aplicar` imprime «Personas con acceso a costos (sin gerencia)».
 - `robot.mjs` no está en ningún repositorio: para que el robot mande `descripcion`, Sara tiene que subir el archivo desde la PC de la tienda (el servidor ya la acepta).
 
 ## Pruebas

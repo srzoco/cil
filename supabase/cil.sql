@@ -4191,6 +4191,22 @@ begin
 end $$;
 
 -- Para cotizar: gerencia y quien tenga el acceso 'costos'
+-- 12/11/2026 (pedido de Sara): Adolfo («Percebe» en CIL) usa el cotizador a costo. Se marca una sola vez,
+-- solo si hay exactamente una persona activa con ese nombre o correo; si no, no toca nada.
+do $$ declare n int; begin
+  if exists (select 1 from public.cil_migraciones where nombre = 'costos-adolfo-2026-11-12') then return; end if;
+  select count(*) into n from public.personas
+   where activo and (nombre ilike '%percebe%' or nombre ilike '%adolfo%' or email ilike '%adolfo%');
+  if n = 1 then
+    update public.personas set accesos = array_append(accesos, 'costos')
+     where activo and (nombre ilike '%percebe%' or nombre ilike '%adolfo%' or email ilike '%adolfo%')
+       and not ('costos' = any (coalesce(accesos, '{}')));
+    insert into public.cil_migraciones (nombre) values ('costos-adolfo-2026-11-12');
+  else
+    raise notice 'costos-adolfo: % personas coinciden; no se cambió nada', n;
+  end if;
+end $$;
+
 create or replace function public.costos_cotizar() returns json
 language plpgsql stable security definer set search_path = public as $$
 begin
