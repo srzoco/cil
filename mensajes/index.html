@@ -613,6 +613,20 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
   function lineFor(p, v, d){
     return (p.emoji || '🔹') + ' ' + money(priceToday(v, d)) + medidaTxt(v) + (v.texto ? ' ' + v.texto.trim() : '');
   }
+  /* Orden del mensaje (13/11/2026, pedido de Sara): primero SIEMPRE lo más caro; y cada marca junta
+     (la marca es lo que va después del último « - » del nombre: «Queso … - Adarga de Oro»), sin intercalar.
+     Marcas ordenadas por su precio más alto; dentro de cada una, productos y presentaciones de mayor a menor precio. */
+  function marcaDe(p){ const n = String(p.nombre || ''), i = n.lastIndexOf(' - '); return i > 0 ? norm(n.slice(i + 3).trim()) : 'id:' + p.id; }
+  const precioDe = v => { const n = Number(v && v.precio); return isFinite(n) ? n : 0; };
+  function ordenarMensaje(entries){
+    entries.forEach(e => { e.idxs.sort((a, b) => precioDe(e.p.presentaciones[b]) - precioDe(e.p.presentaciones[a]) || a - b); e.max = precioDe(e.p.presentaciones[e.idxs[0]]); });
+    const tope = {};
+    entries.forEach(e => { const m = marcaDe(e.p); tope[m] = Math.max(tope[m] || 0, e.max); });
+    return entries.map((e, i) => Object.assign(e, { i })).sort((x, y) => {
+      const mx = marcaDe(x.p), my = marcaDe(y.p);
+      return (tope[my] - tope[mx]) || (mx < my ? -1 : mx > my ? 1 : 0) || (y.max - x.max) || (x.i - y.i);
+    });
+  }
   function selEntries(){
     const out = [];
     for (const [id, set] of S.sel){
@@ -621,7 +635,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
       const idxs = [...set].filter(i => i < p.presentaciones.length).sort((a, b) => a - b);
       if (idxs.length) out.push({ p, idxs });
     }
-    return out;
+    return ordenarMensaje(out);
   }
   function build(){
     const d = disc();

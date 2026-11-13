@@ -89,6 +89,7 @@ jobs:
           node pruebas/armador-cola.js
           node pruebas/armador-yobel.js
           node pruebas/armador-descripcion.js
+          node pruebas/armador-orden.js
           node pruebas/cambiar.js
           node pruebas/consumibles-gerencia.js
           PGPASSWORD=prueba PSQL="psql -h localhost -U postgres -d cil" node pruebas/pendientes.js
