@@ -544,11 +544,12 @@
   function vistos() { try { return JSON.parse(sessionStorage.getItem('bfcontenido_vistos') || '{}'); } catch (e) { return {}; } }
   function vistoVideo(p) { return !!vistos()[p.id + ':' + p.version + ':' + (p.enlace_version || '')]; }
   function marcarVisto(p) { var v = vistos(); v[p.id + ':' + p.version + ':' + (p.enlace_version || '')] = Date.now(); try { sessionStorage.setItem('bfcontenido_vistos', JSON.stringify(v)); } catch (e) { /* nada */ } }
+  var AVISO_PROYECTO = 'Este enlace es del proyecto (el borrador para editar): Sara no lo puede ver, se queda en «Cargando proyecto». En CapCut comparte el video «para revisar» y pega ese enlace.';
   function archivoAviso(p) {
     var cosa = L.etapaNorm(p) === 'diseno' ? 'El diseño' : 'El video';
     var visto = vistoVideo(p);
     return '<div class="archivo">' + (p.enlace_version ? (visto ? '<p class="visto">✓ Ya lo viste. ¿Cómo quedó? Aprueba o corrige abajo.</p>' : '') +
-      '<a class="btn grande' + (visto ? ' sec' : '') + '" data-act="ver-video" data-id="' + p.id + '" href="' + url(p.enlace_version) + '" target="_blank" rel="noopener">' + (visto ? '▶️ Ver otra vez ' : '▶️ Ver ') + cosa.toLowerCase() + ' en CapCut</a>' : '📱 ' + cosa + ' llega por WhatsApp.') + '</div>';
+      '<a class="btn grande' + (visto ? ' sec' : '') + '" data-act="ver-video" data-id="' + p.id + '" href="' + url(p.enlace_version) + '" target="_blank" rel="noopener">' + (visto ? '▶️ Ver otra vez ' : '▶️ Ver ') + cosa.toLowerCase() + ' en CapCut</a>' + (L.enlaceProyecto(p.enlace_version) ? '<p class="aviso-enlace">⚠️ Este enlace es del proyecto de CapCut: no se puede ver, se queda en «Cargando proyecto». Pídele el enlace de «Compartir para revisar» o corrige con ese motivo.</p>' : '') : '📱 ' + cosa + ' llega por WhatsApp.') + '</div>';
   }
   function camposCopy(p, ayuda) {
     return L.plataformasDe(p).map(function (pl) {
@@ -753,7 +754,8 @@
     html += '<form data-form="enviar" data-id="' + p.id + '">';
     if (et === 'video' || et === 'diseno') {
       html += '<div class="nombre-archivo"><span class="muted">Guárdalo en CapCut con este nombre:</span> <b>' + esc(p.titulo) + '</b> <button class="btn link" type="button" data-act="copiar-texto" data-texto="' + esc(p.titulo) + '">Copiar</button></div>' +
-        '<label class="campo">Enlace de CapCut <small>(Compartir → copiar enlace)</small><input type="url" name="enlace" inputmode="url" placeholder="https://" required value="' + esc(p.enlace_version || '') + '"></label>';
+        '<label class="campo">Enlace de CapCut <small>(Compartir para revisar → copiar enlace)</small><input type="url" name="enlace" inputmode="url" placeholder="https://" required value="' + esc(p.enlace_version || '') + '"></label>' +
+        '<p class="aviso-enlace" data-aviso-enlace' + (L.enlaceProyecto(p.enlace_version) ? '' : ' hidden') + '>⚠️ ' + AVISO_PROYECTO + '</p>';
     }
     var lista = L.checklistEnvio(p);
     if (lista) {
@@ -1560,6 +1562,7 @@
       var res = [];
       f.closest('.card').querySelectorAll('[data-resuelta]:checked').forEach(function (c) { res.push(parseInt(c.value, 10)); });
       if (res.length) datos.resueltas = res;
+      if (L.enlaceProyecto(datos.enlace)) { var av = f.querySelector('[data-aviso-enlace]'); if (av) { av.hidden = false; av.scrollIntoView({ block: 'center' }); } return aviso('Ese enlace es del proyecto: Sara no lo puede ver. Comparte el video «para revisar» y pega ese enlace.'); }
       var r;
       try { r = L.accionEnviar(p, datos, { racha: L.rachaLimpia(eventos()) }); } catch (e) { return aviso(e.message); }
       accion(function () { return ejecutar(p, r); }, function (fila) {
@@ -1773,6 +1776,7 @@
     if (t.matches('[data-buscar-en]')) { aplicarBusqueda(t); return; }
     if (t.matches('[data-ir-buscar]')) { clearTimeout(S.irBuscarT); S.irBuscarT = setTimeout(function () { if (t.value.trim()) { S.tablero.q = t.value; location.hash = '#/tablero'; } }, 600); return; }
     if (t.closest('form')) S.sucio = true;
+    if (t.name === 'enlace') { var av = t.form && t.form.querySelector('[data-aviso-enlace]'); if (av) av.hidden = !L.enlaceProyecto(t.value); }
     var fs = t.closest('fieldset.fechas');
     if (fs) actualizarFechas(fs);
   });

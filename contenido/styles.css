@@ -715,3 +715,6 @@ html.marco-fijo .desliza:has(~ .tabs) .contenido { padding-bottom: 28px; }
 .revision .visto { margin: 0 0 8px; color: var(--green); font-weight: 600; font-size: .9rem; }
 .chips.frecuentes .chip { border-style: dashed; }
 .panel-corregir .acciones.pegadas { margin-left: 0; margin-right: 0; }
+
+/* Enlace de CapCut que es del proyecto: Sara no lo puede ver (13/11/2026) */
+.aviso-enlace { margin: 6px 0 0; padding: 8px 10px; border-radius: 10px; background: var(--wine-bg); color: var(--wine); font-size: .88rem; font-weight: 600; }

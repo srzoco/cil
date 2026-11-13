@@ -102,6 +102,9 @@
     var h = ajustes && horaValida(String(ajustes.pub_hasta || '').slice(0, 5)) ? String(ajustes.pub_hasta).slice(0, 5) : '20:30';
     return { desde: d, hasta: h, texto: 'de ' + fmtHora(d) + ' a ' + fmtHora(h) };
   }
+  // Enlace de CapCut que es del PROYECTO (el borrador para editar, capcut.com/sv2/…): Sara no lo puede ver,
+  // se queda en «Cargando proyecto» (13/11/2026). Hay que compartir el video «para revisar».
+  function enlaceProyecto(u) { return /capcut\.com\/sv2\//i.test(String(u || '')); }
   var MUESTRA_DESPUES = 1 / 3;  // de lo que se aprueba solo, esta parte le sale a gerencia para revisar después de publicar
 
   var TIPOS_EVENTO = ['creada', 'idea', 'iniciada', 'editada', 'envio', 'aprobacion', 'correccion', 'comentario',
@@ -1141,6 +1144,7 @@
   }
 
   return {
+    enlaceProyecto: enlaceProyecto,
     PLATAFORMAS: PLATAFORMAS, PLAT_CORTO: PLAT_CORTO, TIPOS: TIPOS, esHistoria: esHistoria, ETAPAS: ETAPAS, ETAPA_LABEL: ETAPA_LABEL, TIPO_DIA: TIPO_DIA,
     DIAS: DIAS, DIAS_CORTOS: DIAS_CORTOS, CRONOGRAMA_BASE: CRONOGRAMA_BASE, AJUSTES_BASE: AJUSTES_BASE,
     CHIPS: CHIPS, UBICACION: UBICACION, OBJETIVOS: OBJETIVOS, CHECKLIST_PUBLICAR: CHECKLIST_PUBLICAR, TIPOS_EVENTO: TIPOS_EVENTO,
