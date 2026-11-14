@@ -4266,6 +4266,28 @@ do $$ declare n int; begin
   end if;
 end $$;
 
+-- Sábados de temporada: trabajan solo Mari y Raya (decisión de Sara, 14/11/2026). Una sola vez:
+-- su local pasa a abrir los sábados; ellas quedan con sábado y todos los demás de ese local, sin sábado
+-- (quien tenía «todos los días» queda con los días que el local tenía antes). Solo si hay exactamente una Mari y una Raya.
+do $$ declare nm int; nr int; l record; v_viejo int[]; begin
+  if exists (select 1 from public.cil_migraciones where nombre = 'sabados-mari-raya-2026') then return; end if;
+  select count(*) into nm from public.personas where activo and (nombre ilike 'mari' or nombre ilike 'mari %' or nombre ilike 'mar_a' or nombre ilike 'mar_a %');
+  select count(*) into nr from public.personas where activo and (nombre ilike 'raya' or nombre ilike 'raya %');
+  if nm <> 1 or nr <> 1 then raise notice 'sabados-mari-raya: % Mari y % Raya; no se cambió nada', nm, nr; return; end if;
+  create temp table _sab_ellas on commit drop as select id, local_id from public.personas
+   where activo and (nombre ilike 'mari' or nombre ilike 'mari %' or nombre ilike 'mar_a' or nombre ilike 'mar_a %' or nombre ilike 'raya' or nombre ilike 'raya %');
+  for l in select * from public.locales where id in (select local_id from _sab_ellas where local_id is not null) loop
+    v_viejo := array(select d from unnest(coalesce(l.dias_laborables, '{}')) d where d <> 6 order by d);
+    update public.personas set dias_trabajo = case when dias_trabajo is null or cardinality(dias_trabajo) = 0 then v_viejo else array_remove(dias_trabajo, 6) end
+     where local_id = l.id and activo and id not in (select id from _sab_ellas);
+    if not (6 = any (coalesce(l.dias_laborables, '{}'))) then update public.locales set dias_laborables = array_append(coalesce(dias_laborables, '{}'), 6) where id = l.id; end if;
+    update public.personas set dias_trabajo = case when dias_trabajo is null or cardinality(dias_trabajo) = 0 then array_append(v_viejo, 6)
+      when 6 = any (dias_trabajo) then dias_trabajo else array_append(dias_trabajo, 6) end
+     where local_id = l.id and id in (select id from _sab_ellas);
+  end loop;
+  insert into public.cil_migraciones (nombre) values ('sabados-mari-raya-2026');
+end $$;
+
 create or replace function public.costos_cotizar() returns json
 language plpgsql stable security definer set search_path = public as $$
 begin
