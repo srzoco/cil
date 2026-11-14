@@ -3827,7 +3827,7 @@ declare
   fila armador_datos%rowtype; palabras text[] := public.bot_palabras(q);
   descu numeric; pie text; pregunta text; r record; v jsonb; lineas text; bloques text[] := '{}';
   n int := 0; total int := 0; hay_mayor boolean := false; hay_pedido boolean := false; preg_uno text; stock_n numeric;
-  max_items constant int := 6;
+  max_items constant int := 6; lins jsonb; elegidos jsonb := '[]'; precio_v numeric;
 begin
   select * into fila from armador_datos where id = 1;
   if fila.datos is null then return json_build_object('encontrados', 0, 'mensaje', '', 'error', 'sin_catalogo'); end if;
@@ -3860,7 +3860,7 @@ begin
     )
     select * from cand order by por_nombre desc, usos desc, length(nom) asc, ord asc
   loop
-    lineas := '';
+    lins := '[]';
     for v in select value from jsonb_array_elements(r.p->'presentaciones') loop
       if not r.por_nombre then
         continue when not (select bool_and(position(w in (r.nom || ' ' || public.bot_norm(v->>'texto'))) > 0) from unnest(palabras) w);
@@ -3868,18 +3868,24 @@ begin
       stock_n := nullif(v->>'stock', '')::numeric;
       continue when stock_n is not null and stock_n <= 0 and not r.bajo_pedido;
       continue when v ? 'sin_actualizar' and not r.bajo_pedido;   -- no vino de Yobel: no se da precio
-      lineas := lineas || E'\n' || coalesce(nullif(r.p->>'emoji', ''), '🔹') || ' $'
-                || trim_scale(round((v->>'precio')::numeric * (1 - descu / 100), 2))::text
+      precio_v := round((v->>'precio')::numeric * (1 - descu / 100), 2);
+      lins := lins || jsonb_build_array(jsonb_build_object('p', precio_v, 't', coalesce(nullif(r.p->>'emoji', ''), '🔹') || ' $'
+                || trim_scale(precio_v)::text
                 -- medida del precio (Armador): v.medida manda; los datos viejos solo tienen v.kilo
                 || case coalesce(v->>'medida', case when (v->>'kilo')::boolean then 'kg' else '' end)
                      when 'kg' then ' el kilo' when 'g' then ' el gramo' when '100g' then ' los 100 g' when 'l' then ' el litro'
                      when 'u' then ' la unidad' when 'docena' then ' la docena' when 'paquete' then ' el paquete' when 'caja' then ' la caja' else '' end
-                || case when coalesce(trim(v->>'texto'), '') <> '' then ' ' || trim(v->>'texto') else '' end;
+                || case when coalesce(trim(v->>'texto'), '') <> '' then ' ' || trim(v->>'texto') else '' end));
     end loop;
-    continue when lineas = '';
+    continue when jsonb_array_length(lins) = 0;
     total := total + 1;
     continue when n >= max_items;
-    bloques := bloques || ((r.p->>'nombre') || lineas);
+    -- Orden del mensaje (13/11/2026, regla de Sara, igual que el Armador): dentro de cada producto, de mayor a menor precio
+    select string_agg(x->>'t', E'\n' order by (x->>'p')::numeric desc, o) into lineas from jsonb_array_elements(lins) with ordinality e(x, o);
+    elegidos := elegidos || jsonb_build_array(jsonb_build_object('b', (r.p->>'nombre') || E'\n' || lineas,
+      'max', (select max((x->>'p')::numeric) from jsonb_array_elements(lins) x), 'n', n,
+      'marca', case when position(' - ' in coalesce(r.p->>'nombre', '')) > 0 then public.bot_norm(regexp_replace(r.p->>'nombre', '^.* - ', ''))
+                    else 'id:' || coalesce(r.p->>'id', r.ord::text) end));
     n := n + 1;
     if r.p->>'categoria' = 'Al Mayor' then hay_mayor := true; end if;
     if r.bajo_pedido then hay_pedido := true; end if;
@@ -3887,6 +3893,11 @@ begin
   end loop;
 
   if n = 0 then return json_build_object('encontrados', 0, 'mensaje', ''); end if;
+  -- Primero SIEMPRE lo más caro y cada marca junta (marca = lo que va después del último « - » del nombre):
+  -- marcas por su precio más alto, y dentro de cada una de mayor a menor. Cuáles entran (máx. 6) sigue siendo por relevancia y uso.
+  select array_agg(x->>'b' order by t.tope desc, x->>'marca', (x->>'max')::numeric desc, (x->>'n')::int) into bloques
+    from jsonb_array_elements(elegidos) x
+    join (select y->>'marca' as marca, max((y->>'max')::numeric) as tope from jsonb_array_elements(elegidos) y group by 1) t on t.marca = x->>'marca';
   pregunta := case when total > n then 'Tenemos más opciones. ¿Busca alguno en particular?'
                    when n > 1 then coalesce(nullif(fila.datos->'ajustes'->>'preguntaVarios', ''), '¿Cuál de estos productos le interesa?')
                    else preg_uno end;

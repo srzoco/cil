@@ -39,6 +39,9 @@ jobs:
       - name: Medidas del precio (el bot dice «el gramo»)
         env: { PGPASSWORD: prueba }
         run: psql -h localhost -U postgres -d cil -v ON_ERROR_STOP=1 -q -f pruebas/medidas.sql
+      - name: Orden de la lista de precios del bot (lo más caro primero, marcas juntas)
+        env: { PGPASSWORD: prueba }
+        run: psql -h localhost -U postgres -d cil -v ON_ERROR_STOP=1 -q -f pruebas/bot-orden.sql
       - name: Costos (solo gerencia y acceso «costos»)
         env: { PGPASSWORD: prueba }
         run: psql -h localhost -U postgres -d cil -v ON_ERROR_STOP=1 -q -f pruebas/costos.sql
