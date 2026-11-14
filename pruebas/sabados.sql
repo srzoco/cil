@@ -8,6 +8,8 @@ update personas set rol = 'admin', activo = true where id = '5a000000-0000-0000-
 update personas set accesos = '{tareas}', activo = true, rol = 'empleado', dias_trabajo = '{1,2,3,4,5,6}', local_id = (select id from locales order by principal desc limit 1)
  where id = '5a000000-0000-0000-0000-000000000001';
 update locales set dias_laborables = '{1,2,3,4,5,6}';
+-- los demás empleados (de otras pruebas) no trabajan el sábado: así se prueba también que solo le sale a quien sí
+update personas set dias_trabajo = '{1,2,3,4,5}' where rol = 'empleado' and id <> '5a000000-0000-0000-0000-000000000001';
 insert into plantillas (titulo, minutos, frecuencia, fecha_inicio, activa, local_id, momentos) values
   ('Temperaturas sab', 5, 'diaria', '2026-11-01', true, (select id from locales order by principal desc limit 1),
    '[{"nombre":"Mañana","desde":"08:30","antes":"09:00"},{"nombre":"Mediodía","desde":"13:00","antes":"13:30"},{"nombre":"Tarde","desde":"16:00","antes":"16:30"}]');
@@ -24,7 +26,7 @@ do $$ declare r record; begin
   select string_agg(to_char(desde, 'HH24:MI') || '-' || to_char(antes, 'HH24:MI'), ',' order by momento) as h, count(*) filter (where asignado_a = '5a000000-0000-0000-0000-000000000001') as mias
     into r from asignaciones where fecha = '2026-11-21' and titulo = 'Temperaturas sab';
   if r.h is distinct from '10:00-10:20,13:00-13:20,15:00-15:20' then raise exception 'FALLO: horas del sábado %', r.h; end if;
-  if r.mias = 0 then raise exception 'FALLO: a quien trabaja el sábado no le salieron tareas'; end if;
+  if r.mias <> 3 then raise exception 'FALLO: el sábado le salieron tareas a quien no trabaja ese día (% de 3 a quien sí)', r.mias; end if;
   perform public.generar_dia('2026-11-20');
   select string_agg(to_char(desde, 'HH24:MI'), ',' order by momento) as h into r from asignaciones where fecha = '2026-11-20' and titulo = 'Temperaturas sab';
   if r.h is distinct from '08:30,13:00,16:00' then raise exception 'FALLO: cambió el viernes %', r.h; end if;
