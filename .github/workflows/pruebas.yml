@@ -42,6 +42,11 @@ jobs:
       - name: Orden de la lista de precios del bot (lo más caro primero, marcas juntas)
         env: { PGPASSWORD: prueba }
         run: psql -h localhost -U postgres -d cil -v ON_ERROR_STOP=1 -q -f pruebas/bot-orden.sql
+      - name: Sábados de temporada (horario 10 a 4, igual en logic.js y en el SQL)
+        env: { PGPASSWORD: prueba }
+        run: |
+          psql -h localhost -U postgres -d cil -v ON_ERROR_STOP=1 -q -f pruebas/sabados.sql
+          node pruebas/sabados.js
       - name: Costos (solo gerencia y acceso «costos»)
         env: { PGPASSWORD: prueba }
         run: psql -h localhost -U postgres -d cil -v ON_ERROR_STOP=1 -q -f pruebas/costos.sql

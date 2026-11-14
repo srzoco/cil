@@ -297,15 +297,15 @@
       h += '<p class="llego presente">' + ICON.check + '<span>Llegaste ' + esc(L.fmtHora(llegadaEnCola().t)) + ' · sin internet, se envía al volver la conexión</span></p>';
     } else if (!L.estaPresente(est)) {
       var ahoraM = new Date(), paso = L.pasoLimite(aj(), ahoraM), tardeYa = L.pasoATiempo(aj(), ahoraM);
-      var sub = paso ? 'Ya pasó la hora límite (' + L.fmtHoraTxt(aj().hora_limite) + '). Marca igual: lo tuyo que nadie ha hecho vuelve a ti, y lo que otro ya hizo por ti lo compensas con tareas suyas.'
-        : tardeYa ? 'Ya pasó la hora de entrada. Marca ya: a las ' + L.fmtHoraTxt(aj().hora_limite) + ' tus tareas pasan a otra persona.'
-        : 'Marca apenas llegues. A tiempo hasta las ' + L.fmtHoraTxt(L.aTiempoHasta(aj())) + '.';
+      var sub = paso ? 'Ya pasó la hora límite (' + L.fmtHoraTxt(L.horaLimite(aj())) + '). Marca igual: lo tuyo que nadie ha hecho vuelve a ti, y lo que otro ya hizo por ti lo compensas con tareas suyas.'
+        : tardeYa ? 'Ya pasó la hora de entrada. Marca ya: a las ' + L.fmtHoraTxt(L.horaLimite(aj())) + ' tus tareas pasan a otra persona.'
+        : 'Marca apenas llegues. A tiempo hasta las ' + L.fmtHoraTxt(L.aTiempoHasta(aj(), L.hoyISO())) + '.';
       h += '<div class="hero llegada' + (tardeYa ? ' tarde' : '') + '"><div><p class="hero-t">' + (est === 'ausente' ? 'Gerencia te marcó como ausente' : '¿Ya llegaste?') + '</p>' +
         '<p class="hero-sub">' + esc(sub) + '</p></div>' +
         '<button class="btn grande" data-acc="llegue">Llegué</button></div>';
     } else {
       h += '<p class="llego ' + est + '">' + ICON.check + '<span>Llegaste ' + esc(L.fmtHora(s.llegada)) + (s.local_id && s.local_id !== y.local_id ? ' a ' + esc(nombreLocal(s.local_id)) : '') +
-        (est === 'tarde' ? ' · después de las ' + esc(L.fmtHoraTxt(L.aTiempoHasta(aj()))) : '') + (s.salida ? ' · te fuiste ' + esc(L.fmtHora(s.salida)) : '') + '</span></p>';
+        (est === 'tarde' ? ' · después de las ' + esc(L.fmtHoraTxt(L.aTiempoHasta(aj(), L.hoyISO()))) : '') + (s.salida ? ' · te fuiste ' + esc(L.fmtHora(s.salida)) : '') + '</span></p>';
     }
     // Almuerzo: solo se anota cuándo empieza; si alguien del grupo está almorzando, hay que esperar
     var botones = [];
@@ -517,7 +517,7 @@
 
   function vistaHoy() {
     var hoy = S.hoy, ahora = new Date();
-    var h = '<h1>Hoy</h1><p class="fecha-hoy">' + esc(L.fmtFechaLarga(hoy)) + ' · a tiempo hasta ' + esc(L.fmtHoraTxt(L.aTiempoHasta(aj()))) + ' · falta desde ' + esc(L.fmtHoraTxt(aj().hora_limite)) + '</p>';
+    var h = '<h1>Hoy</h1><p class="fecha-hoy">' + esc(L.fmtFechaLarga(hoy)) + ' · a tiempo hasta ' + esc(L.fmtHoraTxt(L.aTiempoHasta(aj(), L.hoyISO()))) + ' · falta desde ' + esc(L.fmtHoraTxt(L.horaLimite(aj()))) + '</p>';
     if (ahora.getHours() >= 17) {
       h += '<a class="card reporte-listo" href="#/reporte?f=' + hoy + '"><b>Reporte del día</b><span class="muted">Ver y enviar por WhatsApp ›</span></a>';
     }
@@ -564,7 +564,7 @@
         ' pendiente' + (sug.sinCobertura.length === 1 ? '' : 's') + ' porque nadie más de este local puede hacerla' + (sug.sinCobertura.length === 1 ? '' : 's') + '.</p>';
     }
     if (!sug.items.length && !paso && marcados < trabajan.length) {
-      h += '<p class="nota">' + marcados + ' de ' + trabajan.length + ' han marcado llegada. A las ' + esc(L.fmtHoraTxt(aj().hora_limite)) + ' la app reparte sola lo de quien falte: primero a quienes llegaron tarde.</p>';
+      h += '<p class="nota">' + marcados + ' de ' + trabajan.length + ' han marcado llegada. A las ' + esc(L.fmtHoraTxt(L.horaLimite(aj()))) + ' la app reparte sola lo de quien falte: primero a quienes llegaron tarde.</p>';
     }
 
     var visitas = localId ? empleados().filter(function (pe) {
@@ -1128,7 +1128,7 @@
           return '<li>' + esc(x.pe.nombre) + ' <b>' + plural(x.c.veces, 'vez', 'veces') + '</b>' + (x.c.minutos ? ' <small class="muted">' + esc(L.minutosTxt(x.c.minutos)) + '</small>' : '') +
             (x.c.veces === top ? ' <span class="pill ok">🏆 va ganando</span>' : '') + '</li>';
         }).join('') + '</ul>' : '<p class="muted">Este mes nadie ha ayudado todavía con «La hago yo».</p>') + '</section>';
-      h += '<section class="card"><h2>Puntualidad de ' + MESES_L[Number(S.hoy.slice(5, 7)) - 1] + '</h2><p class="ayuda sin-margen">A tiempo = marcó «Llegué» hasta las ' + esc(L.fmtHoraTxt(L.aTiempoHasta(aj()))) + ' Una falta también cuenta como no a tiempo.</p>' +
+      h += '<section class="card"><h2>Puntualidad de ' + MESES_L[Number(S.hoy.slice(5, 7)) - 1] + '</h2><p class="ayuda sin-margen">A tiempo = marcó «Llegué» hasta las ' + esc(L.fmtHoraTxt(L.aTiempoHasta(aj(), L.hoyISO()))) + ' Una falta también cuenta como no a tiempo.</p>' +
         (punt.length ? '' : '<p class="muted">Todavía no hay días contados este mes.</p>') + '<ul class="rep-lista">' +
         punt.map(function (x) {
           var todo = x.p.a_tiempo === x.p.dias;
@@ -1321,6 +1321,11 @@
     h += '<div class="fila-dos"><label class="campo">A tiempo hasta<input type="time" name="a_tiempo_hasta" value="' + esc(L.aTiempoHasta(a)) + '" required></label>' +
       '<label class="campo">Hora límite (falta)<input type="time" name="hora_limite" value="' + esc(L.hhmm(a.hora_limite)) + '" required></label></div>';
     h += '<p class="ayuda sin-margen">Hasta la primera hora cuenta «a tiempo»; después, «tarde». Quien no marque «Llegué» antes de la hora límite aparece como falta y sus tareas se reparten solas: primero a quienes llegaron tarde (el de último primero, hasta 30 min sobre el promedio) y lo demás a quien tenga menos carga. Si nadie puede hacer alguna, te la muestro en Hoy para que la apruebes. Aplica a todos los locales.</p>';
+    h += '<fieldset class="campo"><legend>Sábados de temporada</legend><div class="fila-dos"><label class="campo">Desde<input type="date" name="sab_desde" value="' + esc(String(a.sab_desde || '').slice(0, 10)) + '"></label>' +
+      '<label class="campo">Hasta<input type="date" name="sab_hasta" value="' + esc(String(a.sab_hasta || '').slice(0, 10)) + '"></label></div>' +
+      '<div class="fila-dos"><label class="campo">Entran<input type="time" name="sab_entrada" value="' + esc(L.hhmm(a.sab_entrada || '10:00')) + '"></label>' +
+      '<label class="campo">Salen<input type="time" name="sab_salida" value="' + esc(L.hhmm(a.sab_salida || '16:00')) + '"></label></div>' +
+      '<p class="ayuda sin-margen">Esos sábados la entrada, «a tiempo» y la hora límite se corren a la hora de entrada (' + esc(L.fmtHoraTxt(L.horaEntrada(Object.assign({}, a, { sab_desde: '2000-01-01', sab_hasta: '2100-01-01' }), '2026-11-21', L.aTiempoHasta(a)))) + ' a tiempo), y las horas de las tareas se acomodan dentro del horario (8:30 → entrada, 1 p. m. queda igual, 4 p. m. → 1 h antes de salir). Quién trabaja los sábados se marca en Equipo → Personas. Vacío = sin sábados.</p></fieldset>';
     h += '<label class="check"><input type="checkbox" name="usar_salidas"' + (a.usar_salidas ? ' checked' : '') + '><span>Botón «Salí a despachar» / «Volví» <small class="muted">— si alguien lo marcó antes de que empiece la ventana de una tarea con horario, esa tarea pasa a otro sin penalizarlo. Si no lo marcó y otra persona tuvo que hacerla, queda como «se le pasó» y le compensa los minutos a quien la hizo. Apagado, nada de eso aplica: las urgentes igual las puede hacer cualquiera, sin penalización.</small></span></label>';
     h += '<label class="check"><input type="checkbox" name="mostrar_record"' + (a.mostrar_record ? ' checked' : '') + '><span>Cada empleado ve su récord de puntualidad del mes <small class="muted">— apagado, solo lo ves tú en Historial.</small></span></label>';
     var cd = a.carga_dias || L.AJUSTES_BASE.carga_dias;
@@ -2236,8 +2241,11 @@
         msgAj = sinConfig.length ? 'Guardado. Ojo: ' + sinConfig.map(function (l) { return l.nombre; }).join(', ') + ' no tiene Wi-Fi registrado: allí nadie puede marcar «Llegué» hasta que lo registres en Equipo → Locales.' : null;
       }
       if (String(fd.get('a_tiempo_hasta')) > String(fd.get('hora_limite'))) { aviso('«A tiempo hasta» tiene que ser antes de la hora límite.'); return; }
+      if (fd.get('sab_desde') && fd.get('sab_hasta') && String(fd.get('sab_desde')) > String(fd.get('sab_hasta'))) { aviso('En sábados, «desde» tiene que ser antes de «hasta».'); return; }
+      if (String(fd.get('sab_entrada') || '10:00') >= String(fd.get('sab_salida') || '16:00')) { aviso('En sábados, la entrada tiene que ser antes de la salida.'); return; }
       ejecutar(store.actualizar('ajustes', 1, { usar_salidas: !!fd.get('usar_salidas'), usar_almuerzo: !!fd.get('usar_almuerzo'), usar_companerismo: !!fd.get('usar_companerismo'), mostrar_record: !!fd.get('mostrar_record'), a_tiempo_hasta: fd.get('a_tiempo_hasta'), hora_limite: fd.get('hora_limite'), pool_activo: !!fd.get('pool'), minutos_jornada: Math.round(horas * 60), solo_en_tienda: solo,
         usar_gps: !!fd.get('usar_gps'), revisiones_dia: Number(fd.get('revisiones_dia')),
+        sab_desde: fd.get('sab_desde') || null, sab_hasta: fd.get('sab_hasta') || null, sab_entrada: fd.get('sab_entrada') || '10:00', sab_salida: fd.get('sab_salida') || '16:00',
         minutos_almuerzo: Math.max(10, Math.min(180, Number(fd.get('minutos_almuerzo')) || 60)),
         carga_dias: [0, 1, 2, 3, 4, 5, 6].reduce(function (o, dd) { var v = Number(fd.get('cd_' + dd)); o[dd] = isNaN(v) ? 100 : Math.max(0, Math.min(100, v)); return o; }, {}) }), msgAj || 'Ajustes guardados.');
     }

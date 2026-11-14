@@ -418,14 +418,20 @@ async function responder(contacto: string, mensaje: string, nombre: string, cana
   const minutos = t.hora * 60 + t.minuto;
   const abre = aMin(cfg.hora_abre ?? "8:30"), cierra = aMin(cfg.hora_cierra ?? "17:30");
   const dias = (cfg.dias_abiertos ?? "lunes,martes,miercoles,jueves,viernes").split(",").map(sinTildes);
-  const abreHoy = dias.includes(DIAS[t.dia]);
-  const abierto = abreHoy && minutos >= abre && minutos < cierra;
+  // Sábados de temporada (14/11/2026): la tienda atiende de sabado_abre a sabado_cierra entre tienda_sabados_desde y _hasta
+  const sabDesde = String(cfg.tienda_sabados_desde ?? "").trim(), sabHasta = String(cfg.tienda_sabados_hasta ?? "").trim();
+  const sabadoTemporada = (fecha: string) => !!sabHasta && fecha <= sabHasta && (!sabDesde || fecha >= sabDesde);
+  const fechaMas = (k: number) => new Date(Date.parse(t.fecha + "T12:00:00Z") + k * 86_400_000).toISOString().slice(0, 10);
+  const abreDia = (k: number) => { const d = (t.dia + k) % 7; return dias.includes(DIAS[d]) || (d === 6 && sabadoTemporada(fechaMas(k))); };
+  const sabHoy = t.dia === 6 && !dias.includes("sabado") && sabadoTemporada(t.fecha);
+  const abreHoy = abreDia(0);
+  const abierto = abreHoy && (sabHoy ? minutos >= aMin(cfg.sabado_abre ?? "10:00") && minutos < aMin(cfg.sabado_cierra ?? "16:00") : minutos >= abre && minutos < cierra);
   let proxima = "en un momento";
   if (!abierto) {
-    if (abreHoy && minutos < abre) proxima = "hoy a primera hora";
+    if (abreHoy && minutos < (sabHoy ? aMin(cfg.sabado_abre ?? "10:00") : abre)) proxima = "hoy a primera hora";
     else {
       let k = 1;
-      while (k < 7 && !dias.includes(DIAS[(t.dia + k) % 7])) k++;
+      while (k < 7 && !abreDia(k)) k++;
       proxima = k === 1 ? "mañana a primera hora" : `el ${DIAS_TXT[(t.dia + k) % 7]} a primera hora`;
     }
   }
@@ -458,7 +464,8 @@ async function responder(contacto: string, mensaje: string, nombre: string, cana
   const esInicio = previos.length === 0;
 
   // 7) Instrucciones
-  const reemplazar = (s: string) => s.replaceAll("{horario}", cfg.horario ?? "").replaceAll("{proxima}", proxima);
+  const horario = (cfg.horario ?? "") + (sabadoTemporada(t.fecha) || (sabDesde && t.fecha < sabDesde && sabHasta) ? ` y ${cfg.horario_sabados || "sábados de 10:00 am a 4:00 pm"} (hasta el ${Number(sabHasta.slice(8, 10))} de ${["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"][Number(sabHasta.slice(5, 7)) - 1]})` : "");
+  const reemplazar = (s: string) => s.replaceAll("{horario}", horario).replaceAll("{proxima}", proxima);
   const fijo = [
     "Eres quien atiende los mensajes de Instagram de Barquero Food, tienda de delicatesen importados en La Florida, Caracas, Venezuela. Escribes como una persona del equipo: natural, nunca como un robot.",
     "## ESTILO\n" + (cfg.estilo ?? ""),

@@ -148,6 +148,43 @@ alter table public.tareas_ajustes add column if not exists usar_companerismo boo
 -- Revisiones de calidad al azar por día, repartidas entre gerencia
 alter table public.tareas_ajustes add column if not exists revisiones_dia int not null default 4 check (revisiones_dia between 0 and 20);
 
+-- ---------- Horario de sábados de temporada (14/11/2026, pedido de Sara: horario navideño) ----------
+-- Los sábados entre sab_desde y sab_hasta se entra a sab_entrada (10:00) y se sale a sab_salida (16:00).
+-- Puntualidad: «a tiempo» y la hora límite se corren igual que la entrada (8:35 → 10:05, 8:50 → 10:20).
+-- Horas de las tareas: la jornada normal 8:30–17:30 se encoge a la del sábado (8:30 → 10:00, 1 pm → 1 pm, 4 pm → 3 pm).
+-- Igual que horarioSabado/horaDia en tareas/logic.js.
+alter table public.tareas_ajustes add column if not exists sab_desde date;
+alter table public.tareas_ajustes add column if not exists sab_hasta date;
+alter table public.tareas_ajustes add column if not exists sab_entrada time not null default '10:00';
+alter table public.tareas_ajustes add column if not exists sab_salida time not null default '16:00';
+create or replace function public._sab(f date) returns boolean
+language sql stable security definer set search_path = public as $$
+  select coalesce((select extract(dow from f) = 6 and f between sab_desde and sab_hasta and sab_salida > sab_entrada
+                   from tareas_ajustes where id = 1), false)
+$$;
+-- Hora de entrada de ese día corrida (a tiempo, hora límite): en sábado de temporada, sab_entrada + (t − 8:30)
+create or replace function public._hora_entrada(t time, f date) returns time
+language sql stable security definer set search_path = public as $$
+  select case when t is null or not public._sab(f) then t
+              else (select sab_entrada + (t - time '08:30') from tareas_ajustes where id = 1) end
+$$;
+-- Hora de una tarea ese día: en sábado de temporada, la jornada 8:30–17:30 encogida a sab_entrada–sab_salida
+create or replace function public._hora_dia(t time, f date) returns time
+language sql stable security definer set search_path = public as $$
+  select case when t is null or not public._sab(f) then t
+              else (select greatest(sab_entrada, least(sab_salida,
+                     sab_entrada + (t - time '08:30') * (extract(epoch from sab_salida - sab_entrada) / extract(epoch from time '17:30' - time '08:30'))))
+                    from tareas_ajustes where id = 1) end
+$$;
+create or replace function public._a_tiempo(f date) returns time
+language sql stable security definer set search_path = public as $$
+  select public._hora_entrada(a_tiempo_hasta, f) from tareas_ajustes where id = 1
+$$;
+create or replace function public._limite(f date) returns time
+language sql stable security definer set search_path = public as $$
+  select public._hora_entrada(hora_limite, f) from tareas_ajustes where id = 1
+$$;
+
 -- ---------- Tareas (recurrentes y de una sola vez) ----------
 create table if not exists public.plantillas (
   id            uuid primary key default gen_random_uuid(),
@@ -540,7 +577,7 @@ language sql stable security definer set search_path = public as $$
       -- tarea de una vez creada hoy pasada la hora límite: solo entra quien marcó llegada
       -- (las recurrentes se reparten entre todos y lo de quien falte se reasigna aparte)
       and not (p.frecuencia = 'unica' and f = public.hoy()
-               and (now() at time zone 'America/Caracas')::time > (select hora_limite from tareas_ajustes where id = 1)
+               and (now() at time zone 'America/Caracas')::time > public._limite(f)
                and not exists (select 1 from asistencia s where s.persona_id = pe.id and s.fecha = f and s.estado = 'presente'))
   ),
   -- Si hay alguien a quien la tarea le cabe en su tope, solo entre esos; si no, entre todos (para que no quede sin dueño).
@@ -592,7 +629,7 @@ begin
       insert into asignaciones (plantilla_id, fecha, titulo, detalle, minutos, arrastra, asignado_a, asignado_original, motivo,
                                 local_id, momento, momento_nombre, antes, desde, registro, equipos, puesto, consumible_id)
       values (p.id, f, p.titulo, p.detalle, p.minutos, p.frecuencia <> 'diaria', quien, quien, mot,
-              p.local_id, i, nullif(trim(m->>'nombre'), ''), nullif(m->>'antes', '')::time, nullif(m->>'desde', '')::time, p.registro, p.equipos, pu, p.consumible_id)
+              p.local_id, i, nullif(trim(m->>'nombre'), ''), public._hora_dia(nullif(m->>'antes', '')::time, f), public._hora_dia(nullif(m->>'desde', '')::time, f), p.registro, p.equipos, pu, p.consumible_id)
       on conflict (plantilla_id, fecha, momento, puesto) do nothing
       returning id into nueva;
       if nueva is not null then
@@ -1470,7 +1507,7 @@ begin
   where persona_id = auth.uid() and fecha = public.hoy();
   -- lo que deja pendiente se reparte solo, con la misma regla de las faltas
   perform public._repartir_local((select local_id from personas where id = auth.uid()),
-                                 now() >= public._ts_hoy((select hora_limite from tareas_ajustes where id = 1)));
+                                 now() >= public._ts_hoy(public._limite(public.hoy())));
   return json_build_object('salida', now(), 'ya', false);
 end $$;
 
@@ -1485,7 +1522,7 @@ begin
     values (p_persona, public.hoy(), 'ausente', null, auth.uid())
     on conflict (persona_id, fecha) do update set estado = 'ausente', llegada = null, salida = null, salida_motivo = null, marcado_por = auth.uid();
     -- si el reparto de la hora límite ya pasó, lo suyo se reparte ahora con la misma regla
-    if now() >= public._ts_hoy((select hora_limite from tareas_ajustes where id = 1)) then
+    if now() >= public._ts_hoy(public._limite(public.hoy())) then
       perform public._repartir_local((select local_id from personas where id = p_persona), true);
     end if;
     return json_build_object('ok', true);
@@ -1498,7 +1535,7 @@ begin
     update asistencia set salida = coalesce(salida, now()) where persona_id = p_persona and fecha = public.hoy() and estado = 'presente';
     if not found then raise exception 'Primero marca su llegada.'; end if;
     perform public._repartir_local((select local_id from personas where id = p_persona),
-                                   now() >= public._ts_hoy((select hora_limite from tareas_ajustes where id = 1)));
+                                   now() >= public._ts_hoy(public._limite(public.hoy())));
     return json_build_object('ok', true);
   end if;
   if p_estado = 'sin_salida' then
@@ -1529,7 +1566,7 @@ begin
     where plantilla_id = new.id and estado = 'pendiente' and fecha >= public.hoy() and momento < 50;
     -- si solo cambiaron las horas (mismas veces al día), también aplican hoy
     if greatest(1, jsonb_array_length(new.momentos)) = greatest(1, jsonb_array_length(old.momentos)) and new.momentos is distinct from old.momentos then
-      update asignaciones set antes = nullif(new.momentos -> momento ->> 'antes', '')::time, desde = nullif(new.momentos -> momento ->> 'desde', '')::time,
+      update asignaciones set antes = public._hora_dia(nullif(new.momentos -> momento ->> 'antes', '')::time, fecha), desde = public._hora_dia(nullif(new.momentos -> momento ->> 'desde', '')::time, fecha),
         momento_nombre = nullif(trim(new.momentos -> momento ->> 'nombre'), '')
       where plantilla_id = new.id and estado = 'pendiente' and fecha >= public.hoy() and momento < 50;
     end if;
@@ -1707,7 +1744,7 @@ language sql stable security definer set search_path = public as $$
   )
   select json_build_object('dias', count(*) filter (where cuenta),
     'a_tiempo', count(*) filter (where cuenta and estado = 'presente'
-       and date_trunc('minute', (llegada at time zone 'America/Caracas')::time) <= (select a_tiempo_hasta from tareas_ajustes where id = 1)))
+       and date_trunc('minute', (llegada at time zone 'America/Caracas')::time) <= public._a_tiempo((llegada at time zone 'America/Caracas')::date)))
   from x
 $$;
 
@@ -1918,7 +1955,7 @@ begin
          coalesce((select sum(a.minutos) from asignaciones a where a.asignado_a = pe.id and (a.fecha = f or (a.arrastra and a.estado = 'pendiente' and a.fecha < f and a.just_estado = 'aprobada'))), 0)
            * 100.0 / greatest(least(pe.capacidad, 100), 10),
          greatest(least(pe.capacidad, 100), 10), pe.tarea_max, pe.grupos, pe.rota, s.llegada,
-         date_trunc('minute', s.llegada at time zone 'America/Caracas')::time > aj.a_tiempo_hasta
+         date_trunc('minute', s.llegada at time zone 'America/Caracas')::time > public._a_tiempo(f)
   from personas pe join asistencia s on s.persona_id = pe.id and s.fecha = f and s.estado = 'presente' and s.salida is null
   where pe.activo and pe.rol = 'empleado' and 'tareas' = any (pe.accesos) and pe.local_id = p_local;
   asignados := '{}'; ocultos := '{}';
@@ -1979,7 +2016,7 @@ language plpgsql security definer set search_path = public as $$
 declare aj public.tareas_ajustes; f date := public.hoy(); lo record; n int := 0;
 begin
   select * into aj from tareas_ajustes where id = 1;
-  if now() < public._ts_hoy(aj.hora_limite) then return 0; end if;
+  if now() < public._ts_hoy(public._limite(f)) then return 0; end if;
   perform pg_advisory_xact_lock(hashtext('repartir_faltas:' || f::text));
   for lo in select l.id from locales l where not exists (select 1 from repartos_auto r where r.fecha = f and r.local_id = l.id) loop
     insert into repartos_auto (fecha, local_id) values (f, lo.id);
@@ -2258,7 +2295,7 @@ begin
   select pe.id, 'llegada:' || hoy || ':' || pe.id, '¿Ya llegaste?', 'Marca «Llegué» en la app.', './#/'
   from personas pe
   where pe.activo and pe.rol = 'empleado' and 'tareas' = any (pe.accesos) and public._trabaja(pe, hoy)
-    and public._ts_hoy(aj.a_tiempo_hasta - interval '5 minutes') <= ahora and public._ts_hoy(aj.a_tiempo_hasta - interval '5 minutes') > hace
+    and public._ts_hoy(public._a_tiempo(hoy) - interval '5 minutes') <= ahora and public._ts_hoy(public._a_tiempo(hoy) - interval '5 minutes') > hace
     and not exists (select 1 from asistencia s where s.persona_id = pe.id and s.fecha = hoy);
 
   -- 4) Gerencia: un solo resumen de asistencia a las 9:30 a. m., y solo si alguien faltó o llegó tarde
@@ -2271,13 +2308,13 @@ begin
   from personas ad,
        (select count(*) filter (where s.persona_id is null) as nf,
                string_agg(coalesce(nullif(pe.nombre, ''), pe.email), ', ' order by pe.nombre) filter (where s.persona_id is null) as faltan,
-               count(*) filter (where s.estado = 'presente' and date_trunc('minute', s.llegada at time zone 'America/Caracas')::time > aj.a_tiempo_hasta) as nt,
+               count(*) filter (where s.estado = 'presente' and date_trunc('minute', s.llegada at time zone 'America/Caracas')::time > public._a_tiempo(hoy)) as nt,
                string_agg(coalesce(nullif(pe.nombre, ''), pe.email) || ' ' || to_char(s.llegada at time zone 'America/Caracas', 'HH12:MI'), ', ' order by s.llegada)
-                 filter (where s.estado = 'presente' and date_trunc('minute', s.llegada at time zone 'America/Caracas')::time > aj.a_tiempo_hasta) as tarde
+                 filter (where s.estado = 'presente' and date_trunc('minute', s.llegada at time zone 'America/Caracas')::time > public._a_tiempo(hoy)) as tarde
         from personas pe left join asistencia s on s.persona_id = pe.id and s.fecha = hoy
         where pe.activo and pe.rol = 'empleado' and 'tareas' = any (pe.accesos) and public._trabaja(pe, hoy)) f
   where ad.activo and ad.rol = 'admin' and (f.nf > 0 or f.nt > 0)
-    and public._ts_hoy(time '09:30') <= ahora and public._ts_hoy(time '09:30') > hace;
+    and public._ts_hoy(public._hora_entrada(time '09:30', hoy)) <= ahora and public._ts_hoy(public._hora_entrada(time '09:30', hoy)) > hace;
 
   -- 4b) Gerencia: cierre a las 5:10 p. m., solo si quedan tareas de hoy sin hacer
   insert into _avisos
@@ -2302,7 +2339,7 @@ begin
          (select (select round(100.0 * count(*) filter (where a.estado = 'hecha') / nullif(count(*), 0))::int
                   from asignaciones a where a.fecha between hoy - 7 and hoy - 1 and not a.oculta) as pct,
                  (select count(*) from asistencia s where s.fecha between hoy - 7 and hoy - 1 and s.estado = 'presente'
-                    and date_trunc('minute', s.llegada at time zone 'America/Caracas')::time > aj.a_tiempo_hasta
+                    and date_trunc('minute', s.llegada at time zone 'America/Caracas')::time > public._a_tiempo(s.fecha)
                     and not exists (select 1 from dias_sin_puntualidad d where d.fecha = s.fecha)) as tardes,
                  (select count(*) from personas pe, generate_series(hoy - 7, hoy - 1, interval '1 day') g(d)
                     where pe.activo and pe.rol = 'empleado' and 'tareas' = any (pe.accesos) and public._trabaja(pe, g.d::date)
@@ -3465,6 +3502,12 @@ grant execute on function public.pend_datos(), public.pend_hilo(uuid), public.pe
 --  Cambios que se hacen UNA sola vez (aunque cil.sql se vuelva a correr)
 -- =====================================================================
 create table if not exists public.cil_migraciones (nombre text primary key, hecho_en timestamptz not null default now());
+-- Horario de sábados de la temporada navideña 2026 (ver «Horario de sábados de temporada» arriba)
+do $$ begin
+  if exists (select 1 from public.cil_migraciones where nombre = 'sabados-navidad-2026') then return; end if;
+  update public.tareas_ajustes set sab_desde = '2026-11-14', sab_hasta = '2026-12-31', sab_entrada = '10:00', sab_salida = '16:00' where id = 1;
+  insert into public.cil_migraciones (nombre) values ('sabados-navidad-2026');
+end $$;
 alter table public.cil_migraciones enable row level security;
 revoke all on public.cil_migraciones from anon, authenticated;
 
@@ -3606,6 +3649,11 @@ insert into public.bot_config (clave, valor, descripcion) values
 ('robot_dias', 'lunes,martes,miercoles,jueves,viernes', 'Días que corre el robot. Los sábados de temporada van en robot_sabados_desde/hasta.'),
 ('robot_sabados_desde', '2026-11-07', 'Temporada navideña: desde este día (AAAA-MM-DD) el robot también corre los sábados.'),
 ('robot_sabados_hasta', '2026-12-31', 'Temporada navideña: hasta este día (AAAA-MM-DD) el robot corre los sábados.'),
+('tienda_sabados_desde', '2026-11-14', 'Temporada navideña: desde este día (AAAA-MM-DD) la tienda atiende los sábados (el bot lo dice y cuenta ese horario).'),
+('tienda_sabados_hasta', '2026-12-31', 'Temporada navideña: hasta este día la tienda atiende los sábados. Vacío = no se atiende los sábados.'),
+('sabado_abre', '10:00', 'Sábados de temporada: hora de apertura (24 h).'),
+('sabado_cierra', '16:00', 'Sábados de temporada: hora de cierre (24 h).'),
+('horario_sabados', 'sábados de 10:00 am a 4:00 pm', 'Cómo dice el bot el horario de los sábados de temporada (se agrega al horario normal mientras dure).'),
 ('proveedor', 'gemini', 'Quién redacta las respuestas: gemini (Google) o claude (Anthropic). Cada uno necesita su clave en los Secrets de la función.'),
 ('modelo_gemini', 'gemini-2.5-flash', 'Modelo de Gemini principal (nombre exacto de Google AI Studio).'),
 ('modelo_gemini_respaldo', 'gemini-2.5-flash-lite', 'Modelo de Gemini cuando se supera tope_principal en el día.'),

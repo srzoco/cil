@@ -40,17 +40,41 @@
     var h = Math.floor(m / 60), r = m % 60;
     return h + ' h' + (r ? ' ' + r + ' min' : '');
   }
+  // ---------- Horario de sábados de temporada (14/11/2026; igual que _sab/_hora_entrada/_hora_dia en cil.sql) ----------
+  // Los sábados entre sab_desde y sab_hasta se entra a sab_entrada (10:00) y se sale a sab_salida (16:00).
+  function aMinutos(t) { var p = String(t || '').slice(0, 5).split(':').map(Number); return p[0] * 60 + (p[1] || 0); }
+  function deMinutos(m) { m = Math.round(m); return pad(Math.floor(m / 60)) + ':' + pad(m % 60); }
+  function esSabadoTemporada(ajustes, f) {
+    var a = ajustes || AJUSTES_BASE; if (!a.sab_desde || !a.sab_hasta || !f) return false;
+    var d = new Date(f + 'T12:00:00');
+    return d.getDay() === 6 && f >= String(a.sab_desde).slice(0, 10) && f <= String(a.sab_hasta).slice(0, 10) &&
+      aMinutos(a.sab_salida || '16:00') > aMinutos(a.sab_entrada || '10:00');
+  }
+  // Hora de entrada corrida (a tiempo, hora límite): sab_entrada + (t − 8:30)
+  function horaEntrada(ajustes, f, t) {
+    if (!t || !esSabadoTemporada(ajustes, f)) return t;
+    return deMinutos(aMinutos(ajustes.sab_entrada || '10:00') + aMinutos(t) - aMinutos('08:30'));
+  }
+  // Hora de una tarea: la jornada 8:30–17:30 encogida a la del sábado (8:30 → 10:00, 1 pm → 1 pm, 4 pm → 3 pm)
+  function horaDia(ajustes, f, t) {
+    if (!t || !esSabadoTemporada(ajustes, f)) return t;
+    var e = aMinutos(ajustes.sab_entrada || '10:00'), sal = aMinutos(ajustes.sab_salida || '16:00');
+    var m = e + (aMinutos(t) - aMinutos('08:30')) * (sal - e) / (aMinutos('17:30') - aMinutos('08:30'));
+    return deMinutos(Math.max(e, Math.min(sal, m)));
+  }
   // ¿Ya pasó la hora límite de hoy?
   function pasoLimite(ajustes, ahora) {
     ahora = ahora || new Date();
-    var p = String((ajustes || AJUSTES_BASE).hora_limite || '08:50').split(':').map(Number);
+    var p = String(horaEntrada(ajustes, hoyISO(ahora), String((ajustes || AJUSTES_BASE).hora_limite || '08:50').slice(0, 5))).split(':').map(Number);
     return ahora.getHours() * 60 + ahora.getMinutes() > p[0] * 60 + (p[1] || 0);
   }
   // «A tiempo» hasta a_tiempo_hasta (8:35); después es tarde. La hora límite (8:50) es otra cosa: desde ahí es falta.
-  function aTiempoHasta(ajustes) { var a = ajustes || AJUSTES_BASE; return String(a.a_tiempo_hasta || a.hora_limite || '08:35').slice(0, 5); }
+  // Con fecha, la de ese día (en sábado de temporada, corrida: 10:05).
+  function aTiempoHasta(ajustes, f) { var a = ajustes || AJUSTES_BASE; var t = String(a.a_tiempo_hasta || a.hora_limite || '08:35').slice(0, 5); return f ? horaEntrada(a, f, t) : t; }
+  function horaLimite(ajustes, f) { var a = ajustes || AJUSTES_BASE; return horaEntrada(a, f || hoyISO(), String(a.hora_limite || '08:50').slice(0, 5)); }
   function pasoATiempo(ajustes, ahora) {
     ahora = ahora || new Date();
-    var p = aTiempoHasta(ajustes).split(':').map(Number);
+    var p = aTiempoHasta(ajustes, hoyISO(ahora)).split(':').map(Number);
     return ahora.getHours() * 60 + ahora.getMinutes() > p[0] * 60 + (p[1] || 0);
   }
   function llegoTarde(ajustes, llegada) {
@@ -513,8 +537,8 @@
           id: nuevoId(), plantilla_id: p.id, fecha: f, titulo: p.titulo, detalle: p.detalle || null, minutos: p.minutos,
           arrastra: p.frecuencia !== 'diaria', asignado_a: quien, asignado_original: quien, motivo: mot,
           estado: 'pendiente', hecha_en: null, hecha_por: null, creado_en: new Date().toISOString(),
-          local_id: p.local_id, momento: i, momento_nombre: (m && String(m.nombre || '').trim()) || null, antes: (m && m.antes) || null,
-          desde: (m && m.desde) || null, registro: !!p.registro, equipos: (p.equipos || []).slice(), puesto: puesto, consumible_id: p.consumible_id || null
+          local_id: p.local_id, momento: i, momento_nombre: (m && String(m.nombre || '').trim()) || null, antes: horaDia(db.ajustes, f, (m && m.antes) || null),
+          desde: horaDia(db.ajustes, f, (m && m.desde) || null), registro: !!p.registro, equipos: (p.equipos || []).slice(), puesto: puesto, consumible_id: p.consumible_id || null
         };
         db.asignaciones.push(a);
         nuevas.push(a);
@@ -855,7 +879,7 @@
   return {
     TOLERANCIA: TOLERANCIA, DIAS: DIAS, DIAS_CORTOS: DIAS_CORTOS, AJUSTES_BASE: AJUSTES_BASE,
     hoyISO: hoyISO, addDias: addDias, difDias: difDias, dow: dow, lunesDe: lunesDe, fmtFecha: fmtFecha, fmtFechaLarga: fmtFechaLarga,
-    fmtHora: fmtHora, fmtHoraTxt: fmtHoraTxt, minutosTxt: minutosTxt, pasoLimite: pasoLimite, llegoTarde: llegoTarde,
+    fmtHora: fmtHora, fmtHoraTxt: fmtHoraTxt, minutosTxt: minutosTxt, pasoLimite: pasoLimite, esSabadoTemporada: esSabadoTemporada, horaEntrada: horaEntrada, horaDia: horaDia, horaLimite: horaLimite, llegoTarde: llegoTarde,
     aTiempoHasta: aTiempoHasta, pasoATiempo: pasoATiempo, puntualidadMes: puntualidadMes, companerismoMes: companerismoMes, sinPuntualidad: sinPuntualidad,
     toca: toca, distanciaM: distanciaM, estadoHora: estadoHora, antesDeHora: antesDeHora, listaDesde: listaDesde,
     equiposDe: equiposDe, fueraDeRango: fueraDeRango, rangoTxt: rangoTxt, esUrgente: esUrgente, excusado: excusado, estaFuera: estaFuera, fueraEn: fueraEn, hhmm: hhmm, tituloCompleto: tituloCompleto,
