@@ -74,6 +74,7 @@ const BASE = process.env.BASE || 'http://localhost:8765';
   for (const e of ['🌰', '🥑', '🥭']) if (!ems.includes(e)) fallas.push('Falta el botón ' + e + ': ' + ems.join(''));
   if (ems[ems.length - 1] !== '🔹') fallas.push('🔹 debe ir de último');
   if (ems.filter(e => e === '🥭').length !== 1) fallas.push('🥭 repetido');
+  if (ems.some(e => /[a-z]/i.test(e))) fallas.push('Un texto salió como emoji: ' + ems.join(' '));
   const w = await p.evaluate(() => document.documentElement.scrollWidth); if (w > 361) fallas.push('Se sale de la pantalla: ' + w);
   await b.close();
   if (fallas.length) { console.error('FALLAS (' + fallas.length + '):\n- ' + fallas.join('\n- ')); process.exit(1); }

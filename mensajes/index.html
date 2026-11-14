@@ -538,7 +538,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
   // No existe emoji de vainilla: se usa 🌼 (su flor), 🫛 (una vaina) o 🍦.
   const EMOJIS = ['🧀','🥩','🍖','🥓','🐟','🦐','🦑','🐙','🦪','🦀','🦞','🫒','🍯','🧂','🥫','🥟','🍄','🌶️','🌿','🌼','🫛','🍦','🍫','🍪','🥜','☕','🍷','🍾','🥖','🧈','🥚','🍝','🍋','🍅','🍇','🍟','🍔','🌰','🥑','🔹'];
   // Más los que ya usa algún producto: un emoji escrito con el teclado queda como botón (sin tener que pedirlo).
-  function emojisBotones(){ const usados = S.products.map(p => (p.emoji || '').trim()).filter(e => e && !EMOJIS.includes(e)); return [...new Set(EMOJIS.slice(0, -1).concat(usados))].concat(['🔹']); }
+  function emojisBotones(){ const usados = S.products.map(p => (p.emoji || '').trim()).filter(e => e.length <= 8 && /\p{Extended_Pictographic}/u.test(e) && !/[a-z0-9]/i.test(e) && !EMOJIS.includes(e)); return [...new Set(EMOJIS.slice(0, -1).concat(usados))].concat(['🔹']); }
   function renderEmojis(){ $('#emojis').innerHTML = emojisBotones().map(em => `<button type="button" data-em="${esc(em)}" aria-label="Usar ${esc(em)}">${esc(em)}</button>`).join(''); }
   function today(){ const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
   function sortProds(a){ return a.slice().sort((x, y) => (x.categoria || 'zzz').localeCompare(y.categoria || 'zzz', 'es') || x.nombre.localeCompare(y.nombre, 'es')); }

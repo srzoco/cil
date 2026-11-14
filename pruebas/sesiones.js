@@ -40,11 +40,15 @@ process.on('unhandledRejection', e => { console.error('FALLA de la prueba (no de
   const k2 = await claves();
   if (k2[0] !== 'yure' || k2[1] !== 'yure') fallas.push('Una pantalla vieja escribió otra sesión encima de la de Yure (' + k2.join(', ') + ')');
   // Salir no deja ninguna sesión
-  await p.goto(BASE + '/').catch(() => {}); await p.waitForTimeout(500);
-  await intentar(() => p.evaluate((s) => { localStorage.clear(); sessionStorage.setItem('barquero_en_menu', '1'); localStorage.setItem('barquero_sesion', s); localStorage.setItem('bfcontenido_sesion', s); }, ses('yure')));
-  await p.goto(BASE + '/').catch(() => {}); await p.waitForTimeout(600);
-  await p.reload().catch(() => {}); await p.waitForTimeout(700);  // la página puede estar redirigiéndose sola
-  const salir = await p.waitForSelector('#salir', { timeout: 6000 }).catch(() => null);
+  // El menú puede estar redirigiéndose solo justo en ese momento: se intenta hasta 3 veces (en GitHub a veces tarda)
+  let salir = null;
+  for (let i = 0; i < 3 && !salir; i++) {
+    await p.goto(BASE + '/').catch(() => {}); await p.waitForTimeout(500);
+    await intentar(() => p.evaluate((s) => { localStorage.clear(); sessionStorage.setItem('barquero_en_menu', '1'); localStorage.setItem('barquero_sesion', s); localStorage.setItem('bfcontenido_sesion', s); }, ses('yure')));
+    await p.goto(BASE + '/').catch(() => {}); await p.waitForTimeout(600);
+    await p.reload().catch(() => {}); await p.waitForTimeout(700);
+    salir = await p.waitForSelector('#salir', { timeout: 6000 }).catch(() => null);
+  }
   if (!salir) fallas.push('No apareció el botón «Salir» del menú');
   else {
     // El menú se vuelve a pintar cuando llegan los datos: si el toque cae justo en ese momento se pierde, así que se repite una vez
