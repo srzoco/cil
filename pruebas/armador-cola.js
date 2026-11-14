@@ -11,7 +11,7 @@ const BASE = process.env.BASE || 'http://localhost:8765';
   p.on('dialog', d => d.accept());
   let datos = { ajustes: {}, productos: [
     { id: 'vainilla', nombre: 'Vaina vainilla Madagascar', categoria: 'Especias', emoji: '🌿', ficha: 'Origen Madagascar', presentaciones: [{ texto: '', precio: 0.5, medida: 'g', ref: 'Vaina vainilla Madagascar|||||', stock: 10, sin_actualizar: '2026-11-09T12:00:00Z' }] },
-    { id: 'jamon', nombre: 'Jamón serrano', categoria: 'Charcutería', presentaciones: [{ texto: 'loncheado', precio: 30, medida: 'kg', kilo: true, ref: 'Jamón serrano|||||', stock: 4 }] } ],
+    { id: 'jamon', nombre: 'Jamón serrano', categoria: 'Charcutería', emoji: '🥭', presentaciones: [{ texto: 'loncheado', precio: 30, medida: 'kg', kilo: true, ref: 'Jamón serrano|||||', stock: 4 }] } ],
     nuevos: [
       { ref: 'Vaina de vainilla Madagascar|||||', producto: 'Vaina de vainilla Madagascar', categoria: 'Especias', precio: 0.55, stock: 40 },
       { ref: 'Aceite de oliva Jaén|||1L||', producto: 'Aceite de oliva Jaén', categoria: 'Grasas', precio: 12, stock: 6 },
@@ -57,6 +57,23 @@ const BASE = process.env.BASE || 'http://localhost:8765';
   if (guardado.p_datos.productos.some(x => x.nombre === 'Queso nuevo')) fallas.push('El CSV creó un producto sin aprobación');
   const q = guardado.p_datos.nuevos.map(f => f.producto).join(',');
   if (q !== 'Queso nuevo') fallas.push('La fila después del CSV: ' + q);
+  // 5) «¿Es el mismo que…?» con buscador: escribir parte del nombre y elegir
+  const item = p.locator('.cola-item', { hasText: 'Queso nuevo' });
+  await item.locator('[data-cola-buscar]').fill('serra'); await p.waitForTimeout(200);
+  const ops = await item.locator('.cola-res').innerText();
+  if (!/Jamón serrano/.test(ops)) fallas.push('El buscador no encuentra «serra»: ' + ops);
+  await item.locator('[data-cola-buscar]').fill('zzz'); await p.waitForTimeout(200);
+  if (!/Ningún producto/.test(await item.locator('.cola-res').innerText())) fallas.push('Buscar sin resultados no lo dice');
+  await item.locator('[data-cola-buscar]').fill('jamon'); await p.waitForTimeout(200);
+  await item.locator('[data-cola="mismo-elegir"]').first().click(); await p.waitForTimeout(900);
+  const j = guardado.p_datos.productos.find(x => x.id === 'jamon');
+  if (!j || j.nombre !== 'Queso nuevo' || guardado.p_datos.nuevos.length) fallas.push('No juntó desde el buscador: ' + JSON.stringify(j));
+  // 6) emojis: 🌰 y 🥑 fijos, y el que ya usa un producto (🥭, escrito con el teclado) sale como botón
+  await p.locator('[data-edit="jamon"]').click(); await p.waitForTimeout(300);
+  const ems = await p.locator('#emojis button').evaluateAll(bs => bs.map(x => x.dataset.em));
+  for (const e of ['🌰', '🥑', '🥭']) if (!ems.includes(e)) fallas.push('Falta el botón ' + e + ': ' + ems.join(''));
+  if (ems[ems.length - 1] !== '🔹') fallas.push('🔹 debe ir de último');
+  if (ems.filter(e => e === '🥭').length !== 1) fallas.push('🥭 repetido');
   const w = await p.evaluate(() => document.documentElement.scrollWidth); if (w > 361) fallas.push('Se sale de la pantalla: ' + w);
   await b.close();
   if (fallas.length) { console.error('FALLAS (' + fallas.length + '):\n- ' + fallas.join('\n- ')); process.exit(1); }

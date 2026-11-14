@@ -118,7 +118,9 @@ textarea.field{resize:vertical}
 .cola-head h3{margin:0;font-size:16px}
 .cola-item{border-top:1px solid var(--line);padding-top:10px;display:grid;gap:6px}
 .cola-acc{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.cola-sel{flex:1 1 160px;width:auto;padding:8px 10px;font-size:14px}
+.cola-buscar{margin-top:8px}
+.cola-res{display:flex;flex-direction:column;gap:4px;margin-top:6px}
+.cola-op{text-align:left;font:inherit;font-size:14px;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:inherit;cursor:pointer}
 .cola-motivo{margin:0;font-size:13.5px}
 .cola-nota{color:var(--muted)}
 .costo-total{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px;background:var(--surface);border:1.5px solid var(--accent);border-radius:16px;padding:14px 16px;box-shadow:0 2px 10px var(--shadow)}
@@ -360,6 +362,7 @@ body.usd #usd-badge{display:inline-block}
   }
 
   var EMOJI_RULES = [
+    [/aguacate/, '🥑'],
     [/langosta/, '🦞'], [/camar[o]n/, '🦐'], [/pulpo/, '🐙'], [/calamar/, '🦑'],
     [/cangrejo|chupetica/, '🦀'], [/mejillon|guacuco|chipi/, '🦪'],
     [/bacalao|salmon|atun|mero|pargo|curvina|robalo|dorado|dormilona|carite|claritas|espada|raya|cazon|sardina|anchoa|bonito|camaiguana|sashimi/, '🐟'],
@@ -368,7 +371,7 @@ body.usd #usd-badge{display:inline-block}
     [/hamburguesa/, '🍔'], [/punta|asado|entrana|carne|pernil/, '🥩'],
     [/aceite|aceituna/, '🫒'], [/nutella/, '🍫'], [/miel|mermelada|pistacho|berryumy|marquesa/, '🍯'],
     [/trufa/, '🍄'], [/empanada|tequeno|hojaldre/, '🥟'], [/papas/, '🍟'],
-    [/sazonador|colorante|pimienta|pimenton/, '🧂']
+    [/sazonador|colorante|pimienta|pimenton/, '🧂'], [/castana|nuez|nueces|almendra|avellana|merey/, '🌰']
   ];
   var CAT_EMOJI = { 'pescados': '🐟', 'mariscos': '🦐', 'quesos': '🧀', 'carnes': '🥩', 'charcuteria': '🍖', 'grasas': '🫒', 'condimentos': '🧂', 'sazonadores': '🧂', 'dulces': '🍯', 'pasapalos': '🥟', 'enlatados': '🥫', 'enlatados y conservas': '🥫', 'vegetales y frutas': '🥫', 'frutas': '🫒' };
   function emojiFor(name, cat){
@@ -533,7 +536,10 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
   };
   // Botones rápidos del editor (también se puede escribir cualquier emoji con el teclado del teléfono).
   // No existe emoji de vainilla: se usa 🌼 (su flor), 🫛 (una vaina) o 🍦.
-  const EMOJIS = ['🧀','🥩','🍖','🥓','🐟','🦐','🦑','🐙','🦪','🦀','🦞','🫒','🍯','🧂','🥫','🥟','🍄','🌶️','🌿','🌼','🫛','🍦','🍫','🍪','🥜','☕','🍷','🍾','🥖','🧈','🥚','🍝','🍋','🍅','🍇','🍟','🍔','🔹'];
+  const EMOJIS = ['🧀','🥩','🍖','🥓','🐟','🦐','🦑','🐙','🦪','🦀','🦞','🫒','🍯','🧂','🥫','🥟','🍄','🌶️','🌿','🌼','🫛','🍦','🍫','🍪','🥜','☕','🍷','🍾','🥖','🧈','🥚','🍝','🍋','🍅','🍇','🍟','🍔','🌰','🥑','🔹'];
+  // Más los que ya usa algún producto: un emoji escrito con el teclado queda como botón (sin tener que pedirlo).
+  function emojisBotones(){ const usados = S.products.map(p => (p.emoji || '').trim()).filter(e => e && !EMOJIS.includes(e)); return [...new Set(EMOJIS.slice(0, -1).concat(usados))].concat(['🔹']); }
+  function renderEmojis(){ $('#emojis').innerHTML = emojisBotones().map(em => `<button type="button" data-em="${esc(em)}" aria-label="Usar ${esc(em)}">${esc(em)}</button>`).join(''); }
   function today(){ const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
   function sortProds(a){ return a.slice().sort((x, y) => (x.categoria || 'zzz').localeCompare(y.categoria || 'zzz', 'es') || x.nombre.localeCompare(y.nombre, 'es')); }
 
@@ -933,6 +939,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
                 <label class="flabel" for="f-emoji">Emoji delante del precio</label>
                 <input id="f-emoji" class="field" type="text" maxlength="8" placeholder="🔹">
                 <div class="emojis" id="emojis"></div>
+                <p class="hint">¿No está el que buscas? Escríbelo arriba con el teclado del teléfono: al guardar queda aquí como botón.</p>
               </div>
             </div>
             <fieldset>
@@ -1187,14 +1194,32 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
     const box = $('#cola'), gs = colaGrupos();
     box.hidden = !gs.length || !S.owner;
     if (box.hidden){ box.innerHTML = ''; return; }
-    const opts = '<option value="">Es el mismo que…</option>' + S.products.slice().sort((a, b) => (a.presentaciones.some(v => v.sin_actualizar) ? 0 : 1) - (b.presentaciones.some(v => v.sin_actualizar) ? 0 : 1) || (a.nombre < b.nombre ? -1 : 1))
-      .map(p => `<option value="${esc(p.id)}">${p.presentaciones.some(v => v.sin_actualizar) ? '⏸ ' : ''}${esc(p.nombre)}</option>`).join('');
     box.innerHTML = `<div class="cola-head"><h3>Nuevos de Yobel por aprobar <span class="pill">${gs.length}</span></h3></div>
       <p class="hint" style="margin:0">No están en el armador. Agrégalos, júntalos con uno que tenga otro nombre (⏸ = quedó sin actualizar) o descártalos.</p>` +
       gs.map((g, i) => { const m = motivoCola(g);
         return `<div class="cola-item" data-i="${i}"><p class="cname">${esc(g.producto)}</p><p class="cmeta">${esc(g.filas[0].categoria || 'Sin categoría')} · ${g.filas.map(f => esc(money(f.precio)) + (f.texto ? ' ' + esc(f.texto) : '')).join(' · ')}</p>
         <p class="cola-motivo"><b>Por qué no entró:</b> ${esc(m.txt)}${m.notas.length ? ' <span class="cola-nota">(' + esc(m.notas.join('; ')) + ')</span>' : ''}</p>
-        <div class="cola-acc">${m.sugerido ? `<button type="button" class="btn primary small" data-cola="mismo-sug" data-id="${esc(m.sugerido)}">Es el mismo: juntar</button><button type="button" class="btn ghost small" data-cola="agregar">Agregar como nuevo</button>` : '<button type="button" class="btn primary small" data-cola="agregar">Agregar</button>'}<select class="field cola-sel" data-cola="mismo" aria-label="Es el mismo que…">${opts}</select><button type="button" class="btn ghost small" data-cola="no">No agregar</button></div></div>`; }).join('');
+        <div class="cola-acc">${m.sugerido ? `<button type="button" class="btn primary small" data-cola="mismo-sug" data-id="${esc(m.sugerido)}">Es el mismo: juntar</button><button type="button" class="btn ghost small" data-cola="agregar">Agregar como nuevo</button>` : '<button type="button" class="btn primary small" data-cola="agregar">Agregar</button>'}<button type="button" class="btn ghost small" data-cola="no">No agregar</button></div>
+        <input type="search" class="field cola-buscar" data-cola-buscar placeholder="🔎 ¿Es el mismo que…? Buscar" aria-label="Buscar si es el mismo que otro producto" autocomplete="off">
+        <div class="cola-res">${colaResultados(g, '')}</div></div>`; }).join('');
+  }
+  // «¿Es el mismo que…?»: buscador. Sin escribir, los 3 más parecidos; escribiendo, los que tienen todas las palabras (⏸ primero).
+  function colaResultados(g, q){
+    const pausado = p => p.presentaciones.some(v => v.sin_actualizar);
+    const qs = norm(q).split(/[^a-z0-9]+/).filter(Boolean);
+    let lista;
+    if (!qs.length){
+      const pv = new Set(palabras(g.producto));
+      lista = S.products.map(p => ({ p, n: palabras(p.nombre).filter(w => pv.has(w)).length })).filter(x => x.n)
+        .sort((a, b) => b.n - a.n || (pausado(b.p) - pausado(a.p))).slice(0, 3).map(x => x.p);
+      if (!lista.length) return '';
+    } else {
+      lista = S.products.filter(p => { const n = norm(p.nombre); return qs.every(w => n.includes(w)); })
+        .sort((a, b) => (pausado(b) - pausado(a)) || (a.nombre < b.nombre ? -1 : 1)).slice(0, 10);
+      if (!lista.length) return '<p class="hint" style="margin:0">Ningún producto del armador tiene esas palabras.</p>';
+    }
+    return (qs.length ? '' : '<p class="hint" style="margin:0">Se parecen:</p>') +
+      lista.map(p => `<button type="button" class="cola-op" data-cola="mismo-elegir" data-id="${esc(p.id)}">${pausado(p) ? '⏸ ' : ''}${esc(p.nombre)}</button>`).join('');
   }
   // Por qué no entró: ¿parece un producto del armador con otro nombre (el viejo quedó sin actualizar)? ¿o es nuevo de verdad?
   function motivoCola(g){
@@ -1277,6 +1302,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
     $('#ed-title').textContent = p ? 'Editar producto' : 'Nuevo producto';
     $('#f-nombre').value = p ? p.nombre : '';
     $('#f-cat').value = p ? p.categoria : (S.cat || '');
+    renderEmojis();
     $('#f-emoji').value = p ? p.emoji : '🔹';
     $('#f-preg').value = p ? p.pregunta : '';
     $('#f-pedido').checked = !!(p && p.bajo_pedido);
@@ -1590,7 +1616,6 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
     publishData(nextData({ ajustes: aj }), 'Ajustes guardados');
   });
 
-  $('#emojis').innerHTML = EMOJIS.map(em => `<button type="button" data-em="${em}" aria-label="Usar ${em}">${em}</button>`).join('');
   $('#emojis').addEventListener('click', e => { const b = e.target.closest('[data-em]'); if (!b) return; $('#f-emoji').value = b.dataset.em; renderEdPreview(); });
   for (const id of ['#f-nombre', '#f-cat', '#f-emoji', '#f-preg']) $(id).addEventListener('input', renderEdPreview);
   function onVrow(e){
@@ -1628,13 +1653,16 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
     const b = e.target.closest('button[data-cola]'); if (!b) return;
     const it = b.closest('.cola-item'), g = it ? colaGrupos()[Number(it.dataset.i)] : null;
     if (b.dataset.cola === 'mismo-sug') colaAccion('mismo', g, b.dataset.id);
+    else if (b.dataset.cola === 'mismo-elegir'){
+      const viejo = S.products.find(x => x.id === b.dataset.id);
+      if (g && viejo && confirm(`¿«${g.producto}» es el mismo producto que «${viejo.nombre}»? Queda uno solo, con la ficha y los usos de «${viejo.nombre}».`)) colaAccion('mismo', g, viejo.id);
+    }
     else colaAccion(b.dataset.cola, g);
   });
-  $('#cola').addEventListener('change', e => {
-    const sel = e.target.closest('select[data-cola="mismo"]'); if (!sel || !sel.value) return;
-    const g = colaGrupos()[Number(sel.closest('.cola-item').dataset.i)], viejo = S.products.find(x => x.id === sel.value);
-    if (g && viejo && confirm(`¿«${g.producto}» es el mismo producto que «${viejo.nombre}»? Queda uno solo, con la ficha y los usos de «${viejo.nombre}».`)) colaAccion('mismo', g, sel.value);
-    else sel.value = '';
+  $('#cola').addEventListener('input', e => {
+    const inp = e.target.closest('[data-cola-buscar]'); if (!inp) return;
+    const it = inp.closest('.cola-item'), g = colaGrupos()[Number(it.dataset.i)];
+    if (g) it.querySelector('.cola-res').innerHTML = colaResultados(g, inp.value);
   });
   $('#unir-sel').addEventListener('change', e => {
     const viejo = S.edit && S.products.find(x => x.id === S.edit.id), nuevo = elegidoUnir(e.target.value);
