@@ -50,6 +50,9 @@ jobs:
       - name: Costos (solo gerencia y acceso «costos»)
         env: { PGPASSWORD: prueba }
         run: psql -h localhost -U postgres -d cil -v ON_ERROR_STOP=1 -q -f pruebas/costos.sql
+      - name: Aprobar en el Armador sin ser gerencia (descuento de Yobel y productos nuevos)
+        env: { PGPASSWORD: prueba }
+        run: psql -h localhost -U postgres -d cil -v ON_ERROR_STOP=1 -q -f pruebas/armador-aprobar.sql
       - name: Llegada desde el primer intento en la red del local
         env: { PGPASSWORD: prueba }
         run: psql -h localhost -U postgres -d cil -v ON_ERROR_STOP=1 -q -f pruebas/llegada-intentos.sql
@@ -98,6 +101,7 @@ jobs:
           node pruebas/armador-yobel.js
           node pruebas/armador-descripcion.js
           node pruebas/armador-orden.js
+          node pruebas/armador-aprobar.js
           node pruebas/cambiar.js
           node pruebas/consumibles-gerencia.js
           PGPASSWORD=prueba PSQL="psql -h localhost -U postgres -d cil" node pruebas/pendientes.js
@@ -136,6 +140,7 @@ jobs:
             select 'Avisos por tipo (7 días, sin nombres): ' || string_agg(k || (case when u then ' urg ' else ' ' end) || n, ', ' order by n desc) from (select replace(split_part(regexp_replace(url, '^(\.\.?/)+', ''), '/', 1), '#', '') || '#' || coalesce(substring(url from '#/?([a-z]+)'), '') || ':' || left(titulo, 2) k, urgente u, count(*) n from public.avisos_log where creado_en > now() - interval '7 days' group by 1, 2 order by 3 desc limit 25) x;
             select 'Avisos por día (7 días): ' || string_agg(to_char(d, 'DD') || '=' || n, ', ' order by d) from (select (creado_en at time zone 'America/Caracas')::date d, count(*) n from public.avisos_log where creado_en > now() - interval '7 days' group by 1) x;
             select 'Personas con acceso a costos (sin gerencia): ' || count(*) from public.personas where activo and rol <> 'admin' and 'costos' = any (accesos);
+            select 'Costos/aprobar (persona ' || row_number() over () || '): accesos ' || array_to_string(p.accesos, ',') || ', última entrada hace ' || coalesce(extract(day from now() - u.last_sign_in_at)::int::text || ' días', 'nunca') from public.personas p join auth.users u on u.id = p.id where p.activo and p.rol <> 'admin' and ('costos' = any (p.accesos) or 'aprobar' = any (p.accesos));
             select 'Sábados (persona ' || row_number() over (order by p.nombre) || '): local ' || coalesce(l.nombre, '?') || ' días local ' || coalesce(l.dias_laborables::text, '?') || ', días persona ' || coalesce(p.dias_trabajo::text, 'todos') || ', rol ' || p.rol || ', tareas ' || ('tareas' = any (p.accesos))::text || ', rota ' || coalesce(p.rota::text, '?') from public.personas p left join public.locales l on l.id = p.local_id where p.activo and (p.nombre ilike 'mar_a%' or p.nombre ilike 'mari%' or p.nombre ilike 'raya%');
             select 'Sábados, por local: ' || string_agg(l.nombre || ' días ' || l.dias_laborables::text || ' empleados con sábado ' || (select count(*) from public.personas p where p.local_id = l.id and p.activo and p.rol = 'empleado' and 'tareas' = any (p.accesos) and (p.dias_trabajo is null or cardinality(p.dias_trabajo) = 0 or 6 = any (p.dias_trabajo))) || ' de ' || (select count(*) from public.personas p where p.local_id = l.id and p.activo and p.rol = 'empleado' and 'tareas' = any (p.accesos)), '; ') from public.locales l;
             select 'Tareas diarias con hora por local: ' || coalesce(string_agg(x, '; '), 'ninguna') from (select l.nombre || ' ' || count(*) x from public.plantillas t join public.locales l on l.id = t.local_id where t.activa group by l.nombre) y;

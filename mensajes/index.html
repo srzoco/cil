@@ -97,6 +97,7 @@ textarea.field{resize:vertical}
 .btn.danger{background:var(--danger);color:var(--bg)}
 .btn.danger-ghost{background:transparent;color:var(--danger)}
 .btn:disabled{opacity:.45;cursor:not-allowed}
+.sin-cil{margin:10px 16px 0;font-size:13px;opacity:.85}
 .yobel{margin:10px 16px 0;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
 .yobel.pide{border:2px solid var(--danger)}
 .yobel p{margin:0 0 4px;font-size:14px}
@@ -235,6 +236,7 @@ legend{font-weight:700;font-size:13px;padding:0 6px}
 }
 
 body:not(.owner) .owner-only{display:none!important}
+body:not(.owner):not(.aprueba) .aprueba-only{display:none!important}
 
 .toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom, 0px));transform:translate(-50%,8px);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-weight:700;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s, transform .2s;max-width:calc(100% - 32px);box-sizing:border-box;text-align:center}
 .toast.on{opacity:1;transform:translate(-50%,0)}
@@ -712,7 +714,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
   }
   /* ---------- Robot de Yobel: aprobar el descuento de las 4 cuentas en Bs. (solo gerencia) ---------- */
   async function cargarYobel(){
-    if (!S.cil) return;
+    if (!S.aprueba) return;
     try { S.yobel = await rpcCil('descuento_yobel_hoy'); } catch (_){ return; }
     renderYobel();
     // mientras espera aprobación o el robot lo está poniendo, se revisa cada minuto
@@ -722,7 +724,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
   function renderYobel(){
     const box = $('#yobel'), y = S.yobel;
     if (!box) return;
-    if (!S.cil || !y){ box.hidden = true; return; }
+    if (!S.aprueba || !y){ box.hidden = true; return; }
     const d = num(Number(y.descuento)) + '%', antes = y.en_yobel != null ? num(Number(y.en_yobel)) + '%' : '—';
     const txt = {
       pendiente: `<p><b>🤖 Yobel: ¿pongo ${d} en las 4 cuentas en Bs.?</b></p><small>Hoy tienen ${antes}. Pago móvil, Punto de Venta Crédito y Débito, Transferencia Bs. Si nadie aprueba antes de las ${esc(y.limite || '12:00')}, queda ${antes}.</small>
@@ -840,6 +842,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
   </header>
 
   <section class="yobel" id="yobel" hidden aria-live="polite"></section>
+  <p class="sin-cil" id="sin-cil" hidden>No has entrado a CIL en este teléfono: «A costo» y lo que te toca aprobar no salen. <a href="../">Entrar a CIL</a></p>
 
   <nav class="tabs" role="tablist" aria-label="Secciones">
     <button type="button" role="tab" id="tab-armar" aria-selected="true" aria-controls="view-armar" data-view="armar">Armar mensaje</button>
@@ -893,7 +896,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
         </div>
         <p id="csv-err" class="err" role="alert" hidden></p>
         <div id="report" class="report" hidden></div>
-        <section id="cola" class="cola owner-only" hidden></section>
+        <section id="cola" class="cola aprueba-only" hidden></section>
         <input id="cq" class="field" type="search" placeholder="Buscar en el catálogo…" autocomplete="off" aria-label="Buscar en el catálogo">
         <div id="clist" class="clist"></div>
 
@@ -1047,7 +1050,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
     $('#tab-costo').hidden = !S.costos;
     $('#view-armar').dataset.mode = S.mode;
   }
-  function renderOwner(){ document.body.classList.toggle('owner', S.owner); }
+  function renderOwner(){ document.body.classList.toggle('owner', !!S.owner); document.body.classList.toggle('aprueba', !!S.aprueba); }
   function renderBusy(){ $('#busy').hidden = !S.busy; }
 
   function fmtWhen(iso){
@@ -1192,7 +1195,7 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
   }
   function renderCola(){
     const box = $('#cola'), gs = colaGrupos();
-    box.hidden = !gs.length || !S.owner;
+    box.hidden = !gs.length || !(S.owner || S.aprueba);
     if (box.hidden){ box.innerHTML = ''; return; }
     box.innerHTML = `<div class="cola-head"><h3>Nuevos de Yobel por aprobar <span class="pill">${gs.length}</span></h3></div>
       <p class="hint" style="margin:0">No están en el armador. Agrégalos, júntalos con uno que tenga otro nombre (⏸ = quedó sin actualizar) o descártalos.</p>` +
@@ -1241,9 +1244,28 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
   }
   function sinDeLaCola(refs){ const q = new Set(refs); return (DATA.nuevos || []).filter(f => !q.has(f.ref)); }
   function idsActuales(){ const ids = {}; S.products.forEach(p => { ids[p.id] = 1; }); return ids; }
+  // En CIL va por armador_cola: solo toca la fila y ese producto (así puede aprobar quien no es gerencia)
+  async function colaRpc(accion, refs, producto, okMsg){
+    S.busy = true; renderBusy();
+    try {
+      S.dbVer = await rpcCil('armador_cola', { p_accion: accion, p_refs: refs, p_producto: producto || null });
+      const db = await leerDb();
+      if (db && db.datos) applyData(db.datos);
+      renderAll(); toast(okMsg);
+    } catch (e){ toast(e && e.msg ? e.msg : 'No se pudo conectar. Revisa la conexión.'); }
+    finally { S.busy = false; renderBusy(); }
+  }
   function colaAccion(tipo, g, conId){
     if (S.busy) return;
     const refs = g ? g.filas.map(f => f.ref) : [], ahora = new Date().toISOString();
+    if (HOST === 'github' && S.aprueba && !S.owner && tipo !== 'todos'){
+      if (tipo === 'agregar') return colaRpc('agregar', refs, IMP.productoNuevo(g.filas, idsActuales(), ahora), `«${g.producto}» agregado al armador`);
+      if (tipo === 'no') return colaRpc('no', refs, null, `«${g.producto}» no se agrega (no vuelve a aparecer aquí)`);
+      if (tipo === 'mismo'){
+        const viejo = S.products.find(x => x.id === conId); if (!viejo) return;
+        return colaRpc('mismo', refs, unirProductos(viejo, IMP.productoNuevo(g.filas, {}, ahora)), `Listo: «${g.producto}» quedó junto con lo que tenía «${viejo.nombre}»`);
+      }
+    }
     if (tipo === 'agregar'){
       const nuevo = IMP.productoNuevo(g.filas, idsActuales(), ahora);
       publishData(nextData({ productos: sortProds(S.products.concat([nuevo])), nuevos: sinDeLaCola(refs) }), `«${g.producto}» agregado al armador`);
@@ -1718,7 +1740,20 @@ if (typeof module !== 'undefined') module.exports = BarqueroImport;
       S.loading = false;
       renderAll();
       // ¿Es alguien de gerencia con sesión de CIL en este teléfono? Entonces puede editar sin clave.
-      try { if (await tokenCil() && (await rpcCil('es_admin')) === true){ S.cil = true; S.owner = true; renderOwner(); renderAll(); } } catch (_){}
+      // Sin sesión de CIL en este teléfono no salen «A costo» ni lo de aprobar: se avisa
+      if (!(await tokenCil())) $('#sin-cil').hidden = false;
+      // ¿Gerencia (edita todo) o quien aprueba (descuento de Yobel y productos nuevos; acceso «aprobar»)?
+      try {
+        if (await tokenCil()){
+          let pm = null;
+          try { pm = await rpcCil('armador_permisos'); } catch (_){ pm = null; }
+          if (!pm || typeof pm.admin !== 'boolean') pm = { admin: (await rpcCil('es_admin')) === true, aprobar: false };
+          if (pm && pm.admin){ S.cil = true; S.owner = true; }
+          if (pm && (pm.admin || pm.aprobar)) S.aprueba = true;
+          if (S.owner || S.aprueba){ renderOwner(); renderAll(); }
+        }
+      } catch (_){}
+      if (location.hash === '#catalogo' && S.aprueba){ S.view = 'catalogo'; renderTabs(); renderCatalog(); }
       cargarYobel();
       cargarCostos();
       // Cada 5 minutos: descuento, y precio y stock nuevos del robot (si nadie está editando ni revisando un CSV)

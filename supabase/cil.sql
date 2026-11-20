@@ -4135,6 +4135,9 @@ begin
   end if;
   if array_length(nuevos, 1) > 0 then
     perform bot_aviso('robot_nuevos', 'Productos nuevos de Yobel esperan tu aprobación en el Armador → Catálogo: ' || array_to_string(nuevos[1:15], ', ') || case when array_length(nuevos, 1) > 15 then '…' else '' end, false);
+    insert into avisos_cola (persona_id, titulo, cuerpo, url)
+    select p.id, 'Productos nuevos de Yobel por aprobar', left('Armador → Catálogo: ' || array_to_string(nuevos[1:15], ', '), 400), 'mensajes/#catalogo' from personas p
+     where p.activo and p.rol <> 'admin' and 'aprobar' = any (coalesce(p.accesos, '{}'));
   end if;
 
   return json_build_object('ok', true, 'filas', (select count(*) from jsonb_object_keys(mapa)), 'cambios_precio', cambios,
@@ -4348,6 +4351,10 @@ begin
     if quien is not null then
       insert into avisos_cola (persona_id, titulo, cuerpo, url)
       values (quien, left(p_texto, 90), left(p_texto, 400), 'mensajes/#yobel');
+      -- también a quien aprueba en el Armador (acceso «aprobar», sin ser gerencia; 20/11/2026)
+      insert into avisos_cola (persona_id, titulo, cuerpo, url)
+      select p.id, left(p_texto, 90), left(p_texto, 400), 'mensajes/#yobel' from personas p
+       where p.activo and p.rol <> 'admin' and 'aprobar' = any (coalesce(p.accesos, '{}')) and p.id <> quien;
       update bot_avisos set enviado_en = now() where tipo = p_tipo and fecha = hoy() and urgente;
     end if;
   end if;
@@ -4445,7 +4452,7 @@ end $$;
 create or replace function public.descuento_yobel_hoy() returns json
 language plpgsql stable security definer set search_path = public as $$
 begin
-  if not public.es_admin() then raise exception 'Solo gerencia.'; end if;
+  if not public.tiene_acceso('aprobar') then raise exception 'Solo gerencia o quien aprueba en el Armador.'; end if;
   return (select json_build_object('fecha', fecha, 'descuento', descuento, 'en_yobel', en_yobel, 'estado', estado,
             'creado', creado, 'aprobado_en', aprobado_en, 'terminado_en', terminado_en, 'detalle', detalle,
             'limite', _bot_cfg('descuento_hora_limite', '12:00'))
@@ -4457,7 +4464,7 @@ create or replace function public.descuento_yobel_aprobar(p_descuento numeric, p
 language plpgsql security definer set search_path = public as $$
 declare r robot_descuentos%rowtype;
 begin
-  if not public.es_admin() then raise exception 'Solo gerencia.'; end if;
+  if not public.tiene_acceso('aprobar') then raise exception 'Solo gerencia o quien aprueba en el Armador.'; end if;
   select * into r from robot_descuentos where fecha = hoy() for update;
   if not found or r.estado <> 'pendiente' then raise exception 'No hay ningún cambio esperando aprobación.'; end if;
   if r.descuento <> p_descuento then raise exception 'El descuento cambió mientras tanto: recarga la página.'; end if;
@@ -4494,4 +4501,73 @@ begin
   -- limpieza: guardar solo 90 días
   perform cron.unschedule(jobid) from cron.job where jobname = 'descuento_yobel_limpieza';
   perform cron.schedule('descuento_yobel_limpieza', '10 7 * * *', $q$delete from public.robot_descuentos where fecha < public.hoy() - 90$q$);
+end $$;
+
+-- ---------- Armador: aprobar sin ser gerencia (acceso «aprobar», 20/11/2026, pedido de Sara para Adolfo) ----------
+-- Quién puede qué en el Armador (para que la página muestre lo que corresponde)
+create or replace function public.armador_permisos() returns json
+language sql stable security definer set search_path = public as $$
+  select json_build_object('admin', public.es_admin(), 'aprobar', public.tiene_acceso('aprobar'))
+$$;
+
+-- «Nuevos de Yobel por aprobar»: agregar, juntar con uno que ya está («es el mismo») o no agregar.
+-- Solo toca la fila de por aprobar y ese producto; el resto del catálogo no se puede cambiar por aquí.
+create or replace function public.armador_cola(p_accion text, p_refs text[], p_producto jsonb default null) returns timestamptz
+language plpgsql security definer set search_path = public as $$
+declare r public.armador_datos; d jsonb; quedan jsonb; prods jsonb; n int; viejo jsonb; ahora timestamptz := clock_timestamp();
+begin
+  if not public.tiene_acceso('aprobar') then raise exception 'Solo gerencia o quien aprueba en el Armador.'; end if;
+  if p_accion is null or p_accion not in ('agregar', 'mismo', 'no') then raise exception 'Acción no válida.'; end if;
+  if coalesce(cardinality(p_refs), 0) = 0 then raise exception 'Datos no válidos.'; end if;
+  select * into r from armador_datos where id = 1 for update;
+  d := coalesce(r.datos, '{}'::jsonb);
+  select count(distinct f->>'ref') into n from jsonb_array_elements(coalesce(d->'nuevos', '[]')) f where f->>'ref' = any (p_refs);
+  if n < (select count(distinct x) from unnest(p_refs) x) then raise exception 'Ese producto ya no está por aprobar: recarga la página.'; end if;
+  select coalesce(jsonb_agg(f order by o), '[]') into quedan
+    from jsonb_array_elements(d->'nuevos') with ordinality x(f, o) where not ((f->>'ref') = any (p_refs));
+  if p_accion = 'no' then
+    select coalesce(jsonb_agg(v order by o), '[]') into prods from (
+      select v, o from jsonb_array_elements(coalesce(d->'descartados', '[]') || to_jsonb(p_refs)) with ordinality y(v, o) order by o desc limit 1000) z;
+    d := d || jsonb_build_object('nuevos', quedan, 'descartados', prods);
+  else
+    if p_producto is null or jsonb_typeof(p_producto) <> 'object' or coalesce(p_producto->>'id', '') = ''
+       or coalesce(p_producto->>'nombre', '') = '' or jsonb_typeof(p_producto->'presentaciones') <> 'array' then raise exception 'Datos no válidos.'; end if;
+    if exists (select 1 from jsonb_array_elements(p_producto->'presentaciones') v where coalesce(v->>'ref', '') <> '' and not ((v->>'ref') = any (p_refs))) then
+      raise exception 'Datos no válidos.';
+    end if;
+    select p into viejo from jsonb_array_elements(coalesce(d->'productos', '[]')) p where p->>'id' = p_producto->>'id' limit 1;
+    if p_accion = 'agregar' then
+      if viejo is not null then raise exception 'Ya hay un producto con ese código: recarga la página.'; end if;
+      prods := coalesce(d->'productos', '[]') || jsonb_build_array(p_producto);
+    else
+      if viejo is null then raise exception 'Ese producto ya no está en el armador: recarga la página.'; end if;
+      -- las presentaciones agregadas a mano (sin código de Yobel) tienen que ser las del producto que ya estaba
+      if exists (select 1 from jsonb_array_elements(p_producto->'presentaciones') v where coalesce(v->>'ref', '') = ''
+                  and not (viejo->'presentaciones') @> jsonb_build_array(v)) then raise exception 'Datos no válidos.'; end if;
+      select jsonb_agg(case when p->>'id' = p_producto->>'id' then p_producto else p end order by o) into prods
+        from jsonb_array_elements(d->'productos') with ordinality x(p, o);
+    end if;
+    d := d || jsonb_build_object('productos', prods, 'nuevos', quedan);
+  end if;
+  insert into armador_datos (id, datos, actualizado_en, actualizado_por, editado_en) values (1, d, ahora, auth.uid(), ahora)
+  on conflict (id) do update set datos = excluded.datos, actualizado_en = excluded.actualizado_en,
+    actualizado_por = excluded.actualizado_por, editado_en = excluded.editado_en;
+  return ahora;
+end $$;
+revoke execute on function public.armador_permisos(), public.armador_cola(text, text[], jsonb) from public, anon, authenticated;
+grant execute on function public.armador_permisos(), public.armador_cola(text, text[], jsonb) to authenticated;
+
+-- Adolfo («Percebe»): aprueba en el Armador. Una sola vez y solo si hay exactamente una persona que coincide.
+do $$ declare n int; begin
+  if exists (select 1 from public.cil_migraciones where nombre = 'aprobar-adolfo-2026-11-20') then return; end if;
+  select count(*) into n from public.personas
+   where activo and (nombre ilike '%percebe%' or nombre ilike '%adolfo%' or email ilike '%adolfo%');
+  if n = 1 then
+    update public.personas set accesos = array_append(coalesce(accesos, '{}'), 'aprobar')
+     where activo and (nombre ilike '%percebe%' or nombre ilike '%adolfo%' or email ilike '%adolfo%')
+       and not ('aprobar' = any (coalesce(accesos, '{}')));
+    insert into public.cil_migraciones (nombre) values ('aprobar-adolfo-2026-11-20');
+  else
+    raise notice 'aprobar-adolfo: % personas coinciden; no se cambió nada', n;
+  end if;
 end $$;
