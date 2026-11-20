@@ -9,7 +9,7 @@ const BASE = process.env.BASE || 'http://localhost:8765';
   const datos = { ajustes: {}, productos: [{ id: 'jamon', nombre: 'Jamón serrano', categoria: 'Charcutería', presentaciones: [{ texto: '', precio: 30, ref: 'Jamón serrano|||||', stock: 4 }] }],
     nuevos: [{ ref: 'Aceite de oliva Jaén|||1L||', producto: 'Aceite de oliva Jaén', categoria: 'Grasas', precio: 12, stock: 6 },
              { ref: 'Cosa rara|||||', producto: 'Cosa rara', categoria: '', precio: 3, stock: 0 }] };
-  async function abrir(conSesion) {
+  async function abrir(conSesion, permisos) {
     const p = await b.newPage({ viewport: { width: 360, height: 800 } });
     p.on('pageerror', e => fallas.push('JS: ' + e.message));
     p.on('dialog', d => d.accept());
@@ -19,7 +19,7 @@ const BASE = process.env.BASE || 'http://localhost:8765';
       const u = r.request().url(), cuerpo = r.request().postData();
       const j = x => r.fulfill({ contentType: 'application/json', body: JSON.stringify(x) });
       if (u.includes('armador_datos')) return j([{ datos, editado_en: '2026-11-20T00:00:00Z' }]);
-      if (u.includes('rpc/armador_permisos')) return j({ admin: false, aprobar: true });
+      if (u.includes('rpc/armador_permisos')) return j(permisos || { admin: false, aprobar: true, editar: false });
       if (u.includes('rpc/es_admin')) return j(false);
       if (u.includes('rpc/descuento_yobel_hoy')) return j({ fecha: '2026-11-20', descuento: 43, en_yobel: 41, estado: 'pendiente', limite: '12:00' });
       if (u.includes('rpc/armador_cola')) { llamadas.push(JSON.parse(cuerpo)); return j('2026-11-20T13:00:00Z'); }
@@ -51,6 +51,10 @@ const BASE = process.env.BASE || 'http://localhost:8765';
   // 2) sin sesión de CIL en el teléfono: el aviso para entrar
   const s = await abrir(false);
   if (!(await s.p.locator('#sin-cil').isVisible())) fallas.push('Sin sesión no sale el aviso de entrar a CIL');
+  // 3) con el acceso «catalogo»: le sale «Editar»
+  const e = await abrir(true, { admin: false, aprobar: true, editar: true });
+  await e.p.click('#tab-catalogo'); await e.p.waitForTimeout(300);
+  if (!(await e.p.locator('[data-edit]').first().isVisible())) fallas.push('Con «catalogo» no le sale «Editar»');
   await b.close();
   if (fallas.length) { console.error('FALLAS (' + fallas.length + '):\n- ' + fallas.join('\n- ')); process.exit(1); }
   console.log('OK: quien aprueba ve el descuento de Yobel y los nuevos, aprueba sin tocar el catálogo, y sin sesión se le avisa.');

@@ -2874,7 +2874,7 @@ create or replace function public.guardar_armador(p_datos jsonb, p_antes timesta
 language plpgsql security definer set search_path = public as $$
 declare r public.armador_datos; ahora timestamptz := clock_timestamp(); mapa jsonb; robot_nuevo boolean;
 begin
-  if not public.es_admin() then raise exception 'Solo gerencia puede cambiar productos y precios.'; end if;
+  if not public.tiene_acceso('catalogo') then raise exception 'Solo gerencia o quien edita el catálogo del Armador.'; end if;
   if p_datos is null or jsonb_typeof(p_datos -> 'productos') <> 'array' then raise exception 'Datos no válidos.'; end if;
   select * into r from armador_datos where id = 1 for update;
   if r.id is not null and r.datos is not null and p_antes is distinct from coalesce(r.editado_en, r.actualizado_en) then
@@ -2926,7 +2926,7 @@ grant execute on function public.armador_usado(text[]) to anon, authenticated;
 create or replace function public.fijar_descuento(p_valor numeric) returns void
 language plpgsql security definer set search_path = public as $$
 begin
-  if not public.es_admin() then raise exception 'Solo gerencia puede fijar el descuento.'; end if;
+  if not public.tiene_acceso('catalogo') then raise exception 'Solo gerencia o quien edita el catálogo del Armador.'; end if;
   if p_valor is not null and (p_valor < 0 or p_valor > 95) then raise exception 'El descuento debe estar entre 0 y 95.'; end if;
   insert into armador_datos (id, descuento_manual, descuento_fecha, descuento_en) values (1, p_valor, case when p_valor is null then null else public.hoy() end, now())
   on conflict (id) do update set descuento_manual = excluded.descuento_manual, descuento_fecha = excluded.descuento_fecha, descuento_en = excluded.descuento_en;
@@ -2937,7 +2937,7 @@ create or replace function public.forzar_tasas() returns void
 language plpgsql security definer set search_path = public as $$
 declare tok text;
 begin
-  if not public.es_admin() then raise exception 'Solo gerencia.'; end if;
+  if not public.tiene_acceso('catalogo') then raise exception 'Solo gerencia o quien edita el catálogo del Armador.'; end if;
   if to_regclass('vault.decrypted_secrets') is not null then
     execute 'select decrypted_secret from vault.decrypted_secrets where name = $1' into tok using 'github_mensajes';
   end if;
@@ -4248,7 +4248,7 @@ end $$;
 create or replace function public.costos_subir(p_filas jsonb) returns int
 language plpgsql security definer set search_path = public as $$
 begin
-  if not public.es_admin() then raise exception 'Solo gerencia.'; end if;
+  if not (public.es_admin() or (public.tiene_acceso('catalogo') and public.tiene_acceso('costos'))) then raise exception 'Solo gerencia.'; end if;
   return public._costos_guardar(p_filas);
 end $$;
 
@@ -4507,7 +4507,7 @@ end $$;
 -- Quién puede qué en el Armador (para que la página muestre lo que corresponde)
 create or replace function public.armador_permisos() returns json
 language sql stable security definer set search_path = public as $$
-  select json_build_object('admin', public.es_admin(), 'aprobar', public.tiene_acceso('aprobar'))
+  select json_build_object('admin', public.es_admin(), 'aprobar', public.tiene_acceso('aprobar'), 'editar', public.tiene_acceso('catalogo'))
 $$;
 
 -- «Nuevos de Yobel por aprobar»: agregar, juntar con uno que ya está («es el mismo») o no agregar.
@@ -4569,5 +4569,20 @@ do $$ declare n int; begin
     insert into public.cil_migraciones (nombre) values ('aprobar-adolfo-2026-11-20');
   else
     raise notice 'aprobar-adolfo: % personas coinciden; no se cambió nada', n;
+  end if;
+end $$;
+
+-- Adolfo («Percebe») edita el catálogo del Armador (acceso «catalogo», se quita en Equipo → Personas; pedido de Sara, 20/11/2026).
+do $$ declare n int; begin
+  if exists (select 1 from public.cil_migraciones where nombre = 'catalogo-adolfo-2026-11-20') then return; end if;
+  select count(*) into n from public.personas
+   where activo and (nombre ilike '%percebe%' or nombre ilike '%adolfo%' or email ilike '%adolfo%');
+  if n = 1 then
+    update public.personas set accesos = array_append(coalesce(accesos, '{}'), 'catalogo')
+     where activo and (nombre ilike '%percebe%' or nombre ilike '%adolfo%' or email ilike '%adolfo%')
+       and not ('catalogo' = any (coalesce(accesos, '{}')));
+    insert into public.cil_migraciones (nombre) values ('catalogo-adolfo-2026-11-20');
+  else
+    raise notice 'catalogo-adolfo: % personas coinciden; no se cambió nada', n;
   end if;
 end $$;

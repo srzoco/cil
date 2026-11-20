@@ -65,6 +65,26 @@ do $$ begin
   begin perform armador_cola('agregar', '{Nuevo|||||}', '{"id":"queso","nombre":"Nuevo","presentaciones":[{"ref":"Nuevo|||||","precio":4}]}');
     raise exception 'FALLO: pisó un producto al agregar'; exception when others then if sqlerrm like 'FALLO%' then raise; end if; end;
 end $$;
+-- 4. el acceso «catalogo» (se quita en Equipo → Personas): edita el catálogo y el descuento del día; sin él, no
+do $$ begin
+  begin perform fijar_descuento(40); raise exception 'FALLO: fijó el descuento sin «catalogo»'; exception when others then if sqlerrm like 'FALLO%' then raise; end if; end;
+  if (armador_permisos()->>'editar')::boolean then raise exception 'FALLO: editar sin el acceso'; end if;
+end $$;
 reset role;
+update personas set accesos = '{tareas,mensajes,catalogo}' where id = 'a3000000-0000-0000-0000-000000000001';
+create temp table t_ver as select coalesce(editado_en, actualizado_en) as v from armador_datos where id = 1;
+grant select on t_ver to authenticated;
+set role authenticated;
+do $$ begin
+  if not (armador_permisos()->>'editar')::boolean then raise exception 'FALLO: no sale «editar»'; end if;
+  perform guardar_armador('{"productos":[{"id":"x","nombre":"X","presentaciones":[]}]}'::jsonb, (select v from t_ver));
+  perform fijar_descuento(40);
+  begin perform costos_subir('[]'::jsonb); raise exception 'FALLO: subió costos sin el acceso «costos»'; exception when others then if sqlerrm like 'FALLO%' then raise; end if; end;
+end $$;
+reset role;
+do $$ begin
+  if (select jsonb_array_length(datos->'productos') from armador_datos where id = 1) <> 1 then raise exception 'FALLO: no guardó el catálogo'; end if;
+  if (select descuento_manual from armador_datos where id = 1) <> 40 then raise exception 'FALLO: no fijó el descuento'; end if;
+end $$;
 rollback;
-\echo 'OK: quien aprueba en el Armador aprueba el descuento y los productos nuevos, y nada más'
+\echo 'OK: «aprobar» aprueba el descuento y los productos nuevos y nada más; «catalogo» edita el catálogo'
